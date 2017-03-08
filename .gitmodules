@@ -1,0 +1,12 @@
+[submodule "third_party/xo"]
+	path = third_party/xo
+	url = https://github.com/bmharper/xo
+[submodule "third_party/tsf"]
+	path = third_party/tsf
+	url = https://github.com/IMQS/tsf.git
+[submodule "third_party/uberlog"]
+	path = third_party/uberlog
+	url = https://github.com/IMQS/uberlog.git
+[submodule "third_party/utfz"]
+	path = third_party/utfz
+	url = https://github.com/IMQS/utfz.git
