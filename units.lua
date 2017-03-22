@@ -152,6 +152,15 @@ local deploy_libcurl_release = copyfile_to_output(vcpkg_bin .. "bin/libcurl.dll"
 local deploy_libssh2_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/libssh2.dll", winDebugFilter)
 local deploy_libssh2_release = copyfile_to_output(vcpkg_bin .. "bin/libssh2.dll", winReleaseFilter)
 
+local deploy_libeay32_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/libeay32.dll", winDebugFilter)
+local deploy_libeay32_release = copyfile_to_output(vcpkg_bin .. "bin/libeay32.dll", winReleaseFilter)
+
+local deploy_ssleay32_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/ssleay32.dll", winDebugFilter)
+local deploy_ssleay32_release = copyfile_to_output(vcpkg_bin .. "bin/ssleay32.dll", winReleaseFilter)
+
+local deploy_zlib_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/zlibd1.dll", winDebugFilter)
+local deploy_zlib_release = copyfile_to_output(vcpkg_bin .. "bin/zlib1.dll", winReleaseFilter)
+
 local deploy_avcodec_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/avcodec-57.dll", winDebugFilter)
 local deploy_avdevice_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/avdevice-57.dll", winDebugFilter)
 local deploy_avfilter_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/avfilter-6.dll", winDebugFilter)
@@ -204,6 +213,12 @@ local libcurl = ExternalLibrary {
 		deploy_libcurl_release,
 		deploy_libssh2_debug,
 		deploy_libssh2_release,
+		deploy_libeay32_debug,
+		deploy_libeay32_release,
+		deploy_ssleay32_debug,
+		deploy_ssleay32_release,
+		deploy_zlib_debug,
+		deploy_zlib_release,
 	},
 	Propagate = {
 		Libs = {
@@ -301,11 +316,11 @@ local pal = SharedLibrary {
 local Annotator = Program {
 	Name = "Annotator",
 	Depends = {
-		winCrt, xo, ffmpeg, pal,
+		winCrt, xo, ffmpeg, pal, tsf,
 	},
-	Env = {
-		PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
-	},
+	--Env = {
+	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
+	--},
 	Libs = { 
 		{ "m", "stdc++"; Config = "linux-*" },
 	},
