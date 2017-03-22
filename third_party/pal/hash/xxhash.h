@@ -1,4 +1,5 @@
 // clang-format off
+#ifndef XXH32_SIZEOFSTATE
 /*
    xxHash - Extremely Fast Hash algorithm
    Header File
@@ -166,3 +167,4 @@ To free memory context, use XXHnn_digest(), or free().
 #if defined (__cplusplus)
 }
 #endif
+#endif // XXH32_SIZEOFSTATE

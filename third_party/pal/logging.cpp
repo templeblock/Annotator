@@ -2,7 +2,10 @@
 #include "logging.h"
 
 #ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable: 4091)
 #include <Dbghelp.h>
+#pragma warning(pop)
 #endif
 
 namespace imqs {

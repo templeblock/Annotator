@@ -235,7 +235,7 @@ Time Time::FromUnix(int64_t sec, int64_t nsec) {
 Time Time::FromUnix(double sec) {
 	double ipart;
 	double frac = modf(sec, &ipart);
-	return Time::FromUnix((int64_t) ipart, (int64_t) (frac * 1000000000.0));
+	return Time::FromUnix((int64_t) ipart, (int64_t)(frac * 1000000000.0));
 }
 
 Time Time::FromEpoch1601(int64_t t) {
@@ -568,6 +568,10 @@ bool Time::operator>=(const Time& t) const {
 	if (Sec == t.Sec)
 		return Nsec >= t.Nsec;
 	return Sec >= t.Sec;
+}
+
+IMQS_PAL_API Time Now() {
+	return Time::Now();
 }
 
 int64_t PerformanceCounter() {

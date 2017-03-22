@@ -25,7 +25,7 @@
  * NOTE: To use the recommended 32 bit FNV-1a hash, use FNV1_32A_INIT as the
  * 	 hval arg on the first call to either fnv_32a_buf() or fnv_32a_str().
  */
-uint32_t fnv_32a_buf(const void *buf, size_t len, uint32_t hval)
+inline uint32_t fnv_32a_buf(const void *buf, size_t len, uint32_t hval)
 {
 	const unsigned char *bp = (const unsigned char *) buf; /* start of buffer */
 	const unsigned char *be = bp + len;              /* beyond end of buffer */

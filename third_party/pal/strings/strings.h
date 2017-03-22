@@ -14,6 +14,9 @@ IMQS_PAL_API void ToHex(const void* buf, size_t len, char* out);
 IMQS_PAL_API std::string tolower(const std::string& s);
 IMQS_PAL_API std::string toupper(const std::string& s);
 
+// Replace all occurrences of 'find' with 'replacement'
+IMQS_PAL_API std::string Replace(const std::string& s, const std::string& find, const std::string& replacement);
+
 IMQS_PAL_API bool EndsWith(const std::string& s, const char* suffix);
 
 // Trim whitespace (space, tab, newline, carriage return) from the right end of the string
@@ -46,6 +49,10 @@ void Split(const char* s, int delim, TList& list) {
 		}
 	}
 }
+
+// Split into vector of strings
+IMQS_PAL_API std::vector<std::string> Split(const char* s, int delim);
+IMQS_PAL_API std::vector<std::string> Split(const std::string& s, int delim);
 
 IMQS_PAL_API std::string Join(const std::vector<std::string>& parts, const char* joiner);
 }

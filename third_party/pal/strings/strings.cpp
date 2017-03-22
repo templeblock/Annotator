@@ -76,6 +76,25 @@ IMQS_PAL_API std::string toupper(const std::string& s) {
 	return up;
 }
 
+IMQS_PAL_API std::string Replace(const std::string& s, const std::string& find, const std::string& replacement) {
+	if (find.size() == 0)
+		return s;
+	std::string r;
+	size_t      i = 0; // position in 's'
+	for (;;) {
+		size_t j = s.find(find, i);
+		if (j == -1) {
+			// no more occurrences of 'find'; Add remaining bytes.
+			r.append(&s[i], s.size() - i);
+			break;
+		}
+		r.append(&s[i], j - i);
+		r.append(replacement);
+		i = j + find.length();
+	}
+	return r;
+}
+
 IMQS_PAL_API bool EndsWith(const std::string& s, const char* suffix) {
 	auto pos = s.rfind(suffix, 0);
 	if (pos == -1)
@@ -134,6 +153,16 @@ IMQS_PAL_API bool MatchWildcardNoCase(const std::string& s, const std::string& p
 }
 IMQS_PAL_API bool MatchWildcardNoCase(const char* s, const char* p) {
 	return MatchWildcardT<false>(s, p);
+}
+
+IMQS_PAL_API std::vector<std::string> Split(const char* s, int delim) {
+	std::vector<std::string> list;
+	Split(s, delim, list);
+	return list;
+}
+
+IMQS_PAL_API std::vector<std::string> Split(const std::string& s, int delim) {
+	return Split(s.c_str(), delim);
 }
 
 IMQS_PAL_API std::string Join(const std::vector<std::string>& parts, const char* joiner) {

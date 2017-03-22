@@ -523,6 +523,11 @@ Response Client::Post(const std::string& url, size_t bodyBytes, const void* body
 	return c.Post(url, bodyBytes, body, headers);
 }
 
+Response Client::Post(const std::string& url, const HeaderMap& headers) {
+	Connection c;
+	return c.Post(url, 0, nullptr, headers);
+}
+
 Response Client::Perform(const std::string& method, const std::string& url, size_t bodyBytes, const void* body, const std::string& caCertsFilePath, const HeaderMap& headers) {
 	Connection c;
 	return c.Perform(method, url, bodyBytes, body, caCertsFilePath, headers);
@@ -565,6 +570,10 @@ Response Connection::Get(const std::string& url, const HeaderMap& headers) {
 
 Response Connection::Post(const std::string& url, size_t bodyBytes, const void* body, const HeaderMap& headers) {
 	return Perform("POST", url, bodyBytes, body, "", headers);
+}
+
+Response Connection::Post(const std::string& url, const HeaderMap& headers) {
+	return Perform("POST", url, 0, nullptr, "", headers);
 }
 
 Response Connection::Perform(const std::string& method, const std::string& url, size_t bodyBytes, const void* body, const std::string& caCertsFilePath, const HeaderMap& headers) {

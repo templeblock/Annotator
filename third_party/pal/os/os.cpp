@@ -284,11 +284,12 @@ Error ReadWholeFile_Internal(const std::string& filename, void** buf_target, std
 		auto   n     = read(fd, (uint8_t*) buf + pos, (unsigned int) chunk);
 		if (n == -1 || n == 0) {
 			len = 0;
-			if (buf_target)
+			if (buf_target) {
 				free(*buf_target);
-			else
+				*buf_target = nullptr;
+			} else {
 				str_target->resize(0);
-			*buf_target = nullptr;
+			}
 			close(fd);
 			return os::ErrorFrom_errno(errno);
 		}
@@ -402,6 +403,7 @@ IMQS_PAL_API Error FindFiles(const std::string& _dir, std::function<bool(const F
 		if (!ignore) {
 			item.IsDir      = !!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
 			item.Name       = fd.cFileName;
+			item.TimeCreate = time::Time::FromEpoch1601(FileTimeTo100NanoSeconds(fd.ftCreationTime));
 			item.TimeModify = time::Time::FromEpoch1601(FileTimeTo100NanoSeconds(fd.ftLastWriteTime));
 			bool res        = callback(item);
 			if (item.IsDir) {
@@ -458,6 +460,7 @@ IMQS_PAL_API Error FindFiles(const std::string& _dir, std::function<bool(const F
 			err = ErrorFrom_errno(errno);
 			break;
 		}
+		item.TimeCreate = time::Time::FromUnix(STAT_TIME(st, c)); // st.st_mtim.tv_sec + st.st_mtim.tv_nsec * (1.0 / 1000000000);
 		item.TimeModify = time::Time::FromUnix(STAT_TIME(st, m)); // st.st_mtim.tv_sec + st.st_mtim.tv_nsec * (1.0 / 1000000000);
 		bool res        = callback(item);
 		if (item.IsDir) {

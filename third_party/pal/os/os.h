@@ -54,9 +54,10 @@ IMQS_PAL_API Error WriteWholeFile(const std::string& filename, const std::string
 IMQS_PAL_API Error FileLength(const std::string& filename, uint64_t& len);
 
 struct IMQS_PAL_API FindFileItem {
-	std::string      Root; // Parent directory
-	std::string      Name; // Name of file or directory
-	imqs::time::Time TimeModify;
+	std::string      Root;       // Parent directory
+	std::string      Name;       // Name of file or directory
+	imqs::time::Time TimeCreate; // Creation time
+	imqs::time::Time TimeModify; // Last modification time
 	bool             IsDir : 1;
 	std::string      FullPath() const; // Returns Root + PathSeparator + Name
 };

@@ -172,6 +172,9 @@ private:
 	time::Weekday AbsWeekday(uint64_t abs) const;
 };
 
+// Convenience function
+IMQS_PAL_API Time Now();
+
 // Read a performance counter timer, which is not tied to any particular epoch, but is
 // intended to be accurate, and useful for profiling code.
 IMQS_PAL_API int64_t PerformanceCounter();
