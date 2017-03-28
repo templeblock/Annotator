@@ -4,6 +4,8 @@
 namespace imqs {
 namespace anno {
 
+StaticError VideoFile::ErrNeedMoreData("Codec needs more data");
+
 void VideoFile::Initialize() {
 	av_register_all();
 }
@@ -16,14 +18,10 @@ VideoFile::~VideoFile() {
 }
 
 void VideoFile::Close() {
-	// TODO? flush cached frames
-	// pkt.data = NULL;
-	// pkt.size = 0;
-	// do {
-	// 	decode_packet(&got_frame, 1);
-	// } while (got_frame);
+	FlushCachedFrames();
 
-	avcodec_close(VideoDecCtx);
+	sws_freeContext(SwsCtx);
+	avcodec_free_context(&VideoDecCtx);
 	avformat_close_input(&FmtCtx);
 	av_frame_free(&Frame);
 }
@@ -41,21 +39,15 @@ Error VideoFile::OpenFile(std::string filename) {
 		return Error("Could not find stream information");
 	}
 
-	auto err = OpenCodecContext(VideoStreamIdx, FmtCtx, AVMEDIA_TYPE_VIDEO);
+	auto err = OpenCodecContext(FmtCtx, AVMEDIA_TYPE_VIDEO, VideoStreamIdx, VideoDecCtx);
 	if (!err.OK()) {
 		Close();
 		return err;
 	}
 
 	VideoStream = FmtCtx->streams[VideoStreamIdx];
-	VideoDecCtx = VideoStream->codec;
 
 	//av_dump_format(fmt_ctx, 0, src_filename, 0);
-
-	if (!VideoStream) {
-		Close();
-		return Error("Could not find video stream in the input");
-	}
 
 	Frame = av_frame_alloc();
 	if (!Frame) {
@@ -66,297 +58,146 @@ Error VideoFile::OpenFile(std::string filename) {
 	return Error();
 }
 
-Error VideoFile::DecodeNextFrame(AVFrame*& frame) {
-	// initialize packet, set data to NULL, let the demuxer fill it
-	AVPacket pkt;
-	av_init_packet(&pkt);
-	pkt.data = nullptr;
-	pkt.size = 0;
-	
-	bool got_frame = false;
+VideoStreamInfo VideoFile::GetVideoStreamInfo() {
+	VideoStreamInfo inf;
+	inf.Width  = VideoDecCtx->width;
+	inf.Height = VideoDecCtx->height;
+	return inf;
+}
 
-	while (av_read_frame(FmtCtx, &pkt) == 0) {
-		AVPacket orig_pkt = pkt;
-		do {
-			int  decoded   = 0;
-			auto err       = DecodePacket(pkt, got_frame, decoded);
-			// this looks like a leak, because we skip av_packet_unref
-			if (!err.OK())
-				return err;
-			pkt.data += decoded;
-			pkt.size -= decoded;
-		} while (pkt.size > 0 && !got_frame);
-		av_packet_unref(&orig_pkt);
-		if (got_frame)
+Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
+	bool haveFrame = false;
+	while (!haveFrame) {
+		int r = avcodec_receive_frame(VideoDecCtx, Frame);
+		switch (r) {
+		case 0:
+			haveFrame = true;
 			break;
+		case AVERROR_EOF:
+			return ErrEOF;
+		case AVERROR(EAGAIN): {
+			// need more data
+			AVPacket pkt;
+			av_init_packet(&pkt);
+			pkt.data = nullptr;
+			pkt.size = 0;
+			r        = av_read_frame(FmtCtx, &pkt);
+			if (r != 0)
+				return TranslateErr(r, "av_read_frame");
+			r = avcodec_send_packet(VideoDecCtx, &pkt);
+			av_packet_unref(&pkt);
+			if (r == AVERROR_INVALIDDATA) {
+				// skip over invalid data, and keep trying
+			} else if (r != 0) {
+				return TranslateErr(r, "avcodec_send_packet");
+			}
+			break;
+		}
+		default:
+			return TranslateErr(r, "avcodec_receive_frame");
+		}
 	}
-	if (!got_frame)
-		return Error("No more frames");
 
-	frame = Frame;
+	if (SwsCtx && (SwsDstW != width) || (SwsDstH != height)) {
+		sws_freeContext(SwsCtx);
+		SwsCtx = nullptr;
+	}
+
+	if (!SwsCtx) {
+		SwsCtx = sws_getContext(Frame->width, Frame->height, (AVPixelFormat) Frame->format, width, height, AVPixelFormat::AV_PIX_FMT_RGBA, 0, nullptr, nullptr, nullptr);
+		if (!SwsCtx)
+			return Error("Unable to create libswscale scaling context");
+		SwsDstH = height;
+		SwsDstW = width;
+	}
+
+	uint8_t* buf8         = (uint8_t*) buf;
+	uint8_t* dst[4]       = {buf8 + 0, buf8 + 1, buf8 + 2, buf8 + 3};
+	int      dstStride[4] = {stride, stride, stride, stride};
+
+	sws_scale(SwsCtx, Frame->data, Frame->linesize, 0, Frame->height, dst, dstStride);
+
 	return Error();
 }
 
-Error VideoFile::OpenCodecContext(int& stream_idx, AVFormatContext* fmt_ctx, AVMediaType type) {
-	int             ret;
-	AVStream*       st;
-	AVCodecContext* dec_ctx = NULL;
-	AVCodec*        dec     = NULL;
-	AVDictionary*   opts    = NULL;
+Error VideoFile::RecvFrame() {
+	int ret = avcodec_receive_frame(VideoDecCtx, Frame);
+	if (ret == 0)
+		return Error();
+	return TranslateErr(ret, "avcodec_receive_frame");
+}
+
+Error VideoFile::TranslateErr(int ret, const char* whileBusyWith) {
+	char errBuf[AV_ERROR_MAX_STRING_SIZE + 1];
+
+	switch (ret) {
+	case AVERROR_EOF: return ErrEOF;
+	case AVERROR(EAGAIN): return ErrNeedMoreData;
+	default:
+		av_strerror(ret, errBuf, sizeof(errBuf));
+		if (whileBusyWith)
+			return Error::Fmt("AVERROR %v from %v", errBuf, whileBusyWith);
+		else
+			return Error::Fmt("AVERROR %v", errBuf);
+	}
+}
+
+Error VideoFile::OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, int& stream_idx, AVCodecContext*& dec_ctx) {
+	int           ret;
+	AVStream*     st;
+	AVCodec*      dec  = NULL;
+	AVDictionary* opts = NULL;
 
 	ret = av_find_best_stream(fmt_ctx, type, -1, -1, NULL, 0);
-	if (ret < 0) {
+	if (ret < 0)
 		return Error::Fmt("Could not find %s stream", av_get_media_type_string(type));
-	} else {
-		stream_idx = ret;
-		st         = fmt_ctx->streams[stream_idx];
 
-		/* find decoder for the stream */
-		dec_ctx = st->codec;
-		dec     = avcodec_find_decoder(dec_ctx->codec_id);
-		if (!dec) {
-			return Error::Fmt("Failed to find %s codec", av_get_media_type_string(type));
-		}
+	stream_idx = ret;
+	st         = fmt_ctx->streams[stream_idx];
 
-		/* Init the video decoder */
-		av_dict_set(&opts, "flags2", "+export_mvs", 0);
-		ret = avcodec_open2(dec_ctx, dec, &opts);
-		if (ret < 0) {
-			return Error::Fmt("Failed to open %s codec", av_get_media_type_string(type));
-		}
-	}
+	// find decoder for the stream
+	dec = avcodec_find_decoder(st->codecpar->codec_id);
+	if (!dec)
+		return Error::Fmt("Failed to find %s codec", av_get_media_type_string(type));
 
-	return Error();
-}
+	// Allocate a codec context for the decoder
+	dec_ctx = avcodec_alloc_context3(dec);
+	if (!dec_ctx)
+		return Error::Fmt("Failed to allocate %v codec context", av_get_media_type_string(type));
 
-Error VideoFile::DecodePacket(AVPacket& pkt, bool& got_frame, int& decoded) {
-	decoded   = pkt.size;
-	got_frame = false;
+	// Copy codec parameters from input stream to output codec context
+	ret = avcodec_parameters_to_context(dec_ctx, st->codecpar);
+	if (ret < 0)
+		return Error::Fmt("Failed to copy %s codec parameters to decoder context. Error %v", av_get_media_type_string(type), ret);
 
-	if (pkt.stream_index == VideoStreamIdx) {
-		int igot_frame = 0;
-		int ret        = avcodec_decode_video2(VideoDecCtx, Frame, &igot_frame, &pkt);
-		if (ret < 0)
-			return Error::Fmt("Error decoding video frame (%v)", ret);
-		got_frame = igot_frame != 0;
-
-		/*
-		if (got_frame) {
-			static int video_frame_count = 0;
-			video_frame_count++;
-			AVFrameSideData* sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MOTION_VECTORS);
-			if (sd) {
-				const AVMotionVector* mvs = (const AVMotionVector*) sd->data;
-				for (int i = 0; i < sd->size / sizeof(*mvs); i++) {
-					const AVMotionVector* mv = &mvs[i];
-					printf("%d,%2d,%2d,%2d,%4d,%4d,%4d,%4d,0x%" PRIx64 "\n",
-					       video_frame_count, mv->source,
-					       mv->w, mv->h, mv->src_x, mv->src_y,
-					       mv->dst_x, mv->dst_y, mv->flags);
-				}
-			}
-		}
-		*/
-	}
+	// Init the video decoder
+	//av_dict_set(&opts, "refcounted_frames", "1", 0); // not necessary, since avcodec_receive_frame() always uses refcounted frames
+	//av_dict_set(&opts, "flags2", "+export_mvs", 0); // motion vectors
+	ret = avcodec_open2(dec_ctx, dec, &opts);
+	if (ret < 0)
+		return Error::Fmt("Failed to open %s codec", av_get_media_type_string(type));
 
 	return Error();
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-static AVFormatContext* fmt_ctx       = NULL;
-static AVCodecContext*  video_dec_ctx = NULL;
-static AVStream*        video_stream  = NULL;
-static const char*      src_filename  = NULL;
-
-static int      video_stream_idx = -1;
-static AVFrame* frame            = NULL;
-static AVPacket pkt;
-static int      video_frame_count = 0;
-
-static int decode_packet(int* got_frame, int cached) {
-	int decoded = pkt.size;
-
-	*got_frame = 0;
-
-	if (pkt.stream_index == video_stream_idx) {
-		int ret = avcodec_decode_video2(video_dec_ctx, frame, got_frame, &pkt);
-		if (ret < 0) {
-			//fprintf(stderr, "Error decoding video frame (%s)\n", av_err2str(ret));
-			//auto errMsg = av_err2str(ret);
-			fprintf(stderr, "Error decoding video frame (%d)\n", ret);
-			return ret;
-		}
-
-		if (*got_frame) {
-			int              i;
-			AVFrameSideData* sd;
-
-			video_frame_count++;
-			sd = av_frame_get_side_data(frame, AV_FRAME_DATA_MOTION_VECTORS);
-			if (sd) {
-				const AVMotionVector* mvs = (const AVMotionVector*) sd->data;
-				for (i = 0; i < sd->size / sizeof(*mvs); i++) {
-					const AVMotionVector* mv = &mvs[i];
-					printf("%d,%2d,%2d,%2d,%4d,%4d,%4d,%4d,0x%" PRIx64 "\n",
-					       video_frame_count, mv->source,
-					       mv->w, mv->h, mv->src_x, mv->src_y,
-					       mv->dst_x, mv->dst_y, mv->flags);
-				}
-			}
-		}
-	}
-
-	return decoded;
-}
-
-static int open_codec_context(int*             stream_idx,
-                              AVFormatContext* fmt_ctx, enum AVMediaType type) {
-	int             ret;
-	AVStream*       st;
-	AVCodecContext* dec_ctx = NULL;
-	AVCodec*        dec     = NULL;
-	AVDictionary*   opts    = NULL;
-
-	ret = av_find_best_stream(fmt_ctx, type, -1, -1, NULL, 0);
-	if (ret < 0) {
-		fprintf(stderr, "Could not find %s stream in input file '%s'\n",
-		        av_get_media_type_string(type), src_filename);
-		return ret;
-	} else {
-		*stream_idx = ret;
-		st          = fmt_ctx->streams[*stream_idx];
-
-		/* find decoder for the stream */
-		dec_ctx = st->codec;
-		dec     = avcodec_find_decoder(dec_ctx->codec_id);
-		if (!dec) {
-			fprintf(stderr, "Failed to find %s codec\n",
-			        av_get_media_type_string(type));
-			return AVERROR(EINVAL);
-		}
-
-		/* Init the video decoder */
-		av_dict_set(&opts, "flags2", "+export_mvs", 0);
-		if ((ret = avcodec_open2(dec_ctx, dec, &opts)) < 0) {
-			fprintf(stderr, "Failed to open %s codec\n",
-			        av_get_media_type_string(type));
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
-void TestDecode(xo::DomCanvas* canvas) {
-	VideoFile v;
-	auto err = v.OpenFile("D:\\mldata\\GOPR0080.MP4");
-	if (!err.OK())
+void VideoFile::FlushCachedFrames() {
+	// flush cached frames in the codec's buffers
+	if (!VideoDecCtx)
 		return;
 
-	AVFrame* frame;
-	err = v.DecodeNextFrame(frame);
-	if (err.OK()) {
-		auto cx = canvas->GetCanvas2D();
-		size_t w = std::min<size_t>(cx->Width(), frame->width);
-		size_t h = std::min<size_t>(cx->Height(), frame->height);
-		for (size_t y = 0; y < h; y++) {
-			const uint8_t* src = frame->data[0];
-			src += y * (size_t) frame->linesize[0];
-			uint8_t* dst = (uint8_t*) cx->RowPtr(y);
-			for (size_t x = 0; x < w; x++) {
-				dst[0] = src[0];
-				dst[1] = src[0];
-				dst[2] = src[0];
-				dst[3] = 255;
-				src++;
-				dst += 4;
-			}
-		}
-		cx->Invalidate();
-		canvas->ReleaseCanvas(cx);
-	}
-}
-
-void TestDecode_OLD(xo::DomCanvas* canvas) {
-	int ret = 0, got_frame;
-
-	src_filename = "D:\\mldata\\GOPR0080.MP4";
-
-	av_register_all();
-
-	if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
-		fprintf(stderr, "Could not open source file %s\n", src_filename);
-		exit(1);
-	}
-
-	if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
-		fprintf(stderr, "Could not find stream information\n");
-		exit(1);
-	}
-
-	if (open_codec_context(&video_stream_idx, fmt_ctx, AVMEDIA_TYPE_VIDEO) >= 0) {
-		video_stream  = fmt_ctx->streams[video_stream_idx];
-		video_dec_ctx = video_stream->codec;
-	}
-
-	av_dump_format(fmt_ctx, 0, src_filename, 0);
-
-	if (!video_stream) {
-		fprintf(stderr, "Could not find video stream in the input, aborting\n");
-		ret = 1;
-		goto end;
-	}
-
-	frame = av_frame_alloc();
-	if (!frame) {
-		fprintf(stderr, "Could not allocate frame\n");
-		ret = AVERROR(ENOMEM);
-		goto end;
-	}
-
-	printf("framenum,source,blockw,blockh,srcx,srcy,dstx,dsty,flags\n");
-
-	/* initialize packet, set data to NULL, let the demuxer fill it */
+	// send an empty packet which instructs the codec to start flushing
+	AVPacket pkt;
 	av_init_packet(&pkt);
 	pkt.data = NULL;
 	pkt.size = 0;
+	avcodec_send_packet(VideoDecCtx, &pkt);
 
-	/* read frames from the file */
-	while (av_read_frame(fmt_ctx, &pkt) >= 0) {
-		AVPacket orig_pkt = pkt;
-		do {
-			ret = decode_packet(&got_frame, 0);
-			if (ret < 0)
-				break;
-			pkt.data += ret;
-			pkt.size -= ret;
-		} while (pkt.size > 0);
-		av_packet_unref(&orig_pkt);
+	// drain the codec
+	while (true) {
+		int r = avcodec_receive_frame(VideoDecCtx, Frame);
+		if (r != 0)
+			break;
 	}
-
-	/* flush cached frames */
-	pkt.data = NULL;
-	pkt.size = 0;
-	do {
-		decode_packet(&got_frame, 1);
-	} while (got_frame);
-
-end:
-	avcodec_close(video_dec_ctx);
-	avformat_close_input(&fmt_ctx);
-	av_frame_free(&frame);
 }
 }
 }

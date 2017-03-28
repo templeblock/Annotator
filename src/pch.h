@@ -7,4 +7,5 @@
 extern "C" {
 #include <libavutil/motion_vector.h>
 #include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
 }
