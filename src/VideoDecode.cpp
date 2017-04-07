@@ -31,12 +31,14 @@ Error VideoFile::OpenFile(std::string filename) {
 
 	//src_filename = "D:\\mldata\\GOPR0080.MP4";
 
-	if (avformat_open_input(&FmtCtx, filename.c_str(), NULL, NULL) < 0)
-		return Error::Fmt("Could not open video file %v", filename);
+	int r = avformat_open_input(&FmtCtx, filename.c_str(), NULL, NULL);
+	if (r < 0)
+		return TranslateErr(r, tsf::fmt("Could not open video file %v", filename).c_str());
 
-	if (avformat_find_stream_info(FmtCtx, NULL) < 0) {
+	r = avformat_find_stream_info(FmtCtx, NULL);
+	if (r < 0) {
 		Close();
-		return Error("Could not find stream information");
+		return TranslateErr(r, "Could not find stream information");
 	}
 
 	auto err = OpenCodecContext(FmtCtx, AVMEDIA_TYPE_VIDEO, VideoStreamIdx, VideoDecCtx);
@@ -136,7 +138,7 @@ Error VideoFile::TranslateErr(int ret, const char* whileBusyWith) {
 	default:
 		av_strerror(ret, errBuf, sizeof(errBuf));
 		if (whileBusyWith)
-			return Error::Fmt("AVERROR %v from %v", errBuf, whileBusyWith);
+			return Error::Fmt("%v: Error %", whileBusyWith, errBuf);
 		else
 			return Error::Fmt("AVERROR %v", errBuf);
 	}
