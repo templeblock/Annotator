@@ -4,8 +4,14 @@ namespace imqs {
 namespace anno {
 
 struct VideoStreamInfo {
-	int Width;
-	int Height;
+	int64_t    Duration  = 0; // AVFormatContext.duration
+	int64_t    NumFrames = 0; // AvStream.nb_frames
+	AVRational FrameRate;     // AVStream.r_frame_rate
+	int        Width  = 0;
+	int        Height = 0;
+
+	double DurationSeconds() const;
+	double FrameRateSeconds() const;
 };
 
 class VideoFile {
@@ -18,11 +24,16 @@ public:
 	~VideoFile();
 
 	void            Close();
+	bool            IsOpen() const { return Filename != ""; }
 	Error           OpenFile(std::string filename);
+	std::string     GetFilename() const { return Filename; }
 	VideoStreamInfo GetVideoStreamInfo();
+	Error           SeekToFrame(int64_t frame);
+	double          LastFrameTimeSeconds();
 	Error           DecodeFrameRGBA(int width, int height, void* buf, int stride);
 
 private:
+	std::string      Filename;
 	AVFormatContext* FmtCtx         = nullptr;
 	AVCodecContext*  VideoDecCtx    = nullptr;
 	AVStream*        VideoStream    = nullptr;
@@ -31,6 +42,7 @@ private:
 	SwsContext*      SwsCtx         = nullptr;
 	int              SwsDstW        = 0;
 	int              SwsDstH        = 0;
+	int64_t          LastFramePTS   = 0; // PTS = presentation time stamp (ie time when frame should be shown to user)
 
 	static Error TranslateErr(int ret, const char* whileBusyWith = nullptr);
 	static Error OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, int& stream_idx, AVCodecContext*& dec_ctx);

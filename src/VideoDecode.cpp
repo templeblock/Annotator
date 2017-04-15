@@ -6,6 +6,18 @@ namespace anno {
 
 StaticError VideoFile::ErrNeedMoreData("Codec needs more data");
 
+double VideoStreamInfo::DurationSeconds() const {
+	return (double) Duration / (double) AV_TIME_BASE;
+}
+
+double VideoStreamInfo::FrameRateSeconds() const {
+	return av_q2d(FrameRate);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void VideoFile::Initialize() {
 	av_register_all();
 }
@@ -24,6 +36,15 @@ void VideoFile::Close() {
 	avcodec_free_context(&VideoDecCtx);
 	avformat_close_input(&FmtCtx);
 	av_frame_free(&Frame);
+	FmtCtx         = nullptr;
+	VideoDecCtx    = nullptr;
+	VideoStream    = nullptr;
+	VideoStreamIdx = -1;
+	Frame          = nullptr;
+	SwsCtx         = nullptr;
+	SwsDstW        = 0;
+	SwsDstH        = 0;
+	Filename       = "";
 }
 
 Error VideoFile::OpenFile(std::string filename) {
@@ -57,14 +78,32 @@ Error VideoFile::OpenFile(std::string filename) {
 		return Error("Out of memory allocating frame");
 	}
 
+	Filename = filename;
 	return Error();
 }
 
 VideoStreamInfo VideoFile::GetVideoStreamInfo() {
 	VideoStreamInfo inf;
-	inf.Width  = VideoDecCtx->width;
-	inf.Height = VideoDecCtx->height;
+	// frame rate: 119.880116
+	// duration: 4:31
+	//int64_t duration = FmtCtx->duration;
+	//int64_t tbase = VideoDecCtx->
+	//av_rescale()
+	inf.Duration  = FmtCtx->duration;
+	inf.NumFrames = VideoStream->nb_frames;
+	inf.FrameRate = VideoStream->r_frame_rate;
+	inf.Width     = VideoDecCtx->width;
+	inf.Height    = VideoDecCtx->height;
 	return inf;
+}
+
+Error VideoFile::SeekToFrame(int64_t frame) {
+	av_seek_frame(FmtCtx, VideoStreamIdx, frame, 0);
+	return Error();
+}
+
+double VideoFile::LastFrameTimeSeconds() {
+	return av_q2d(av_mul_q({(int) LastFramePTS, 1}, VideoStream->time_base));
 }
 
 Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
@@ -99,6 +138,9 @@ Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
 			return TranslateErr(r, "avcodec_receive_frame");
 		}
 	}
+	IMQS_ASSERT(haveFrame);
+
+	LastFramePTS = Frame->pts;
 
 	if (SwsCtx && (SwsDstW != width) || (SwsDstH != height)) {
 		sws_freeContext(SwsCtx);
