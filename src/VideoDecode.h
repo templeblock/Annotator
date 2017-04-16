@@ -29,6 +29,7 @@ public:
 	std::string     GetFilename() const { return Filename; }
 	VideoStreamInfo GetVideoStreamInfo();
 	Error           SeekToFrame(int64_t frame);
+	Error           SeekToFraction(double fraction_0_to_1);
 	double          LastFrameTimeSeconds();
 	Error           DecodeFrameRGBA(int width, int height, void* buf, int stride);
 

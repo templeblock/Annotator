@@ -17,6 +17,7 @@ public:
 	xo::DomNode*   Root          = nullptr;
 	xo::DomNode*   TimeSliderBox = nullptr;
 	xo::DomCanvas* VideoCanvas   = nullptr;
+	xo::DomNode*   PlayBtn       = nullptr;
 	int64_t        PlayTimer     = 0;
 	int64_t        OnDestroyEv   = 0;
 	std::string    VideoFilename;
@@ -33,10 +34,17 @@ public:
 	void Render() {
 		auto ui = this;
 		Root->Clear();
+
 		auto videoArea = Root->ParseAppendNode("<div style='break:after; box-sizing: margin; width: 100%; margin: 10ep'></div>");
-		VideoCanvas    = videoArea->AddCanvas();
+
+		auto fileArea = videoArea->ParseAppendNode("<div style='break:after;'></div>");
+		fileArea->AddText("Hello");
+
+		double aspect = 1920.0 / 1080.0;
+
+		VideoCanvas = videoArea->AddCanvas();
 		VideoCanvas->StyleParse("hcenter: hcenter; border: 1px #888; border-radius: 1.5ep;");
-		VideoCanvas->SetSize(1200, 700);
+		VideoCanvas->SetSize(1400, (int) (1400 / aspect));
 
 		TimeSliderBox = Root->ParseAppendNode("<div></div>");
 		RenderTimeSlider(true);
@@ -44,17 +52,17 @@ public:
 		auto mediaControlBox = Root->ParseAppendNode("<div style='break:after; padding: 5ep'></div>");
 		auto btnW            = "20ep";
 		auto btnH            = "20ep";
-		auto btnPlay         = xo::controls::Button::NewSvg(mediaControlBox, "media-play", btnW, btnH);
-		auto btnPause        = xo::controls::Button::NewSvg(mediaControlBox, "media-pause", btnW, btnH);
-		auto btnStepB        = xo::controls::Button::NewSvg(mediaControlBox, "media-step-backward", btnW, btnH);
-		auto btnStepF        = xo::controls::Button::NewSvg(mediaControlBox, "media-step-forward", btnW, btnH);
+		PlayBtn              = xo::controls::Button::NewSvg(mediaControlBox, "media-play", btnW, btnH);
+		//auto btnPause        = xo::controls::Button::NewSvg(mediaControlBox, "media-pause", btnW, btnH);
+		//auto btnStepB = xo::controls::Button::NewSvg(mediaControlBox, "media-step-backward", btnW, btnH);
+		auto btnStepF = xo::controls::Button::NewSvg(mediaControlBox, "media-step-forward", btnW, btnH);
 
-		btnPlay->OnClick([ui] {
-			ui->Play();
+		PlayBtn->OnClick([ui] {
+			ui->FlipPlayState();
 		});
-		btnPause->OnClick([ui] {
-			ui->Stop();
-		});
+		//btnPause->OnClick([ui] {
+		//	ui->Stop();
+		//});
 		btnStepF->OnClick([ui] {
 			ui->Stop();
 			ui->NextFrame();
@@ -68,8 +76,9 @@ public:
 
 			Root->OnKeyChar([ui](xo::Event& ev) {
 				switch (ev.KeyChar) {
+				//case ',': ui->NextFrame(); break; -- back frame
 				case '.': ui->NextFrame(); break;
-				case ',': ui->NextFrame(); break;
+				case 'p': ui->FlipPlayState(); break;
 				}
 			});
 		}
@@ -85,8 +94,9 @@ public:
 		auto caret = TimeSliderBox->ParseAppendNode("<div style='background: #ccc; border: 1px #888; width: 5ep; height: 120%; vcenter: vcenter; border-radius: 2.5ep'></div>");
 
 		if (first) {
-			TimeSliderBox->OnMouseDown([this]() {
+			TimeSliderBox->OnMouseDown([this](xo::Event& ev) {
 				TimeSliderBox->SetCapture();
+				SeekFromUI(ev);
 			});
 
 			TimeSliderBox->OnMouseUp([this]() {
@@ -94,37 +104,51 @@ public:
 			});
 
 			TimeSliderBox->OnMouseMove([this](xo::Event& ev) {
-				if (ev.IsPressed(xo::Button::MouseLeft)) {
-					auto tester = (xo::DomNode*) TimeSliderBox->ChildByIndex(0);
-					auto r = ev.LayoutResult->Node(TimeSliderBox);
-					float mouseX = ev.PointsRel[0].x / r->ContentWidthPx(); // percentage
-					mouseX = xo::Clamp(mouseX, 0.f, 1.f);
-					tester->StyleParsef("hcenter: %.1f%%", mouseX * 100.f);
-				}
+				if (ev.IsPressed(xo::Button::MouseLeft))
+					SeekFromUI(ev);
 			});
 		}
 
-		auto info = Video.GetVideoStreamInfo();
-		double dur = info.DurationSeconds();
-		double pos = Video.LastFrameTimeSeconds();
-		
+		auto   info = Video.GetVideoStreamInfo();
+		double dur  = info.DurationSeconds();
+		double pos  = Video.LastFrameTimeSeconds();
+
 		caret->StyleParsef("hcenter: %.1f%%", pos * 100.0 / dur);
+	}
+
+	void FlipPlayState() {
+		if (PlayState == PlayStates::Play)
+			Stop();
+		else
+			Play();
+	}
+
+	void SeekFromUI(xo::Event& ev) {
+		auto  box    = ev.LayoutResult->Node(TimeSliderBox);
+		float mouseX = ev.PointsRel[0].x / box->ContentWidthPx(); // percentage
+		mouseX       = xo::Clamp(mouseX, 0.f, 1.f);
+		Video.SeekToFraction(mouseX);
+		// I've been too lazy to understand why we need to burn a frame after seeking.
+		NextFrame();
+		NextFrame();
 	}
 
 	void Play() {
 		if (PlayState == PlayStates::Play)
 			return;
+		xo::controls::Button::SetSvg(PlayBtn, "media-pause");
 		PlayState = PlayStates::Play;
-		VideoCanvas->OnTimer([this](xo::Event& ev) {
+		PlayTimer = VideoCanvas->OnTimer([this](xo::Event& ev) {
 			if (this->PlayState == PlayStates::Play)
 				this->NextFrame();
 		},
-		                     16);
+		                                 16);
 	}
 
 	void Stop() {
 		if (PlayState == PlayStates::Stop)
 			return;
+		xo::controls::Button::SetSvg(PlayBtn, "media-play");
 		PlayState = PlayStates::Stop;
 		VideoCanvas->RemoveHandler(PlayTimer);
 		PlayTimer = 0;
@@ -151,15 +175,16 @@ public:
 		return err.OK();
 	}
 };
-}
-}
+
+} // namespace anno
+} // namespace imqs
 
 void xoMain(xo::SysWnd* wnd) {
 	using namespace imqs::anno;
 	VideoFile::Initialize();
 
 	svg::LoadAll(wnd->Doc());
-	wnd->SetPosition(xo::Box(0, 0, 1300, 840), xo::SysWnd::SetPosition_Size);
+	wnd->SetPosition(xo::Box(0, 0, 1500, 970), xo::SysWnd::SetPosition_Size);
 
 	auto ui           = new UI(&wnd->Doc()->Root);
 	ui->VideoFilename = "D:\\mldata\\GOPR0080.MP4";

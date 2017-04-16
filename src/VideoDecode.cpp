@@ -98,7 +98,17 @@ VideoStreamInfo VideoFile::GetVideoStreamInfo() {
 }
 
 Error VideoFile::SeekToFrame(int64_t frame) {
-	av_seek_frame(FmtCtx, VideoStreamIdx, frame, 0);
+	double ts = av_q2d(VideoStream->time_base);
+	double t  = frame / ts;
+	int    r  = av_seek_frame(FmtCtx, VideoStreamIdx, (int64_t) t, 0);
+	return Error();
+}
+
+Error VideoFile::SeekToFraction(double fraction_0_to_1) {
+	double seconds = fraction_0_to_1 * GetVideoStreamInfo().DurationSeconds();
+	double ts      = av_q2d(VideoStream->time_base);
+	double t       = seconds / ts;
+	int    r       = av_seek_frame(FmtCtx, VideoStreamIdx, (int64_t) t, 0);
 	return Error();
 }
 
@@ -243,5 +253,5 @@ void VideoFile::FlushCachedFrames() {
 			break;
 	}
 }
-}
-}
+} // namespace anno
+} // namespace imqs
