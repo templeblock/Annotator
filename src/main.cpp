@@ -35,16 +35,26 @@ public:
 		auto ui = this;
 		Root->Clear();
 
-		auto videoArea = Root->ParseAppendNode("<div style='break:after; box-sizing: margin; width: 100%; margin: 10ep'></div>");
-
-		auto fileArea = videoArea->ParseAppendNode("<div style='break:after;'></div>");
-		fileArea->AddText("Hello");
-
-		double aspect = 1920.0 / 1080.0;
+		auto   videoArea  = Root->ParseAppendNode("<div style='break:after; box-sizing: margin; width: 100%; margin: 10ep'></div>");
+		double aspect     = 1920.0 / 1080.0;
+		double videoWidth = 1400;
 
 		VideoCanvas = videoArea->AddCanvas();
 		VideoCanvas->StyleParse("hcenter: hcenter; border: 1px #888; border-radius: 1.5ep;");
-		VideoCanvas->SetSize(1400, (int) (1400 / aspect));
+		VideoCanvas->SetSize((int) videoWidth, (int) (videoWidth / aspect));
+
+		auto fileArea = videoArea->ParseAppendNode("<div style='break:after; margin: 4ep'></div>");
+		fileArea->StyleParsef("hcenter: hcenter; width: %vpx", videoWidth);
+		auto fileName = fileArea->ParseAppendNode("<div style='cursor: hand'></div>");
+		fileName->AddClass("font-medium");
+		fileName->AddText(VideoFilename);
+		fileName->OnClick([this]{
+			std::vector<std::pair<std::string,std::string>> types = {
+				{"Video Files", "*.mp4;*.avi;*.mkv"},
+			};
+			if (xo::osdialogs::BrowseForFileOpen(Root->GetDoc(), types, VideoFilename))
+				OpenVideo();
+		});
 
 		TimeSliderBox = Root->ParseAppendNode("<div></div>");
 		RenderTimeSlider(true);
@@ -53,16 +63,12 @@ public:
 		auto btnW            = "20ep";
 		auto btnH            = "20ep";
 		PlayBtn              = xo::controls::Button::NewSvg(mediaControlBox, "media-play", btnW, btnH);
-		//auto btnPause        = xo::controls::Button::NewSvg(mediaControlBox, "media-pause", btnW, btnH);
 		//auto btnStepB = xo::controls::Button::NewSvg(mediaControlBox, "media-step-backward", btnW, btnH);
 		auto btnStepF = xo::controls::Button::NewSvg(mediaControlBox, "media-step-forward", btnW, btnH);
 
 		PlayBtn->OnClick([ui] {
 			ui->FlipPlayState();
 		});
-		//btnPause->OnClick([ui] {
-		//	ui->Stop();
-		//});
 		btnStepF->OnClick([ui] {
 			ui->Stop();
 			ui->NextFrame();
@@ -170,9 +176,13 @@ public:
 		Video.Close();
 
 		auto err = Video.OpenFile(VideoFilename);
-		if (!err.OK())
+		if (!err.OK()) {
 			xo::controls::MsgBox::Show(Root->GetDoc(), err.Message());
-		return err.OK();
+			return false;
+		}
+		Render();
+		NextFrame();
+		return true;
 	}
 };
 
@@ -183,12 +193,12 @@ void xoMain(xo::SysWnd* wnd) {
 	using namespace imqs::anno;
 	VideoFile::Initialize();
 
+	wnd->Doc()->ClassParse("font-medium", "font-size: 14ep");
+
 	svg::LoadAll(wnd->Doc());
 	wnd->SetPosition(xo::Box(0, 0, 1500, 970), xo::SysWnd::SetPosition_Size);
 
 	auto ui           = new UI(&wnd->Doc()->Root);
 	ui->VideoFilename = "D:\\mldata\\GOPR0080.MP4";
 	ui->OpenVideo();
-	ui->Render();
-	ui->NextFrame();
 }
