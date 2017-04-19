@@ -449,7 +449,7 @@ Status Response::StatusCode() const {
 
 std::string Response::HeaderValue(const std::string& key) const {
 	for (size_t i = 0; i < Headers.size(); i++) {
-		if (Headers[i].Key == key)
+		if (strings::eqnocase(Headers[i].Key, key))
 			return Headers[i].Value;
 	}
 	return "";
@@ -457,7 +457,7 @@ std::string Response::HeaderValue(const std::string& key) const {
 
 bool Response::FirstSetCookie(Cookie& cookie) const {
 	for (size_t i = 0; i < Headers.size(); i++) {
-		if (Headers[i].Key == "Set-Cookie")
+		if (strings::eqnocase(Headers[i].Key, "Set-Cookie"))
 			return Cookie::ParseCookieFromServer(Headers[i].Value.c_str(), Headers[i].Value.size(), cookie);
 	}
 	return false;
@@ -633,6 +633,7 @@ void Connection::Perform(const Request& request, Response& response) {
 	curl_easy_setopt(CurlC, CURLOPT_TIMEOUT_MS, request.TimeoutMilliseconds);
 	curl_easy_setopt(CurlC, CURLOPT_NOSIGNAL, 1);
 	curl_easy_setopt(CurlC, CURLOPT_CAINFO, request.CACertFile != "" ? request.CACertFile.c_str() : nullptr);
+	curl_easy_setopt(CurlC, CURLOPT_ACCEPT_ENCODING, ""); // empty string = all supported encodings
 
 	// libcurl makes no attempt to detect if the hostname is a loopback one such as localhost or 127.0.0.1. If http_proxy
 	// is set, then it will attempt to use that, even for loopback addresses. That is why we need to take the pains here

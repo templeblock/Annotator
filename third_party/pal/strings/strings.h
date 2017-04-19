@@ -7,6 +7,8 @@ namespace imqs {
 IMQS_PAL_API int64_t AtoI64(const char* s);
 IMQS_PAL_API size_t ItoA(int value, char* result, int base);       // Returns size of string, excluding null terminator. Max 12 bytes written (including null terminator), for base 10
 IMQS_PAL_API size_t I64toA(int64_t value, char* result, int base); // Returns size of string, excluding null terminator. Max 21 bytes written (including null terminator), for base 10
+IMQS_PAL_API std::string ItoA(int value, int base = 10);
+IMQS_PAL_API std::string I64toA(int64_t value, int base = 10);
 
 namespace strings {
 IMQS_PAL_API void ToHex(const void* buf, size_t len, char* out);
@@ -14,9 +16,14 @@ IMQS_PAL_API void ToHex(const void* buf, size_t len, char* out);
 IMQS_PAL_API std::string tolower(const std::string& s);
 IMQS_PAL_API std::string toupper(const std::string& s);
 
+IMQS_PAL_API bool eqnocase(const char* a, const char* b);               // Returns true if the strings are equal, assuming they are both ASCII
+IMQS_PAL_API bool eqnocase(const std::string& a, const char* b);        // Returns true if the strings are equal, assuming they are both ASCII
+IMQS_PAL_API bool eqnocase(const std::string& a, const std::string& b); // Returns true if the strings are equal, assuming they are both ASCII
+
 // Replace all occurrences of 'find' with 'replacement'
 IMQS_PAL_API std::string Replace(const std::string& s, const std::string& find, const std::string& replacement);
 
+IMQS_PAL_API bool StartsWith(const std::string& s, const char* prefix);
 IMQS_PAL_API bool EndsWith(const std::string& s, const char* suffix);
 
 // Trim whitespace (space, tab, newline, carriage return) from the right end of the string

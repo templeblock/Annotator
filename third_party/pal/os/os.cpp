@@ -1,17 +1,23 @@
 #include "pch.h"
 #include "os.h"
-#include "../io_.h"
+#include "File.h"
+#include "io/io.h"
 #include "../path.h"
+#include "../strings/strings.h"
+#include "../strings/utf.h"
 
 #include <fcntl.h>
 
 #ifdef _WIN32
+static const char SYSTEM_PATH_SPLITTER = ';';
 #include <io.h>
 #elif MACOS
+static const char SYSTEM_PATH_SPLITTER = ':';
 #define O_BINARY (0)
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #else
+static const char SYSTEM_PATH_SPLITTER = ':';
 #define O_BINARY (0)
 #include <unistd.h>
 #include <fcntl.h>
@@ -39,6 +45,14 @@ std::string FindFileItem::FullPath() const {
 	return std::string(Root) + PathSeparator + Name;
 }
 
+#ifdef _WIN32
+static int64_t FileTimeTo100NanoSeconds(const FILETIME& ft) {
+	uint64_t time  = ((uint64_t) ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+	int64_t  stime = (int64_t) time; // 100-nanoseconds
+	return stime;
+}
+#endif
+
 IMQS_PAL_API void Sleep(imqs::time::Duration d) {
 #ifdef _WIN32
 	::Sleep((DWORD) d.Milliseconds());
@@ -49,6 +63,10 @@ IMQS_PAL_API void Sleep(imqs::time::Duration d) {
 	t.tv_sec  = (nano - t.tv_nsec) / 1000000000;
 	nanosleep(&t, nullptr);
 #endif
+}
+
+IMQS_PAL_API Error ErrorFrom_errno() {
+	return ErrorFrom_errno(errno);
 }
 
 IMQS_PAL_API Error ErrorFrom_errno(int errno_) {
@@ -63,6 +81,10 @@ IMQS_PAL_API Error ErrorFrom_errno(int errno_) {
 }
 
 #ifdef _WIN32
+IMQS_PAL_API Error ErrorFrom_GetLastError() {
+	return ErrorFrom_GetLastError(GetLastError());
+}
+
 #pragma warning(push)
 #pragma warning(disable : 6031) // snprintf return value ignored
 IMQS_PAL_API Error ErrorFrom_GetLastError(DWORD err) {
@@ -104,16 +126,30 @@ IMQS_PAL_API Error ErrorFrom_GetLastError(DWORD err) {
 
 IMQS_PAL_API Error Stat(const std::string& path, FileAttributes& attribs) {
 #ifdef _WIN32
-	DWORD a = GetFileAttributesA(path.c_str());
-	if (a == INVALID_FILE_ATTRIBUTES)
+	// FILE_FLAG_BACKUP_SEMANTICS is necessary for opening a directory
+	HANDLE h = CreateFileW(towide(path).c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (h == INVALID_HANDLE_VALUE) {
 		return ErrorFrom_GetLastError(GetLastError());
-	attribs.IsDir = !!(a & FILE_ATTRIBUTE_DIRECTORY);
+	}
+	BY_HANDLE_FILE_INFORMATION inf;
+	if (!GetFileInformationByHandle(h, &inf)) {
+		CloseHandle(h);
+		return ErrorFrom_GetLastError(GetLastError());
+	}
+	attribs.IsDir      = !!(inf.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+	attribs.TimeCreate = time::Time::FromEpoch1601(FileTimeTo100NanoSeconds(inf.ftCreationTime));
+	attribs.TimeModify = time::Time::FromEpoch1601(FileTimeTo100NanoSeconds(inf.ftLastWriteTime));
+	attribs.Size       = (uint64_t) inf.nFileSizeHigh << 32 | (uint64_t) inf.nFileSizeLow;
+	CloseHandle(h);
 	return Error();
 #else
 	struct stat s;
 	if (stat(path.c_str(), &s) != 0)
 		return ErrorFrom_errno(errno);
-	attribs.IsDir = S_ISDIR(s.st_mode);
+	attribs.IsDir      = S_ISDIR(s.st_mode);
+	attribs.TimeCreate = time::Time::FromUnix(STAT_TIME(s, c)); // st.st_mtim.tv_sec + st.st_mtim.tv_nsec * (1.0 / 1000000000);
+	attribs.TimeModify = time::Time::FromUnix(STAT_TIME(s, m)); // st.st_mtim.tv_sec + st.st_mtim.tv_nsec * (1.0 / 1000000000);
+	attribs.Size       = s.st_size;
 	return Error();
 #endif
 }
@@ -344,32 +380,19 @@ IMQS_PAL_API Error WriteWholeFile(const std::string& filename, const std::string
 }
 
 IMQS_PAL_API Error FileLength(const std::string& filename, uint64_t& len) {
-	len    = -1;
-	int fd = open(filename.c_str(), O_BINARY | O_RDONLY, 0);
-	if (fd == -1)
-		return os::ErrorFrom_errno(errno);
+	File f;
+	auto err = f.Open(filename);
+	if (!err.OK())
+		return err;
 
-// Measure file length
-#ifdef _WIN32
-	len = _lseeki64(fd, 0, SEEK_END);
-#else
-	len                = lseek64(fd, 0, SEEK_END);
-#endif
-	if (len == -1) {
-		close(fd);
-		return os::ErrorFrom_errno(errno);
-	}
+	int64_t pos = -1;
+	err = f.Seek(0, SeekWhence::End, pos);
+	if (!err.OK())
+		return err;
 
+	len = pos;
 	return Error();
 }
-
-#ifdef _WIN32
-static int64_t FileTimeTo100NanoSeconds(const FILETIME& ft) {
-	uint64_t time  = ((uint64_t) ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-	int64_t  stime = (int64_t) time; // 100-nanoseconds
-	return stime;
-}
-#endif
 
 IMQS_PAL_API Error FindFiles(const std::string& _dir, std::function<bool(const FindFileItem& item)> callback) {
 	if (_dir.length() == 0)
@@ -496,7 +519,7 @@ IMQS_PAL_API const char* CmdLineGetOption(int argc, char** argv, const char* opt
 	return nullptr;
 }
 
-IMQS_PAL_API int GetNumberOfCores() {
+IMQS_PAL_API int NumberOfCPUCores() {
 #ifdef WIN32
 	SYSTEM_INFO sysinfo;
 	GetSystemInfo(&sysinfo);
@@ -551,6 +574,82 @@ IMQS_PAL_API bool IsDebuggerPresent() {
 #endif
 }
 
+// New API added in Windows 10, version 1607 (but I haven't managed to get it to work with GetProcAddress)
+#ifdef _WIN32
+static HRESULT(WINAPI* _SetThreadDescription)(
+    _In_ HANDLE hThread,
+    _In_ PCWSTR lpThreadDescription);
+
+// Old method that works with VS 2015 and any version of Windows
+const DWORD MS_VC_EXCEPTION = 0x406D1388;
+#pragma pack(push, 8)
+typedef struct tagTHREADNAME_INFO {
+	DWORD  dwType;     // Must be 0x1000.
+	LPCSTR szName;     // Pointer to name (in user addr space).
+	DWORD  dwThreadID; // Thread ID (-1=caller thread).
+	DWORD  dwFlags;    // Reserved for future use, must be zero.
+} THREADNAME_INFO;
+#pragma pack(pop)
+static void _SetThreadName(DWORD dwThreadID, const char* threadName) {
+	THREADNAME_INFO info;
+	info.dwType     = 0x1000;
+	info.szName     = threadName;
+	info.dwThreadID = dwThreadID;
+	info.dwFlags    = 0;
+#pragma warning(push)
+#pragma warning(disable : 6320 6322)
+	__try {
+		RaiseException(MS_VC_EXCEPTION, 0, sizeof(info) / sizeof(ULONG_PTR), (ULONG_PTR*) &info);
+	} __except (EXCEPTION_EXECUTE_HANDLER) {
+	}
+#pragma warning(pop)
+}
+#endif
+
+IMQS_PAL_API void SetThreadName(const char* name) {
+#ifdef _WIN32
+	_SetThreadName(GetCurrentThreadId(), name);
+// This doesn't work, and I don't know why. GetProcAddress returns null, despite my Windows 10 version being 1607.
+/*
+	if (!_SetThreadDescription) {
+		auto kernel = GetModuleHandleW(L"kernel32.dll");
+		if (kernel) {
+			auto                  func     = reinterpret_cast<decltype(_SetThreadDescription)>(GetProcAddress(kernel, "SetThreadDescription"));
+			std::atomic_intptr_t* ptr      = (std::atomic_intptr_t*) &_SetThreadDescription;
+			intptr_t              expected = 0;
+			ptr->compare_exchange_strong(expected, (intptr_t) func);
+			//_SetThreadDescription = func;
+		}
+	}
+	if (_SetThreadDescription)
+		_SetThreadDescription(GetCurrentThread(), towide(name).c_str());
+	*/
+#else
+	return;
+#endif
+}
+
+IMQS_PAL_API std::string ProcessPath() {
+#ifdef _WIN32
+	wchar_t buf[2048];
+	GetModuleFileNameW(NULL, buf, arraysize(buf));
+	buf[arraysize(buf) - 1] = 0;
+	return toutf8(buf);
+#else
+	char buf[2048];
+	buf[0] = 0;
+	int r = readlink("/proc/self/exe", buf, arraysize(buf) - 1);
+	if (r < 0)
+		return buf;
+
+	if (r < sizeof(buf))
+		buf[r] = 0;
+	else
+		buf[sizeof(buf) - 1] = 0;
+	return buf;
+#endif
+}
+
 IMQS_PAL_API std::string HostName() {
 	char name[512];
 	name[0] = 0;
@@ -563,6 +662,79 @@ IMQS_PAL_API std::string HostName() {
 #endif
 	name[arraysize(name) - 1] = 0;
 	return name;
+}
+
+IMQS_PAL_API ohash::map<std::string, std::string> AllEnvironmentVars() {
+	ohash::map<std::string, std::string> vars;
+#ifdef _WIN32
+	wchar_t* env = GetEnvironmentStringsW();
+	for (size_t i = 0; env[i];) {
+		size_t eq = i;
+		for (; env[eq] != '='; eq++) {
+		}
+		vars.insert(toutf8(env + i, eq - i), toutf8(env + eq + 1));
+		for (; env[i]; i++) {
+		}
+		i++;
+	}
+	FreeEnvironmentStringsW(env);
+#else
+	for (size_t i = 0; environ[i]; i++) {
+		const char* var = environ[i];
+		size_t      eq  = 0;
+		for (; var[eq] != '='; eq++) {
+		}
+		vars.insert(std::string(var, eq), std::string(var + eq + 1));
+	}
+#endif
+	return vars;
+}
+
+IMQS_PAL_API std::string EnvironmentVar(const char* var) {
+#ifdef _WIN32
+	wchar_t buf[512];
+	DWORD   len = 512;
+	DWORD   r   = GetEnvironmentVariableW(towide(var).c_str(), buf, len);
+	if (r < 512)
+		return toutf8(buf);
+	wchar_t* dbuf = new wchar_t[r];
+	r             = GetEnvironmentVariableW(towide(var).c_str(), dbuf, r);
+	auto res      = toutf8(dbuf);
+	delete[] dbuf;
+	return res;
+#else
+	return getenv(var);
+#endif
+}
+
+IMQS_PAL_API std::string FindInSystemPath(const std::string& filename) {
+	auto path = EnvironmentVar("PATH");
+	if (path == "")
+		return "";
+	auto paths = strings::Split(path, SYSTEM_PATH_SPLITTER);
+	for (const auto& p : paths) {
+		auto           full = path::Join(p, filename);
+		FileAttributes attrib;
+		if (Stat(full, attrib).OK())
+			return full;
+	}
+	return "";
+}
+
+IMQS_PAL_API std::string ExecutableExtension() {
+#ifdef _WIN32
+	return ".exe";
+#else
+	return "";
+#endif
+}
+
+IMQS_PAL_API std::string SharedLibraryExtension() {
+#ifdef _WIN32
+	return ".dll";
+#else
+	return ".so";
+#endif
 }
 }
 }

@@ -4,6 +4,15 @@
 #include <xo/xo/xo.h>
 #include <pal/pal.h>
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4503)
+#endif
+#include <nlohmann-json/json.hpp>
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
 extern "C" {
 #include <libavutil/motion_vector.h>
 #include <libavformat/avformat.h>

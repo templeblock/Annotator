@@ -49,6 +49,18 @@ IMQS_PAL_API size_t I64toA(int64_t value, char* result, int base) {
 	return ItoAT(value, result, base);
 }
 
+IMQS_PAL_API std::string ItoA(int value, int base) {
+	char buf[34];
+	ItoA(value, buf, base);
+	return buf;
+}
+
+IMQS_PAL_API std::string I64toA(int64_t value, int base) {
+	char buf[66];
+	I64toA(value, buf, base);
+	return buf;
+}
+
 namespace strings {
 IMQS_PAL_API void ToHex(const void* buf, size_t len, char* out) {
 	const char* lut = "0123456789ABCDEF";
@@ -76,6 +88,53 @@ IMQS_PAL_API std::string toupper(const std::string& s) {
 	return up;
 }
 
+static char ToLowerCh(char c) {
+	return (c >= 'A' && c <= 'Z') ? c + 32 : c;
+}
+
+// (0..31).map{|n| n.to_s }.join(",")
+// (32..63).map{|n| n.to_s }.join(",")
+// (64..95).map{|n| n += 32 if n >= 65 && n <= 90; n.to_s }.join(",")
+// (96..127).map{|n| n.to_s }.join(",")
+
+// At first, I was tempted here to only make the lookup table include the range from 32..127, because that is by far
+// the most frequently used ASCII range. However, that makes the table 96 bytes, which is 1.5 cache lines, so if you hit
+// the full range of them, you'd still hit 2 cache lines. By making the table 128 characters big, we're still only two
+// cache lines, but all of the character digits a-zA-Z lie inside the top 64 bytes, so they'd all be inside the same
+// cache line. This also gets rid of the -32 subtraction that you need to perform to get into the range of the 96-byte
+// table.
+static char ToLowerTable[128] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+    32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
+    64, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 91, 92, 93, 94, 95,
+    96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127};
+
+IMQS_PAL_API bool eqnocase(const char* a, const char* b) {
+	size_t i = 0;
+	for (; a[i] && b[i]; i++) {
+		char ca = a[i];
+		char cb = b[i];
+		if (ca <= 127 && cb <= 127) {
+			// this branch is by far the most common, because the range 32..127 includes
+			// the standard characters, and digits, punctuation, etc
+			if (ToLowerTable[ca] != ToLowerTable[cb])
+				return false;
+		} else {
+			if (ToLowerCh(ca) != ToLowerCh(cb))
+				return false;
+		}
+	}
+	return a[i] == 0 && b[i] == 0;
+}
+
+IMQS_PAL_API bool eqnocase(const std::string& a, const char* b) {
+	return eqnocase(a.c_str(), b);
+}
+
+IMQS_PAL_API bool eqnocase(const std::string& a, const std::string& b) {
+	return eqnocase(a, b.c_str());
+}
+
 IMQS_PAL_API std::string Replace(const std::string& s, const std::string& find, const std::string& replacement) {
 	if (find.size() == 0)
 		return s;
@@ -95,8 +154,18 @@ IMQS_PAL_API std::string Replace(const std::string& s, const std::string& find, 
 	return r;
 }
 
+IMQS_PAL_API bool StartsWith(const std::string& s, const char* prefix) {
+	const char* a = s.c_str();
+	size_t      i = 0;
+	for (; a[i] && prefix[i]; i++) {
+		if (a[i] != prefix[i])
+			break;
+	}
+	return prefix[i] == 0;
+}
+
 IMQS_PAL_API bool EndsWith(const std::string& s, const char* suffix) {
-	auto pos = s.rfind(suffix, 0);
+	auto pos = s.rfind(suffix, std::string::npos);
 	if (pos == -1)
 		return false;
 	return pos == s.length() - strlen(suffix);

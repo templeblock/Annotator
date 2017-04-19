@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 namespace imqs {
 namespace time {
 
@@ -51,17 +53,20 @@ public:
 	double   Minutes() const { return (double) D / (1000000000.0 * 60); }
 	double   Hours() const { return (double) D / (1000000000.0 * 3600); }
 
+	std::chrono::nanoseconds Chrono() const { return std::chrono::nanoseconds(D); }
+	operator std::chrono::nanoseconds() const { return std::chrono::nanoseconds(D); }
+
 private:
 	int64_t D = 0;
 };
 
-//const Duration Some = Duration(1);
 const Duration Nanosecond(1);
 const Duration Microsecond(1000);
 const Duration Millisecond(1000000);
 const Duration Second(1000000000);
 const Duration Minute(60 * (int64_t) 1000000000);
 const Duration Hour(3600 * (int64_t) 1000000000);
+const Duration Infinite((int64_t) 9223372036854775807ll); // Used as a special value to indicate concepts such as "wait forever"
 
 inline Duration operator*(int64_t m, Duration d) { return d * m; }
 // Date.
@@ -111,8 +116,9 @@ public:
 	void   FormatHttp(char* buf) const;            // Buf must be at least 30 characters (29 + null terminator).
 	Error  ParseHttp(const char* str, size_t len); // Parse HTTP time (Sun, 06 Nov 1994 08:49:37 GMT)
 
-	int64_t SubMicro(const Time& t) const;  // Return number of microseconds between this and t.
+	int64_t SubMicro(Time t) const;         // Return number of microseconds between this and t.
 	Time    PlusMicro(int64_t micro) const; // Return this time with microseconds added to it.
+	int     Compare(Time t) const;          // Returns -1 when this BEFORE t; +1 when this AFTER t; 0 when this == t
 
 	bool        IsNull() const { return Sec == 0 && Nsec == 0; }
 	static bool IsLeapYear(uint32_t year) { return (year % 4 == 0) && !((year % 100 == 0) && (year % 400 != 0)); }
@@ -126,13 +132,13 @@ public:
 		AddNano(-d.Nanoseconds());
 		return *this;
 	}
-	bool     operator==(const Time& d) const { return Sec == d.Sec && Nsec == d.Nsec; }
-	bool     operator!=(const Time& d) const { return !(*this == d); }
+	bool     operator==(Time d) const { return Sec == d.Sec && Nsec == d.Nsec; }
+	bool     operator!=(Time d) const { return !(*this == d); }
 	Duration operator-(Time d) const { return Sub(d); }
-	bool     operator<(const Time& t) const;
-	bool     operator<=(const Time& t) const;
-	bool     operator>(const Time& t) const;
-	bool     operator>=(const Time& t) const;
+	bool     operator<(Time t) const;
+	bool     operator<=(Time t) const;
+	bool     operator>(Time t) const;
+	bool     operator>=(Time t) const;
 
 private:
 	int64_t Sec  = 0;

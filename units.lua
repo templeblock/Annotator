@@ -161,6 +161,8 @@ local deploy_ssleay32_release = copyfile_to_output(vcpkg_bin .. "bin/ssleay32.dl
 local deploy_zlib_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/zlibd1.dll", winDebugFilter)
 local deploy_zlib_release = copyfile_to_output(vcpkg_bin .. "bin/zlib1.dll", winReleaseFilter)
 
+local deploy_lz4 = copyfile_to_output(vcpkg_bin .. "bin/lz4.dll", winFilter)
+
 local deploy_avcodec_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/avcodec-57.dll", winDebugFilter)
 local deploy_avdevice_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/avdevice-57.dll", winDebugFilter)
 local deploy_avfilter_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/avfilter-6.dll", winDebugFilter)
@@ -224,6 +226,34 @@ local libcurl = ExternalLibrary {
 		Libs = {
 			{ "libcurl_imp.lib"; Config = winFilter },
 			{ "curl"; Config = linuxFilter },
+		}
+	}
+}
+
+local zlib = ExternalLibrary {
+	Name = "zlib",
+	Depends = {
+		deploy_zlib_debug,
+		deploy_zlib_release,
+	},
+	Propagate = {
+		Libs = {
+			{ "zlibd.lib"; Config = winDebugFilter },
+			{ "zlib.lib"; Config = winReleaseFilter },
+			{ "z"; Config = linuxFilter },
+		}
+	}
+}
+
+local lz4 = ExternalLibrary {
+	Name = "lz4",
+	Depends = {
+		deploy_lz4,
+	},
+	Propagate = {
+		Libs = {
+			{ "lz4.lib"; Config = winFilter },
+			{ "lz4"; Config = linuxFilter },
 		}
 	}
 }
@@ -297,7 +327,10 @@ local uberlog = StaticLibrary {
 
 local pal = SharedLibrary {
 	Name = "pal",
-	Depends = { winCrt, uberlog, utfz, tsf, libcurl },
+	Depends = { winCrt, uberlog, utfz, tsf, libcurl, zlib, lz4 },
+	Includes = {
+		"third_party/pal",
+	},
 	Libs = {
 		{ "Dbghelp.lib"; Config = winFilter },
 		{ "uuid", "curl"; Config = linuxFilter },

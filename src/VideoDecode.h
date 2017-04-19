@@ -33,6 +33,8 @@ public:
 	double          LastFrameTimeSeconds();
 	Error           DecodeFrameRGBA(int width, int height, void* buf, int stride);
 
+	void Dimensions(int& width, int& height) const;
+
 private:
 	std::string      Filename;
 	AVFormatContext* FmtCtx         = nullptr;
@@ -50,5 +52,11 @@ private:
 	Error        RecvFrame();
 	void         FlushCachedFrames();
 };
+
+inline void VideoFile::Dimensions(int& width, int& height) const {
+	width  = VideoDecCtx->width;
+	height = VideoDecCtx->height;
 }
-}
+
+} // namespace anno
+} // namespace imqs

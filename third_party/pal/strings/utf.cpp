@@ -47,6 +47,53 @@ static const bool WideIs16 = sizeof(wchar_t) == 2;
 static const bool WideIs32 = sizeof(wchar_t) == 4;
 
 namespace imqs {
+
+IMQS_PAL_API std::wstring towide(const std::string& src) {
+	return strings::utf::ConvertUTF8ToWide(src);
+}
+
+IMQS_PAL_API std::wstring towide(const char* src, size_t len) {
+	std::wstring r;
+	wchar_t tmp[256];
+	size_t dstLen = 256;
+	if (strings::utf::ConvertUTF8ToWide(src, len, tmp, dstLen)) {
+		r = tmp;
+	} else {
+		if (len == -1)
+			len = strlen(src);
+		dstLen = strings::utf::MaximumWideFromUtf8(len) + 1;
+		wchar_t* buf = new wchar_t[dstLen];
+		buf[0] = 0;
+		strings::utf::ConvertUTF8ToWide(src, len, buf, dstLen);
+		r = buf;
+		delete[] buf;
+	}
+	return r;
+}
+
+IMQS_PAL_API std::string toutf8(const std::wstring& src) {
+	return strings::utf::ConvertWideToUTF8(src);
+}
+
+IMQS_PAL_API std::string toutf8(const wchar_t* src, size_t len) {
+	std::string r;
+	char tmp[256];
+	size_t dstLen = 256;
+	if (strings::utf::ConvertWideToUTF8(src, len, tmp, dstLen)) {
+		r = tmp;
+	} else {
+		if (len == -1)
+			len = wcslen(src);
+		dstLen = strings::utf::MaximumUtf8FromWide(len) + 1;
+		char* buf = new char[dstLen];
+		buf[0] = 0;
+		strings::utf::ConvertWideToUTF8(src, len, buf, dstLen);
+		r = buf;
+		delete[] buf;
+	}
+	return r;
+}
+
 namespace strings {
 namespace utf {
 

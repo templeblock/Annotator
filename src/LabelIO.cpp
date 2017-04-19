@@ -1,0 +1,161 @@
+#include "pch.h"
+#include "LabelIO.h"
+
+using json = nlohmann::json;
+
+// This seems kinda neat, but I don't see a benefit here beyond plain old To/From methods
+/*
+namespace nlohmann {
+
+template <>
+struct adl_serializer<imqs::anno::Rect> {
+	static void to_json(json& j, const imqs::anno::Rect& rect) {
+		j["x1"] = rect.X1;
+		j["y1"] = rect.Y1;
+		j["x2"] = rect.X2;
+		j["y2"] = rect.Y2;
+	}
+
+	static void from_json(const json& j, imqs::anno::Rect& rect) {
+		if (j.is_null())
+			return;
+		rect.X1 = j["x1"];
+		rect.Y1 = j["y1"];
+		rect.X2 = j["x2"];
+		rect.Y2 = j["y2"];
+	}
+};
+
+template <>
+struct adl_serializer<imqs::anno::Label> {
+	static void to_json(json& j, const imqs::anno::Label& lab) {
+		json jr;
+		adl_serializer<imqs::anno::Rect>::to_json(jr, lab.Rect);
+		j["rect"] = jr;
+	}
+
+	static void from_json(const json& j, imqs::anno::Label& lab) {
+		if (j.is_null())
+			return;
+	}
+};
+
+} // namespace nlohmann
+*/
+
+namespace imqs {
+namespace anno {
+
+Error Rect::FromJson(const nlohmann::json& j) {
+	X1 = j["x1"];
+	Y1 = j["y1"];
+	X2 = j["x2"];
+	Y2 = j["y2"];
+	return Error();
+}
+
+void Rect::ToJson(nlohmann::json& j) const {
+	j["x1"] = X1;
+	j["y1"] = Y1;
+	j["x2"] = X2;
+	j["y2"] = Y2;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Error Label::FromJson(const nlohmann::json& j) {
+	Class = j["class"];
+	Rect.FromJson(j["rect"]);
+	return Error();
+}
+
+void Label::ToJson(nlohmann::json& j) const {
+	j["class"] = Class;
+	Rect.ToJson(j["rect"]);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Error ImageLabels::FromJson(const nlohmann::json& j) {
+	for (const auto& jlab : j["labels"]) {
+		Label lab;
+		auto  err = lab.FromJson(jlab);
+		if (!err.OK())
+			return err;
+		Labels.emplace_back(std::move(lab));
+	}
+	return Error();
+}
+
+void ImageLabels::ToJson(nlohmann::json& j) const {
+	auto& jlabels = j["labels"];
+	for (const auto& lab : Labels) {
+		json jlab;
+		lab.ToJson(jlab);
+		jlabels.emplace_back(std::move(jlab));
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+std::string LabelClass::KeyStr() const {
+	char buf[2] = {(char) Key, 0};
+	return buf;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+std::string LabelFileDir(std::string videoFilename) {
+	return path::Dir(videoFilename) + "/labels/" + path::Filename(videoFilename);
+}
+
+Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
+	labels.Frames.clear();
+	auto  dir = LabelFileDir(videoFilename);
+	Error err;
+	auto  errFind = os::FindFiles(dir, [&err, &labels](const os::FindFileItem& item) -> bool {
+		// 000001.json
+		if (strings::EndsWith(item.Name, ".json")) {
+			std::string buf;
+			err = os::ReadWholeFile(item.FullPath(), buf);
+			if (!err.OK())
+				return false;
+			auto               j = json::parse(buf.c_str());
+			VideoLabels::Frame frame;
+			frame.Time = AtoI64(item.Name.c_str());
+			//nlohmann::adl_serializer<Rect>::from_json(j, r);
+			err = frame.Labels.FromJson(j);
+			if (!err.OK())
+				return false;
+			labels.Frames.emplace_back(std::move(frame));
+		}
+		return true;
+	});
+
+	if (!errFind.OK())
+		return errFind;
+	return err;
+}
+
+// Save one labeled frame. By saving at image granularity instead of video granularity, we allow concurrent labeling by many people
+Error SaveFrameLabels(std::string videoFilename, const VideoLabels::Frame& frame) {
+	auto dir = LabelFileDir(videoFilename);
+	auto err = os::MkDirAll(dir);
+	if (!err.OK())
+		return err;
+	json j;
+	frame.Labels.ToJson(j);
+	auto fn = tsf::fmt("%v.json", frame.Time);
+	return os::WriteWholeFile(dir + "/" + fn, j.dump(4));
+}
+
+} // namespace anno
+} // namespace imqs

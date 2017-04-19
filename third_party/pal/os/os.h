@@ -19,11 +19,16 @@ extern IMQS_PAL_API StaticError ErrEMFILE;
 extern IMQS_PAL_API StaticError ErrENOENT;
 
 struct FileAttributes {
-	bool IsDir = false;
+	imqs::time::Time TimeCreate; // Creation time
+	imqs::time::Time TimeModify; // Last modification time
+	uint64_t         Size  = 0;
+	bool             IsDir = false;
 };
 
+IMQS_PAL_API Error ErrorFrom_errno();
 IMQS_PAL_API Error ErrorFrom_errno(int errno_);
 #ifdef _WIN32
+IMQS_PAL_API Error ErrorFrom_GetLastError();
 IMQS_PAL_API Error ErrorFrom_GetLastError(DWORD err);
 #endif
 
@@ -83,8 +88,15 @@ IMQS_PAL_API Error FindFiles(const std::string& dir, std::function<bool(const Fi
 
 IMQS_PAL_API bool        CmdLineHasOption(int argc, char** argv, const char* option); // Returns true if -option or --option exists on the command-line
 IMQS_PAL_API const char* CmdLineGetOption(int argc, char** argv, const char* option); // Get value of the form "option value". Returns value or null. Typically "--option value".
-IMQS_PAL_API int         GetNumberOfCores();
+IMQS_PAL_API int         NumberOfCPUCores();
 IMQS_PAL_API bool        IsDebuggerPresent();
+IMQS_PAL_API void        SetThreadName(const char* name); // Useful for debugging. Only implemented on Windows 10 with SetThreadDescription
+IMQS_PAL_API std::string ProcessPath();                   // Get the path of the currently executing process (eg c:\programs\foo.exe, or /usr/bin/foo)
 IMQS_PAL_API std::string HostName();
+IMQS_PAL_API ohash::map<std::string, std::string> AllEnvironmentVars(); // Retrieve environment variables
+IMQS_PAL_API std::string EnvironmentVar(const char* var);               // Retrieve environment variable
+IMQS_PAL_API std::string FindInSystemPath(const std::string& filename); // Search the system PATH for the given filename
+IMQS_PAL_API std::string ExecutableExtension();                         // ".exe" on windows, and "" on other platforms
+IMQS_PAL_API std::string SharedLibraryExtension();                      // ".dll" on windows, and ".so" on other platforms
 }
 }

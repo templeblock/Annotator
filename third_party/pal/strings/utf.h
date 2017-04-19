@@ -88,6 +88,12 @@
 #include <stdint.h>
 
 namespace imqs {
+
+IMQS_PAL_API std::wstring towide(const std::string& src);
+IMQS_PAL_API std::wstring towide(const char* src, size_t len = -1);
+IMQS_PAL_API std::string toutf8(const std::wstring& src);
+IMQS_PAL_API std::string toutf8(const wchar_t* src, size_t len = -1);
+
 namespace strings {
 namespace utf {
 

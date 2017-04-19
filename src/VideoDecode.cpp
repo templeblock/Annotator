@@ -50,8 +50,6 @@ void VideoFile::Close() {
 Error VideoFile::OpenFile(std::string filename) {
 	Close();
 
-	//src_filename = "D:\\mldata\\GOPR0080.MP4";
-
 	int r = avformat_open_input(&FmtCtx, filename.c_str(), NULL, NULL);
 	if (r < 0)
 		return TranslateErr(r, tsf::fmt("Could not open video file %v", filename).c_str());
@@ -92,8 +90,7 @@ VideoStreamInfo VideoFile::GetVideoStreamInfo() {
 	inf.Duration  = FmtCtx->duration;
 	inf.NumFrames = VideoStream->nb_frames;
 	inf.FrameRate = VideoStream->r_frame_rate;
-	inf.Width     = VideoDecCtx->width;
-	inf.Height    = VideoDecCtx->height;
+	Dimensions(inf.Width, inf.Height);
 	return inf;
 }
 

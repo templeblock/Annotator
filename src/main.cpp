@@ -2,6 +2,7 @@
 #include "third_party/xo/templates/xoWinMain.cpp"
 #include "VideoDecode.h"
 #include "SvgIcons.h"
+#include "LabelIO.h"
 
 namespace imqs {
 namespace anno {
@@ -14,6 +15,11 @@ public:
 		Play
 	} PlayState = PlayStates::Stop;
 
+	enum class ActionStates {
+		None,
+		AssignLabel,
+	} ActionState = ActionStates::None;
+
 	xo::DomNode*   Root          = nullptr;
 	xo::DomNode*   TimeSliderBox = nullptr;
 	xo::DomCanvas* VideoCanvas   = nullptr;
@@ -22,6 +28,11 @@ public:
 	int64_t        OnDestroyEv   = 0;
 	std::string    VideoFilename;
 	VideoFile      Video;
+
+	std::vector<LabelClass> Classes;
+	VideoLabels             Labels;
+	int                     LabelGridSize = 128;
+	bool                    GridTopDown   = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
 
 	UI(xo::DomNode* root) {
 		Root = root;
@@ -42,15 +53,16 @@ public:
 		VideoCanvas = videoArea->AddCanvas();
 		VideoCanvas->StyleParse("hcenter: hcenter; border: 1px #888; border-radius: 1.5ep;");
 		VideoCanvas->SetSize((int) videoWidth, (int) (videoWidth / aspect));
+		VideoCanvas->OnMouseMove([ui](xo::Event& ev) { ui->OnCanvasMouseMove(ev); });
 
 		auto fileArea = videoArea->ParseAppendNode("<div style='break:after; margin: 4ep'></div>");
 		fileArea->StyleParsef("hcenter: hcenter; width: %vpx", videoWidth);
 		auto fileName = fileArea->ParseAppendNode("<div style='cursor: hand'></div>");
 		fileName->AddClass("font-medium");
 		fileName->AddText(VideoFilename);
-		fileName->OnClick([this]{
-			std::vector<std::pair<std::string,std::string>> types = {
-				{"Video Files", "*.mp4;*.avi;*.mkv"},
+		fileName->OnClick([this] {
+			std::vector<std::pair<std::string, std::string>> types = {
+			    {"Video Files", "*.mp4;*.avi;*.mkv"},
 			};
 			if (xo::osdialogs::BrowseForFileOpen(Root->GetDoc(), types, VideoFilename))
 				OpenVideo();
@@ -59,12 +71,14 @@ public:
 		TimeSliderBox = Root->ParseAppendNode("<div></div>");
 		RenderTimeSlider(true);
 
-		auto mediaControlBox = Root->ParseAppendNode("<div style='break:after; padding: 5ep'></div>");
-		auto btnW            = "20ep";
-		auto btnH            = "20ep";
-		PlayBtn              = xo::controls::Button::NewSvg(mediaControlBox, "media-play", btnW, btnH);
+		auto bottomControlBoxes = Root->ParseAppendNode("<div style='padding: 5ep'></div>");
+		auto mediaControlBox    = bottomControlBoxes->ParseAppendNode("<div></div>");
+		auto btnW               = "20ep";
+		auto btnH               = "20ep";
+		PlayBtn                 = xo::controls::Button::NewSvg(mediaControlBox, "media-play", btnW, btnH);
 		//auto btnStepB = xo::controls::Button::NewSvg(mediaControlBox, "media-step-backward", btnW, btnH);
 		auto btnStepF = xo::controls::Button::NewSvg(mediaControlBox, "media-step-forward", btnW, btnH);
+		//auto btnTest  = xo::controls::Button::NewText(mediaControlBox, "test");
 
 		PlayBtn->OnClick([ui] {
 			ui->FlipPlayState();
@@ -73,6 +87,32 @@ public:
 			ui->Stop();
 			ui->NextFrame();
 		});
+		/*
+		btnTest->OnClick([ui] {
+			ui->Labels.Frames.clear();
+			ui->Labels.Frames.push_back(VideoLabels::Frame());
+			auto& f = ui->Labels.Frames[0];
+			f.Time  = 12345;
+			f.Labels.Labels.push_back(Label());
+			f.Labels.Labels.back().Class = "crack";
+			f.Labels.Labels.back().Rect  = Rect(3, 4, 5, 6);
+			SaveFrameLabels(ui->VideoFilename, ui->Labels.Frames[0]);
+		});
+		*/
+
+		auto        labelGroup      = bottomControlBoxes->ParseAppendNode("<div style='padding-left: 20ep; color: #333'></div>");
+		std::string shortcutsTop    = "";
+		std::string shortcutsBottom = "";
+		auto        addShortcut     = [](std::string& shortcuts, const char* key, const char* title) {
+            shortcuts += tsf::fmt("<div style='width: 10em'><span class='shortcut'>%v</span>%v</div>", key, title);
+        };
+		size_t half = Classes.size() / 2;
+		for (size_t i = 0; i < half; i++)
+			addShortcut(shortcutsTop, Classes[i].KeyStr().c_str(), Classes[i].Class.c_str());
+		for (size_t i = half; i < Classes.size(); i++)
+			addShortcut(shortcutsBottom, Classes[i].KeyStr().c_str(), Classes[i].Class.c_str());
+		labelGroup->ParseAppend("<div style='break:after'>" + shortcutsTop + "</div>");
+		labelGroup->ParseAppend("<div style='break:after'>" + shortcutsBottom + "</div>");
 
 		// Setup once-off things
 		if (OnDestroyEv == 0) {
@@ -80,13 +120,7 @@ public:
 				delete ui;
 			});
 
-			Root->OnKeyChar([ui](xo::Event& ev) {
-				switch (ev.KeyChar) {
-				//case ',': ui->NextFrame(); break; -- back frame
-				case '.': ui->NextFrame(); break;
-				case 'p': ui->FlipPlayState(); break;
-				}
-			});
+			Root->OnKeyChar([ui](xo::Event& ev) { ui->OnKeyChar(ev); });
 		}
 	}
 
@@ -160,13 +194,86 @@ public:
 		PlayTimer = 0;
 	}
 
+	void DrawLabelBoxes() {
+		auto cx = VideoCanvas->GetCanvas2D();
+		int vwidth, vheight;
+		Video.Dimensions(vwidth, vheight);
+		auto  vinfo = Video.GetVideoStreamInfo();
+		float sx    = (float) cx->Width() / (float) vwidth;
+		float sy    = (float) cx->Height() / (float) vheight;
+		int gwidth, gheight;
+		GridDimensions(gwidth, gheight);
+		for (int x = 0; x < gwidth; x++) {
+			for (int y = 0; y < gheight; y++) {
+				xo::Box r = xo::Box::Inverted();
+				r.ExpandToFit(GridPosToVideo(x, y));
+				r.ExpandToFit(GridPosToVideo(x + 1, y + 1));
+				xo::BoxF rscaled = r;
+				rscaled.Expand(-3, -3);
+				rscaled.Scale(sx, sy);
+				cx->StrokeRect(rscaled, xo::Color::RGBA(200, 0, 0, 150), 1);
+			}
+		}
+
+		VideoCanvas->ReleaseAndInvalidate(cx);
+	}
+
+	void OnKeyChar(xo::Event& ev) {
+		switch (ev.KeyChar) {
+		case ',':
+		case ' ':
+			FlipPlayState();
+			break;
+		case '.':
+			NextFrame();
+			break;
+		}
+		for (auto c : Classes) {
+			if (toupper(c.Key) == toupper(ev.KeyChar)) {
+				AssignLabel(c);
+				break;
+			}
+		}
+	}
+
+	void AssignLabel(LabelClass c) {
+	}
+
+	void OnCanvasMouseMove(xo::Event& ev) {
+	}
+
+	void GridDimensions(int& width, int& height) {
+		int vwidth, vheight;
+		Video.Dimensions(vwidth, vheight);
+		width = (int) ceil((float) vwidth / (float) LabelGridSize);
+		height = (int) ceil((float) vheight / (float) LabelGridSize);
+	}
+
+	xo::Point VideoPosToGrid(int x, int y) {
+		int vwidth, vheight;
+		Video.Dimensions(vwidth, vheight);
+		if (!GridTopDown)
+			y = vheight - y;
+		return xo::Point((int) (x / LabelGridSize), (int) (y / LabelGridSize));
+	}
+
+	xo::Point GridPosToVideo(int x, int y) {
+		int vwidth, vheight;
+		Video.Dimensions(vwidth, vheight);
+		x *= LabelGridSize;
+		y *= LabelGridSize;
+		if (!GridTopDown)
+			y = vheight - y;
+		return xo::Point(x, y);
+	}
+
 	void NextFrame() {
 		if (!Video.IsOpen())
 			return;
 		auto cx = VideoCanvas->GetCanvas2D();
 		Video.DecodeFrameRGBA(cx->Width(), cx->Height(), cx->RowPtr(0), cx->Stride());
-		cx->Invalidate();
-		VideoCanvas->ReleaseCanvas(cx);
+		VideoCanvas->ReleaseAndInvalidate(cx);
+		DrawLabelBoxes();
 		RenderTimeSlider();
 	}
 
@@ -194,11 +301,23 @@ void xoMain(xo::SysWnd* wnd) {
 	VideoFile::Initialize();
 
 	wnd->Doc()->ClassParse("font-medium", "font-size: 14ep");
+	wnd->Doc()->ClassParse("shortcut", "font-size: 15ep; color: #000; width: 1em");
 
 	svg::LoadAll(wnd->Doc());
 	wnd->SetPosition(xo::Box(0, 0, 1500, 970), xo::SysWnd::SetPosition_Size);
 
-	auto ui           = new UI(&wnd->Doc()->Root);
+	auto ui = new UI(&wnd->Doc()->Root);
+
+	ui->Classes.push_back({'R', "normal road"});
+	ui->Classes.push_back({'C', "crocodile cracks"});
+	ui->Classes.push_back({'B', "bricks"});
+	ui->Classes.push_back({'P', "pothole"});
+	ui->Classes.push_back({'S', "straight crack"});
+	ui->Classes.push_back({'M', "manhole cover"});
+	ui->Classes.push_back({'X', "pockmarks"});
+	ui->Classes.push_back({'U', "unlabeled"});
+
 	ui->VideoFilename = "D:\\mldata\\GOPR0080.MP4";
-	ui->OpenVideo();
+	if (!ui->OpenVideo())
+		ui->Render();
 }

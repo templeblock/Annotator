@@ -505,7 +505,7 @@ Error Time::ParseHttp(const char* str, size_t len) {
 	return Error();
 }
 
-int64_t Time::SubMicro(const Time& t) const {
+int64_t Time::SubMicro(Time t) const {
 	int64_t m = (Sec - t.Sec) * 1000000;
 	m += Nsec / 1000 - t.Nsec / 1000;
 	return m;
@@ -516,6 +516,22 @@ Time Time::PlusMicro(int64_t micro) const {
 	int64_t newMicro = (int64_t) Nsec / 1000 + micro;
 	Normalize(newSec, newMicro, (int64_t) 1000000);
 	return Time::FromInternal(newSec, (int32_t)(newMicro * 1000));
+}
+
+int Time::Compare(Time t) const {
+	if (Sec == t.Sec) {
+		if (Nsec < t.Nsec)
+			return -1;
+		if (Nsec > t.Nsec)
+			return 1;
+		return 0;
+	}
+
+	if (Sec < t.Sec)
+		return -1;
+	if (Sec > t.Sec)
+		return 1;
+	return 0;
 }
 
 void Time::AddNano(int64_t nsec) {
@@ -546,25 +562,25 @@ Time Time::FromInternal(int64_t sec, int32_t nsec) {
 	return d;
 }
 
-bool Time::operator<(const Time& t) const {
+bool Time::operator<(Time t) const {
 	if (Sec == t.Sec)
 		return Nsec < t.Nsec;
 	return Sec < t.Sec;
 }
 
-bool Time::operator<=(const Time& t) const {
+bool Time::operator<=(Time t) const {
 	if (Sec == t.Sec)
 		return Nsec <= t.Nsec;
 	return Sec <= t.Sec;
 }
 
-bool Time::operator>(const Time& t) const {
+bool Time::operator>(Time t) const {
 	if (Sec == t.Sec)
 		return Nsec > t.Nsec;
 	return Sec > t.Sec;
 }
 
-bool Time::operator>=(const Time& t) const {
+bool Time::operator>=(Time t) const {
 	if (Sec == t.Sec)
 		return Nsec >= t.Nsec;
 	return Sec >= t.Sec;

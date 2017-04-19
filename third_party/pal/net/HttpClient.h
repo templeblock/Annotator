@@ -168,7 +168,7 @@ public:
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // Inspection
-    std::string HeaderValue(const std::string& key) const; // Returns an empty string if no such header exists, otherwise the first header that matches the key.
+    std::string HeaderValue(const std::string& key) const; // Returns an empty string if no such header exists, otherwise the first header that matches the key (case insensitive match).
     std::string StatusLine() const;                        // Returns, for example, "HTTP/1.1 401 Unauthorized"
     std::string StatusCodeStr() const;                     // Returns, for example, "401 Unauthorized"
     int         StatusCodeInt() const;                     // Returns, for example, the integer 401. Can compare against Status enum, but note that this value could be outside of Status's range.

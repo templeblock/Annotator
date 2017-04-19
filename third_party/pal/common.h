@@ -18,6 +18,9 @@
 #include <memory>
 #include <string>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
+#include <thread>
 
 #ifdef _WIN32
 #include <BaseTsd.h>
@@ -51,6 +54,8 @@
 #pragma warning(pop)
 #endif
 
+#include <zlib.h>
+#include <lz4.h>
 
 #include "defs.h"
 #include "asserts.h"
