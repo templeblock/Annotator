@@ -104,6 +104,44 @@ void ImageLabels::ToJson(nlohmann::json& j) const {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+static int CompareFrame(const ImageLabels& f, const int64_t& time) {
+	if (f.Time < time)
+		return -1;
+	if (f.Time > time)
+		return 1;
+	return 0;
+}
+
+ImageLabels* VideoLabels::FindFrame(int64_t time) {
+	if (Frames.size() == 0)
+		return nullptr;
+	auto i = algo::BinarySearch(Frames.size(), &Frames[0], time, CompareFrame);
+	if (i == -1)
+		return nullptr;
+	return &Frames[i];
+}
+
+ImageLabels* VideoLabels::FindOrInsertFrame(int64_t time) {
+	auto f = FindFrame(time);
+	if (f)
+		return f;
+	return InsertFrame(time);
+}
+
+ImageLabels* VideoLabels::InsertFrame(int64_t time) {
+	size_t i = 0;
+	if (Frames.size() != 0)
+		i = algo::BinarySearchTry(Frames.size(), &Frames[0], time, CompareFrame);
+	auto frame = ImageLabels();
+	frame.Time = time;
+	Frames.insert(Frames.begin() + i, frame);
+	return &Frames[i];
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 std::string LabelClass::KeyStr() const {
 	char buf[2] = {(char) Key, 0};
 	return buf;
@@ -128,17 +166,18 @@ Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
 			err = os::ReadWholeFile(item.FullPath(), buf);
 			if (!err.OK())
 				return false;
-			auto               j = json::parse(buf.c_str());
-			VideoLabels::Frame frame;
+			auto        j = json::parse(buf.c_str());
+			ImageLabels frame;
 			frame.Time = AtoI64(item.Name.c_str());
 			//nlohmann::adl_serializer<Rect>::from_json(j, r);
-			err = frame.Labels.FromJson(j);
+			err = frame.FromJson(j);
 			if (!err.OK())
 				return false;
 			labels.Frames.emplace_back(std::move(frame));
 		}
 		return true;
 	});
+	std::sort(labels.Frames.begin(), labels.Frames.end());
 
 	if (!errFind.OK())
 		return errFind;
@@ -146,13 +185,13 @@ Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
 }
 
 // Save one labeled frame. By saving at image granularity instead of video granularity, we allow concurrent labeling by many people
-Error SaveFrameLabels(std::string videoFilename, const VideoLabels::Frame& frame) {
+Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame) {
 	auto dir = LabelFileDir(videoFilename);
 	auto err = os::MkDirAll(dir);
 	if (!err.OK())
 		return err;
 	json j;
-	frame.Labels.ToJson(j);
+	frame.ToJson(j);
 	auto fn = tsf::fmt("%v.json", frame.Time);
 	return os::WriteWholeFile(dir + "/" + fn, j.dump(4));
 }

@@ -3,6 +3,14 @@
 namespace imqs {
 namespace anno {
 
+struct Point {
+	int X = 0;
+	int Y = 0;
+
+	Point() {}
+	Point(int x, int y) : X(x), Y(y) {}
+};
+
 struct Rect {
 	int X1 = 0;
 	int Y1 = 0;
@@ -19,9 +27,8 @@ struct Rect {
 		Y2 += y;
 	}
 
-	void Expand(int xy) {
-		Expand(xy, xy);
-	}
+	void  Expand(int xy) { Expand(xy, xy); }
+	Point Center() const { return Point((X1 + X2) / 2, (Y1 + Y2) / 2); }
 
 	Error FromJson(const nlohmann::json& j);
 	void  ToJson(nlohmann::json& j) const;
@@ -40,20 +47,24 @@ public:
 // Set of labels for an image (image is usually a single frame from a video)
 class ImageLabels {
 public:
+	int64_t            Time = 0; // Time in ffmpeg units AV_TIME_BASE - which is millionths of a second
 	std::vector<Label> Labels;
+	bool               IsDirty = false; // Needs to be saved to disk
 
 	Error FromJson(const nlohmann::json& j);
 	void  ToJson(nlohmann::json& j) const;
+
+	bool operator<(const ImageLabels& b) const { return Time < b.Time; }
 };
 
 // Labels for a video
 class VideoLabels {
 public:
-	struct Frame {
-		int64_t     Time = 0; // Time in ffmpeg units AV_TIME_BASE - which is millionths of a second
-		ImageLabels Labels;
-	};
-	std::vector<Frame> Frames;
+	std::vector<ImageLabels> Frames;
+
+	ImageLabels* FindFrame(int64_t time);
+	ImageLabels* FindOrInsertFrame(int64_t time);
+	ImageLabels* InsertFrame(int64_t time);
 };
 
 // label class and associated shortcut key
@@ -70,7 +81,7 @@ public:
 
 std::string LabelFileDir(std::string videoFilename);
 Error       LoadVideoLabels(std::string videoFilename, VideoLabels& labels);
-Error       SaveFrameLabels(std::string videoFilename, const VideoLabels::Frame& frame);
+Error       SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);
 
 } // namespace anno
 } // namespace imqs

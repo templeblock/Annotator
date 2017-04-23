@@ -109,9 +109,25 @@ Error VideoFile::SeekToFraction(double fraction_0_to_1) {
 	return Error();
 }
 
-double VideoFile::LastFrameTimeSeconds() {
+double VideoFile::LastFrameTimeSeconds() const {
 	return av_q2d(av_mul_q({(int) LastFramePTS, 1}, VideoStream->time_base));
 }
+
+int64_t VideoFile::LastFrameTimeMicrosecond() const {
+	return (int64_t) (LastFrameTimeSeconds() * 1000000.0);
+}
+
+/* This turns out to be useless, because the FFMPeg rationals are stored as
+32-bit num/dem, so with a denominator of 1000000 you quickly hit 32-bit limits.
+int64_t VideoFile::LastFrameAVTime() const {
+	// change the time unit to AV_TIME_BASE
+	auto v1 = av_make_q(VideoStream->time_base.num, VideoStream->time_base.den);
+	auto v2 = av_make_q(AV_TIME_BASE, 1);
+	auto scale = av_mul_q(v1, v2);
+	auto a = av_mul_q({(int) LastFramePTS, 1}, scale);
+	return a.num;
+}
+*/
 
 Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
 	bool haveFrame = false;

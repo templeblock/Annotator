@@ -7,6 +7,8 @@
 #endif
 
 #include "common.h"
+
+#include "algo/BinarySearch.h"
 #include "crypto/Rand.h"
 #include "compress/lz4.h"
 #include "compress/zlib.h"

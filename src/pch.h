@@ -4,6 +4,8 @@
 #include <xo/xo/xo.h>
 #include <pal/pal.h>
 
+#include <algorithm>
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable: 4503)

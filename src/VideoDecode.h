@@ -30,7 +30,8 @@ public:
 	VideoStreamInfo GetVideoStreamInfo();
 	Error           SeekToFrame(int64_t frame);
 	Error           SeekToFraction(double fraction_0_to_1);
-	double          LastFrameTimeSeconds();
+	double          LastFrameTimeSeconds() const;
+	int64_t         LastFrameTimeMicrosecond() const;
 	Error           DecodeFrameRGBA(int width, int height, void* buf, int stride);
 
 	void Dimensions(int& width, int& height) const;
