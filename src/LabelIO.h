@@ -47,12 +47,14 @@ public:
 // Set of labels for an image (image is usually a single frame from a video)
 class ImageLabels {
 public:
-	int64_t            Time = 0; // Time in ffmpeg units AV_TIME_BASE - which is millionths of a second
+	int64_t            Time = 0; // Video time in microseconds (0 = start of video)
 	std::vector<Label> Labels;
 	bool               IsDirty = false; // Needs to be saved to disk
 
 	Error FromJson(const nlohmann::json& j);
 	void  ToJson(nlohmann::json& j) const;
+
+	double TimeSeconds() const { return (double) Time / 1000000.0; }
 
 	bool operator<(const ImageLabels& b) const { return Time < b.Time; }
 };

@@ -130,12 +130,12 @@ void UI::RenderTimeSlider(bool first) {
 	if (!Video.IsOpen())
 		return;
 
-	TimeSliderBox->Clear();
-	TimeSliderBox->StyleParse("break:after; margin: 16ep 8ep; padding: 0ep; box-sizing: margin; width: 100%; height: 34ep; border-radius: 3ep; background: #eee");
-	TimeSliderBox->StyleParse("");
-	auto caret = TimeSliderBox->ParseAppendNode("<div style='background: #ccc; border: 1px #888; width: 5ep; height: 120%; vcenter: vcenter; border-radius: 2.5ep'></div>");
-
 	if (first) {
+		TimeSliderBox->Clear();
+		TimeSliderBox->StyleParse("break:after; margin: 16ep 8ep; padding: 0ep; box-sizing: margin; width: 100%; height: 34ep; border-radius: 3ep; background: #eee");
+		TimeSliderBox->ParseAppendNode("<div style='position: absolute; width: 100%; height: 50%; background: #cfc'></div>");
+		TimeSliderBox->ParseAppendNode("<div style='background: #ccc; border: 1px #888; width: 5ep; height: 120%; vcenter: vcenter; border-radius: 2.5ep'></div>");
+
 		TimeSliderBox->OnMouseDown([this](xo::Event& ev) {
 			TimeSliderBox->SetCapture();
 			SeekFromUI(ev);
@@ -151,9 +151,19 @@ void UI::RenderTimeSlider(bool first) {
 		});
 	}
 
+	auto tickContainer = TimeSliderBox->NodeByIndex(0);
+	auto caret = TimeSliderBox->NodeByIndex(1);
+
 	auto   info = Video.GetVideoStreamInfo();
 	double dur  = info.DurationSeconds();
 	double pos  = Video.LastFrameTimeSeconds();
+
+	tickContainer->Clear();
+	for (const auto& frame : Labels.Frames) {
+		double p = 100.0 * frame.TimeSeconds() / dur;
+		auto tick = tickContainer->ParseAppendNode("<div></div>");
+		tick->StyleParsef("background: #c005; position: absolute; hcenter: %.1f%%; width: 3px; height: 100%%", p);
+	}
 
 	caret->StyleParsef("hcenter: %.1f%%", pos * 100.0 / dur);
 }

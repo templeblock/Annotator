@@ -36,16 +36,16 @@ public:
 	std::thread       SaveThread;
 	std::atomic<bool> IsExiting;
 
-	size_t                    UnlabeledClass = 0; // First class must be unlabeled
-	std::vector<LabelClass>   Classes;
-	VideoLabels               Labels;
-	LabelClass                CurrentAssignClass;
-	int                       LabelGridSize = 128;
-	bool                      GridTopDown   = false;  // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
+	size_t                  UnlabeledClass = 0; // First class must be unlabeled
+	std::vector<LabelClass> Classes;
+	VideoLabels             Labels;
+	LabelClass              CurrentAssignClass;
+	int                     LabelGridSize = 128;
+	bool                    GridTopDown   = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
 
 	// Saving
-	std::atomic<SavePackage*> SaveQueue;              // Dirty frames waiting to be saved by save thread
-	std::atomic<const char*>  SaveError;              // Last save message
+	std::atomic<SavePackage*> SaveQueue; // Dirty frames waiting to be saved by save thread
+	std::atomic<const char*>  SaveError; // Last save message
 
 	static void SaveThreadFunc(UI* ui);
 
