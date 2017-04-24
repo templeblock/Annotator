@@ -275,7 +275,7 @@ Error ReadWholeFile_Internal(const std::string& filename, void** buf_target, std
 #ifdef _WIN32
 	int64_t flen = _lseeki64(fd, 0, SEEK_END);
 #else
-	int64_t flen       = lseek64(fd, 0, SEEK_END);
+	int64_t     flen       = lseek64(fd, 0, SEEK_END);
 #endif
 	if (flen == -1) {
 		close(fd);
@@ -286,7 +286,7 @@ Error ReadWholeFile_Internal(const std::string& filename, void** buf_target, std
 #ifdef _WIN32
 	int64_t seek_start = _lseeki64(fd, 0, SEEK_SET);
 #else
-	int64_t seek_start = lseek64(fd, 0, SEEK_SET);
+	int64_t     seek_start = lseek64(fd, 0, SEEK_SET);
 #endif
 	if (seek_start == -1) {
 		close(fd);
@@ -354,7 +354,7 @@ IMQS_PAL_API Error WriteWholeFile(const std::string& filename, const void* buf, 
 #ifdef _WIN32
 	int fd = open(filename.c_str(), O_BINARY | O_CREAT | O_RDWR | O_TRUNC, _S_IREAD | _S_IWRITE);
 #else
-	int     fd         = open(filename.c_str(), O_BINARY | O_CREAT | O_RDWR | O_TRUNC, 0664);
+	int         fd         = open(filename.c_str(), O_BINARY | O_CREAT | O_RDWR | O_TRUNC, 0664);
 #endif
 	if (fd == -1)
 		return os::ErrorFrom_errno(errno);
@@ -386,7 +386,7 @@ IMQS_PAL_API Error FileLength(const std::string& filename, uint64_t& len) {
 		return err;
 
 	int64_t pos = -1;
-	err = f.Seek(0, SeekWhence::End, pos);
+	err         = f.Seek(0, SeekWhence::End, pos);
 	if (!err.OK())
 		return err;
 
@@ -451,7 +451,7 @@ IMQS_PAL_API Error FindFiles(const std::string& _dir, std::function<bool(const F
 		return Error();
 	return err;
 #else
-	std::string fixed  = _dir;
+	std::string fixed      = _dir;
 	if (_dir[_dir.length() - 1] == '/')
 		fixed.pop_back();
 
@@ -638,7 +638,7 @@ IMQS_PAL_API std::string ProcessPath() {
 #else
 	char buf[2048];
 	buf[0] = 0;
-	int r = readlink("/proc/self/exe", buf, arraysize(buf) - 1);
+	int r  = readlink("/proc/self/exe", buf, arraysize(buf) - 1);
 	if (r < 0)
 		return buf;
 
@@ -662,6 +662,24 @@ IMQS_PAL_API std::string HostName() {
 #endif
 	name[arraysize(name) - 1] = 0;
 	return name;
+}
+
+IMQS_PAL_API std::string UserName() {
+#ifdef _WIN32
+	wchar_t name[256];
+	name[0]    = 0;
+	DWORD size = arraysize(name);
+	if (GetUserNameW(name, &size) == TRUE)
+		name[size] = 0;
+	name[arraysize(name) - 1] = 0;
+	return toutf8(name);
+#else
+	char name[512];
+	name[0] = 0;
+	getlogin_r(name, arraysize(name));
+	name[arraysize(name) - 1] = 0;
+	return name;
+#endif
 }
 
 IMQS_PAL_API ohash::map<std::string, std::string> AllEnvironmentVars() {
@@ -736,8 +754,8 @@ IMQS_PAL_API std::string SharedLibraryExtension() {
 	return ".so";
 #endif
 }
-}
-}
+} // namespace os
+} // namespace imqs
 
 #ifdef _WIN32
 #pragma warning(pop)

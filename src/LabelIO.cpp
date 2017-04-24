@@ -66,13 +66,15 @@ void Rect::ToJson(nlohmann::json& j) const {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Error Label::FromJson(const nlohmann::json& j) {
-	Class = j["class"];
+	Class   = j["class"];
+	Labeler = j["labeler"];
 	Rect.FromJson(j["rect"]);
 	return Error();
 }
 
 void Label::ToJson(nlohmann::json& j) const {
-	j["class"] = Class;
+	j["class"]   = Class;
+	j["labeler"] = Labeler;
 	Rect.ToJson(j["rect"]);
 }
 
@@ -81,6 +83,7 @@ void Label::ToJson(nlohmann::json& j) const {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Error ImageLabels::FromJson(const nlohmann::json& j) {
+	EditTime = time::Time::FromUnix(j["edittime"], 0);
 	for (const auto& jlab : j["labels"]) {
 		Label lab;
 		auto  err = lab.FromJson(jlab);
@@ -92,12 +95,18 @@ Error ImageLabels::FromJson(const nlohmann::json& j) {
 }
 
 void ImageLabels::ToJson(nlohmann::json& j) const {
+	j["edittime"] = EditTime.Unix();
 	auto& jlabels = j["labels"];
 	for (const auto& lab : Labels) {
 		json jlab;
 		lab.ToJson(jlab);
 		jlabels.emplace_back(std::move(jlab));
 	}
+}
+
+void ImageLabels::SetDirty() {
+	IsDirty  = true;
+	EditTime = time::Now();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -132,10 +141,17 @@ ImageLabels* VideoLabels::InsertFrame(int64_t time) {
 	size_t i = 0;
 	if (Frames.size() != 0)
 		i = algo::BinarySearchTry(Frames.size(), &Frames[0], time, CompareFrame);
-	auto frame = ImageLabels();
+	ImageLabels frame;
 	frame.Time = time;
 	Frames.insert(Frames.begin() + i, frame);
 	return &Frames[i];
+}
+
+int64_t VideoLabels::TotalLabelCount() const {
+	int64_t c = 0;
+	for (const auto& f : Frames)
+		c += f.Labels.size();
+	return c;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -169,8 +185,7 @@ Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
 			auto        j = json::parse(buf.c_str());
 			ImageLabels frame;
 			frame.Time = AtoI64(item.Name.c_str());
-			//nlohmann::adl_serializer<Rect>::from_json(j, r);
-			err = frame.FromJson(j);
+			err        = frame.FromJson(j);
 			if (!err.OK())
 				return false;
 			labels.Frames.emplace_back(std::move(frame));
@@ -194,6 +209,18 @@ Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame) {
 	frame.ToJson(j);
 	auto fn = tsf::fmt("%v.json", frame.Time);
 	return os::WriteWholeFile(dir + "/" + fn, j.dump(4));
+}
+
+int MergeVideoLabels(const VideoLabels& src, VideoLabels& dst) {
+	int nnew = 0;
+	for (const auto& sframe : src.Frames) {
+		auto dframe = dst.FindOrInsertFrame(sframe.Time);
+		if (sframe.EditTime > dframe->EditTime) {
+			nnew++;
+			*dframe = sframe;
+		}
+	}
+	return nnew;
 }
 
 } // namespace anno

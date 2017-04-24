@@ -93,10 +93,11 @@ IMQS_PAL_API bool        IsDebuggerPresent();
 IMQS_PAL_API void        SetThreadName(const char* name); // Useful for debugging. Only implemented on Windows 10 with SetThreadDescription
 IMQS_PAL_API std::string ProcessPath();                   // Get the path of the currently executing process (eg c:\programs\foo.exe, or /usr/bin/foo)
 IMQS_PAL_API std::string HostName();
+IMQS_PAL_API std::string UserName();                                    // Not usable for security purposes on Linux (trivial for a user to spoof)
 IMQS_PAL_API ohash::map<std::string, std::string> AllEnvironmentVars(); // Retrieve environment variables
 IMQS_PAL_API std::string EnvironmentVar(const char* var);               // Retrieve environment variable
 IMQS_PAL_API std::string FindInSystemPath(const std::string& filename); // Search the system PATH for the given filename
 IMQS_PAL_API std::string ExecutableExtension();                         // ".exe" on windows, and "" on other platforms
 IMQS_PAL_API std::string SharedLibraryExtension();                      // ".dll" on windows, and ".so" on other platforms
 }
-}
+} // namespace imqs

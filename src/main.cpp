@@ -17,8 +17,6 @@ void xoMain(xo::SysWnd* wnd) {
 
 	auto ui = new UI(&wnd->Doc()->Root);
 
-	ui->SaveThread = std::thread(UI::SaveThreadFunc, ui);
-
 	ui->Classes.push_back({'U', "unlabeled"}); // first class must be unlabeled - as embodied by UI::UnlabeledClass
 	ui->Classes.push_back({'R', "normal road"});
 	ui->Classes.push_back({'C', "crocodile cracks"});

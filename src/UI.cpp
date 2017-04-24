@@ -4,42 +4,73 @@
 namespace imqs {
 namespace anno {
 
-void UI::SaveThreadFunc(UI* ui) {
-	std::string saveErrorStorage;
+void UI::LoadSaveThreadFunc(UI* ui) {
+	auto        lastLoad = time::Now();
+	std::string lastVideoFilename;
+	auto        reloadInterval = 60 * time::Second;
 
-	while (true) {
-		if (ui->IsExiting)
-			break;
+	auto setError = [ui](std::string err) {
+		std::lock_guard<std::mutex> lock(ui->LoadSaveErrorLock);
+		ui->LoadSaveError = err;
+	};
 
-		SavePackage* package = ui->SaveQueue;
+	while (!ui->IsExiting) {
+		LoadSavePackage* package = ui->SaveQueue;
 		if (package) {
+			setError("");
 			if (ui->SaveQueue.compare_exchange_strong(package, nullptr)) {
+				// save last filename, so that loader knows about it
+				lastVideoFilename = package->VideoFilename;
 				for (const auto& frame : package->Labels.Frames) {
 					auto err = SaveFrameLabels(package->VideoFilename, frame);
 					if (!err.OK()) {
-						saveErrorStorage = err.Message();
-						ui->SaveError    = saveErrorStorage.c_str();
-						break;
+						setError(tsf::fmt("Error saving labels for %v: %v", package->VideoFilename, err.Message()));
+						break; // don't try saving further frames
 					}
 				}
 				delete package;
 			}
+		} else if (time::Now() - lastLoad > reloadInterval && lastVideoFilename != "") {
+			setError("");
+			package                = new LoadSavePackage();
+			package->VideoFilename = lastVideoFilename;
+			auto err               = LoadVideoLabels(lastVideoFilename, package->Labels);
+			if (!err.OK()) {
+				setError(tsf::fmt("Error loading labels for %v: %v", lastVideoFilename, err.Message()));
+				delete package;
+			} else {
+				// Ideally we should remove a stale doc here, but that just makes us more complicated. I don't believe it's worth the tradeoff.
+				LoadSavePackage* empty = nullptr;
+				if (!ui->LoadQueue.compare_exchange_strong(empty, package))
+					delete package;
+				lastLoad = time::Now();
+			}
 		} else {
-			os::Sleep(200 * time::Millisecond);
+			os::Sleep(100 * time::Millisecond);
 		}
 	}
 }
 
 UI::UI(xo::DomNode* root) {
-	IsExiting = false;
-	SaveQueue = nullptr;
-	Root      = root;
+	IsExiting      = false;
+	SaveQueue      = nullptr;
+	LoadQueue      = nullptr;
+	UserName       = os::UserName();
+	Root           = root;
+	LoadSaveThread = std::thread(LoadSaveThreadFunc, this);
 	Render();
 }
 
 UI::~UI() {
+	// wait for the load/save thread to process any pending writes
+	while (SaveQueue.load())
+		os::Sleep(50 * time::Millisecond);
+
 	IsExiting = true;
-	SaveThread.join();
+	LoadSaveThread.join();
+
+	// discard any pending load
+	delete LoadQueue.load();
 }
 
 void UI::Render() {
@@ -58,8 +89,9 @@ void UI::Render() {
 
 	auto fileArea = videoArea->ParseAppendNode("<div style='break:after; margin: 4ep'></div>");
 	fileArea->StyleParsef("hcenter: hcenter; width: %vpx", videoWidth);
-	auto fileName = fileArea->ParseAppendNode("<div style='cursor: hand'></div>");
-	fileName->AddClass("font-medium");
+	auto fileName = fileArea->ParseAppendNode("<div class='font-medium' style='cursor: hand'></div>");
+	StatusLabel   = fileArea->ParseAppendNode("<div class='font-medium' style='padding-left: 3em'></div>");
+	ErrorLabel    = fileArea->ParseAppendNode("<div class='font-medium' style='right: right'></div>");
 	fileName->AddText(VideoFilename);
 	fileName->OnClick([this] {
 		std::vector<std::pair<std::string, std::string>> types = {
@@ -88,18 +120,8 @@ void UI::Render() {
 		ui->Stop();
 		ui->NextFrame();
 	});
-	/*
-		btnTest->OnClick([ui] {
-			ui->Labels.Frames.clear();
-			ui->Labels.Frames.push_back(VideoLabels::Frame());
-			auto& f = ui->Labels.Frames[0];
-			f.Time  = 12345;
-			f.Labels.Labels.push_back(Label());
-			f.Labels.Labels.back().Class = "crack";
-			f.Labels.Labels.back().Rect  = Rect(3, 4, 5, 6);
-			SaveFrameLabels(ui->VideoFilename, ui->Labels.Frames[0]);
-		});
-		*/
+	//btnTest->OnClick([ui] {
+	//});
 
 	auto        labelGroup      = bottomControlBoxes->ParseAppendNode("<div style='padding-left: 20ep; color: #333'></div>");
 	std::string shortcutsTop    = "";
@@ -122,7 +144,7 @@ void UI::Render() {
 		});
 
 		Root->OnKeyChar([ui](xo::Event& ev) { ui->OnKeyChar(ev); });
-		Root->OnTimer([ui]() { ui->OnSaveTimer(); }, 1000);
+		Root->OnTimer([ui]() { ui->OnLoadSaveTimer(); }, 1000);
 	}
 }
 
@@ -133,8 +155,8 @@ void UI::RenderTimeSlider(bool first) {
 	if (first) {
 		TimeSliderBox->Clear();
 		TimeSliderBox->StyleParse("break:after; margin: 16ep 8ep; padding: 0ep; box-sizing: margin; width: 100%; height: 34ep; border-radius: 3ep; background: #eee");
-		TimeSliderBox->ParseAppendNode("<div style='position: absolute; width: 100%; height: 50%; background: #cfc'></div>");
-		TimeSliderBox->ParseAppendNode("<div style='background: #ccc; border: 1px #888; width: 5ep; height: 120%; vcenter: vcenter; border-radius: 2.5ep'></div>");
+		TimeSliderBox->ParseAppendNode("<div style='position: absolute; width: 100%; height: 100%'></div>");                                                         // tick container
+		TimeSliderBox->ParseAppendNode("<div style='background: #ccc3; border: 1px #888; width: 5ep; height: 120%; vcenter: vcenter; border-radius: 2.5ep'></div>"); // caret
 
 		TimeSliderBox->OnMouseDown([this](xo::Event& ev) {
 			TimeSliderBox->SetCapture();
@@ -152,17 +174,31 @@ void UI::RenderTimeSlider(bool first) {
 	}
 
 	auto tickContainer = TimeSliderBox->NodeByIndex(0);
-	auto caret = TimeSliderBox->NodeByIndex(1);
+	auto caret         = TimeSliderBox->NodeByIndex(1);
 
 	auto   info = Video.GetVideoStreamInfo();
 	double dur  = info.DurationSeconds();
 	double pos  = Video.LastFrameTimeSeconds();
 
+	// lerp between an old and new color, to indicate when other people are actively
+	// working on a segment of video.
+	xo::Vec3f oldcolor(0, 0.95f, 0);
+	xo::Vec3f newcolor(0.95f, 0, 0);
+
+	auto now = time::Now();
 	tickContainer->Clear();
 	for (const auto& frame : Labels.Frames) {
-		double p = 100.0 * frame.TimeSeconds() / dur;
-		auto tick = tickContainer->ParseAppendNode("<div></div>");
-		tick->StyleParsef("background: #c005; position: absolute; hcenter: %.1f%%; width: 3px; height: 100%%", p);
+		double p    = 100.0 * frame.TimeSeconds() / dur;
+		auto   tick = tickContainer->ParseAppendNode("<div></div>");
+		float  age  = (float) ((now - frame.EditTime).Seconds() / 300);
+		age         = xo::Clamp(age, 0.0f, 1.0f);
+		// lerping in sRGB is just so damn ugly. But I am so damn ready to ship this!
+		xo::Vec3f fcolor = age * oldcolor + (1.0f - age) * newcolor;
+		int       r      = xo::Clamp((int) (fcolor.x * 255), 0, 255);
+		int       g      = xo::Clamp((int) (fcolor.y * 255), 0, 255);
+		int       b      = xo::Clamp((int) (fcolor.z * 255), 0, 255);
+		int       a      = 80;
+		tick->StyleParsef("background: #%02x%02x%02x%02x; position: absolute; hcenter: %.1f%%; width: 1px; height: 100%%", r, g, b, a, p);
 	}
 
 	caret->StyleParsef("hcenter: %.1f%%", pos * 100.0 / dur);
@@ -236,7 +272,6 @@ Label* UI::FindOrInsertLabel(ImageLabels* frame, int gridX, int gridY) {
 	auto  p2 = GridPosToVideo(gridX, gridY);
 	lab.Rect = Rect(p1.X, p1.Y, p2.X, p2.Y);
 	frame->Labels.push_back(lab);
-	frame->IsDirty = true;
 	return &frame->Labels.back();
 }
 
@@ -246,7 +281,7 @@ bool UI::RemoveLabel(ImageLabels* frame, int gridX, int gridY) {
 		auto        c       = lab.Rect.Center();
 		auto        gridPos = VideoPosToGrid(c.X, c.Y);
 		if (gridPos.X == gridX && gridPos.Y == gridY) {
-			frame->IsDirty = true;
+			frame->SetDirty();
 			frame->Labels.erase(frame->Labels.begin() + i);
 			return true;
 		}
@@ -328,27 +363,47 @@ void UI::OnKeyChar(xo::Event& ev) {
 }
 
 // Find any dirty frames and add them to a save package
-void UI::OnSaveTimer() {
+void UI::OnLoadSaveTimer() {
+	LoadSaveErrorLock.lock();
+	ErrorLabel->SetText(LoadSaveError);
+	LoadSaveErrorLock.unlock();
+
 	// Wait for previous package to be saved away
 	if (SaveQueue.load() != nullptr)
 		return;
 
-	SavePackage* package   = new SavePackage();
-	package->VideoFilename = VideoFilename;
-	for (auto& frame : Labels.Frames) {
-		if (frame.IsDirty) {
-			// This assumes that the save will succeed. To manage failures is quite a bit more work, and
-			// I'm not convinced it's worth the effort right now.
-			frame.IsDirty = false;
-			package->Labels.Frames.emplace_back(frame);
+	{
+		// Merge potentially new data that the load/save thread has read from disk
+		LoadSavePackage* package = LoadQueue.load();
+		if (package && LoadQueue.compare_exchange_strong(package, nullptr)) {
+			if (package->VideoFilename == VideoFilename) {
+				int nnew = MergeVideoLabels(package->Labels, Labels);
+				if (nnew)
+					RenderTimeSlider();
+			}
+			delete package;
 		}
 	}
-	if (package->Labels.Frames.size() == 0) {
-		delete package;
-		return;
+
+	{
+		// Save dirty frames
+		LoadSavePackage* package = new LoadSavePackage();
+		package->VideoFilename   = VideoFilename;
+		for (auto& frame : Labels.Frames) {
+			if (frame.IsDirty) {
+				// This assumes that the save will succeed. To manage failures is quite a bit more work, and
+				// I'm not convinced it's worth the effort right now.
+				frame.IsDirty = false;
+				package->Labels.Frames.emplace_back(frame);
+			}
+		}
+		// Always send a new package, even if the frames are empty. This has the advantage
+		// of updating the load/save thread's state of our current video filename, so that
+		// it can do background loads.
+		SaveQueue = package;
 	}
 
-	SaveQueue = package;
+	StatusLabel->SetText(tsf::fmt("%v labels", Labels.TotalLabelCount()));
 }
 
 void UI::AssignLabel(LabelClass c) {
@@ -369,8 +424,9 @@ void UI::OnPaintLabel(xo::Event& ev) {
 		}
 		auto label = FindOrInsertLabel(frame, gpos.X, gpos.Y);
 		if (label->Class != CurrentAssignClass.Class) {
-			frame->IsDirty = true;
+			label->Labeler = UserName;
 			label->Class   = CurrentAssignClass.Class;
+			frame->SetDirty();
 			DrawLabelBoxes();
 		}
 	}
@@ -439,7 +495,7 @@ bool UI::OpenVideo() {
 		xo::controls::MsgBox::Show(Root->GetDoc(), err.Message());
 		return false;
 	}
-	LoadVideoLabels(VideoFilename, Labels);
+	LoadLabels();
 	Render();
 	NextFrame();
 	return true;
@@ -451,6 +507,10 @@ size_t UI::FindClass(const std::string& klass) {
 			return i;
 	}
 	return -1;
+}
+
+void UI::LoadLabels() {
+	LoadVideoLabels(VideoFilename, Labels);
 }
 
 } // namespace anno

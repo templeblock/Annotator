@@ -39,6 +39,7 @@ class Label {
 public:
 	Rect        Rect;
 	std::string Class;
+	std::string Labeler; // Person who created this label
 
 	Error FromJson(const nlohmann::json& j);
 	void  ToJson(nlohmann::json& j) const;
@@ -49,10 +50,12 @@ class ImageLabels {
 public:
 	int64_t            Time = 0; // Video time in microseconds (0 = start of video)
 	std::vector<Label> Labels;
+	time::Time         EditTime;        // Time when this frame's labels were last edited
 	bool               IsDirty = false; // Needs to be saved to disk
 
 	Error FromJson(const nlohmann::json& j);
 	void  ToJson(nlohmann::json& j) const;
+	void  SetDirty();
 
 	double TimeSeconds() const { return (double) Time / 1000000.0; }
 
@@ -67,6 +70,7 @@ public:
 	ImageLabels* FindFrame(int64_t time);
 	ImageLabels* FindOrInsertFrame(int64_t time);
 	ImageLabels* InsertFrame(int64_t time);
+	int64_t      TotalLabelCount() const;
 };
 
 // label class and associated shortcut key
@@ -84,6 +88,7 @@ public:
 std::string LabelFileDir(std::string videoFilename);
 Error       LoadVideoLabels(std::string videoFilename, VideoLabels& labels);
 Error       SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);
+int         MergeVideoLabels(const VideoLabels& src, VideoLabels& dst); // Returns number of new frames
 
 } // namespace anno
 } // namespace imqs
