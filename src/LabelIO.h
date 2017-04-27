@@ -20,6 +20,8 @@ struct Rect {
 	Rect() {}
 	Rect(int x1, int y1, int x2, int y2) : X1(x1), Y1(y1), X2(x2), Y2(y2) {}
 
+	static Rect Inverted() { return Rect(INT32_MAX, INT32_MAX, INT32_MIN, INT32_MIN); }
+
 	void Expand(int x, int y) {
 		X1 -= x;
 		Y1 -= y;
@@ -27,8 +29,17 @@ struct Rect {
 		Y2 += y;
 	}
 
+	void ExpandToFit(int x, int y) {
+		X1 = std::min(X1, x);
+		Y1 = std::min(Y1, y);
+		X2 = std::min(X2, x);
+		Y2 = std::min(Y2, y);
+	}
+
 	void  Expand(int xy) { Expand(xy, xy); }
 	Point Center() const { return Point((X1 + X2) / 2, (Y1 + Y2) / 2); }
+	int   Width() const { return X2 - X1; }
+	int   Height() const { return Y2 - Y1; }
 
 	Error FromJson(const nlohmann::json& j);
 	void  ToJson(nlohmann::json& j) const;
@@ -86,6 +97,7 @@ public:
 };
 
 std::string LabelFileDir(std::string videoFilename);
+std::string ImagePatchDir(std::string videoFilename);
 Error       LoadVideoLabels(std::string videoFilename, VideoLabels& labels);
 Error       SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);
 int         MergeVideoLabels(const VideoLabels& src, VideoLabels& dst); // Returns number of new frames

@@ -103,9 +103,13 @@ Error VideoFile::SeekToFrame(int64_t frame) {
 
 Error VideoFile::SeekToFraction(double fraction_0_to_1) {
 	double seconds = fraction_0_to_1 * GetVideoStreamInfo().DurationSeconds();
-	double ts      = av_q2d(VideoStream->time_base);
-	double t       = seconds / ts;
-	int    r       = av_seek_frame(FmtCtx, VideoStreamIdx, (int64_t) t, 0);
+	return SeekToMicrosecond((int64_t)(seconds * 1000000.0));
+}
+
+Error VideoFile::SeekToMicrosecond(int64_t microsecond) {
+	double ts = av_q2d(VideoStream->time_base);
+	double t  = ((double) microsecond / 1000000.0) / ts;
+	int    r  = av_seek_frame(FmtCtx, VideoStreamIdx, (int64_t) t, 0);
 	return Error();
 }
 
@@ -114,7 +118,7 @@ double VideoFile::LastFrameTimeSeconds() const {
 }
 
 int64_t VideoFile::LastFrameTimeMicrosecond() const {
-	return (int64_t) (LastFrameTimeSeconds() * 1000000.0);
+	return (int64_t)(LastFrameTimeSeconds() * 1000000.0);
 }
 
 /* This turns out to be useless, because the FFMPeg rationals are stored as

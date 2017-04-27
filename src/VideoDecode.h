@@ -30,11 +30,15 @@ public:
 	VideoStreamInfo GetVideoStreamInfo();
 	Error           SeekToFrame(int64_t frame);
 	Error           SeekToFraction(double fraction_0_to_1);
+	Error           SeekToMicrosecond(int64_t microsecond);
 	double          LastFrameTimeSeconds() const;
 	int64_t         LastFrameTimeMicrosecond() const;
 	Error           DecodeFrameRGBA(int width, int height, void* buf, int stride);
 
 	void Dimensions(int& width, int& height) const;
+
+	int Width() const { return VideoDecCtx->width; }
+	int Height() const { return VideoDecCtx->height; }
 
 private:
 	std::string      Filename;

@@ -171,6 +171,10 @@ std::string LabelFileDir(std::string videoFilename) {
 	return path::Dir(videoFilename) + "/labels/" + path::Filename(videoFilename);
 }
 
+std::string ImagePatchDir(std::string videoFilename) {
+	return path::Dir(videoFilename) + "/patches/" + path::Filename(videoFilename);
+}
+
 Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
 	labels.Frames.clear();
 	auto  dir = LabelFileDir(videoFilename);

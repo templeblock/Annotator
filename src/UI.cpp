@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "UI.h"
+#include "Exporter.h"
 
 namespace imqs {
 namespace anno {
@@ -89,9 +90,10 @@ void UI::Render() {
 
 	auto fileArea = videoArea->ParseAppendNode("<div style='break:after; margin: 4ep'></div>");
 	fileArea->StyleParsef("hcenter: hcenter; width: %vpx", videoWidth);
-	auto fileName = fileArea->ParseAppendNode("<div class='font-medium' style='cursor: hand'></div>");
-	StatusLabel   = fileArea->ParseAppendNode("<div class='font-medium' style='padding-left: 3em'></div>");
-	ErrorLabel    = fileArea->ParseAppendNode("<div class='font-medium' style='right: right'></div>");
+	auto fileName  = fileArea->ParseAppendNode("<div class='font-medium' style='cursor: hand'></div>");
+	StatusLabel    = fileArea->ParseAppendNode("<div class='font-medium' style='margin-left: 2em'></div>");
+	auto exportBtn = xo::controls::Button::NewText(fileArea, "Export");
+	ErrorLabel     = fileArea->ParseAppendNode("<div class='font-medium' style='right: right'></div>");
 	fileName->AddText(VideoFilename);
 	fileName->OnClick([this] {
 		std::vector<std::pair<std::string, std::string>> types = {
@@ -99,6 +101,11 @@ void UI::Render() {
 		};
 		if (xo::osdialogs::BrowseForFileOpen(Root->GetDoc(), types, VideoFilename))
 			OpenVideo();
+	});
+
+	exportBtn->OnClick([this] {
+		auto err = ExportLabeledImagePatches_Video(VideoFilename, Labels);
+		xo::controls::MsgBox::Show(Root->GetDoc(), tsf::fmt("Done with: %v", err.Message()).c_str());
 	});
 
 	TimeSliderBox = Root->ParseAppendNode("<div></div>");
@@ -269,8 +276,10 @@ Label* UI::FindOrInsertLabel(ImageLabels* frame, int gridX, int gridY) {
 	}
 	Label lab;
 	auto  p1 = GridPosToVideo(gridX, gridY);
-	auto  p2 = GridPosToVideo(gridX, gridY);
-	lab.Rect = Rect(p1.X, p1.Y, p2.X, p2.Y);
+	auto  p2 = GridPosToVideo(gridX + 1, gridY + 1);
+	lab.Rect = Rect::Inverted();
+	lab.Rect.ExpandToFit(p1.X, p1.Y);
+	lab.Rect.ExpandToFit(p2.X, p2.Y);
 	frame->Labels.push_back(lab);
 	return &frame->Labels.back();
 }
