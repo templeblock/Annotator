@@ -32,8 +32,8 @@ struct Rect {
 	void ExpandToFit(int x, int y) {
 		X1 = std::min(X1, x);
 		Y1 = std::min(Y1, y);
-		X2 = std::min(X2, x);
-		Y2 = std::min(Y2, y);
+		X2 = std::max(X2, x);
+		Y2 = std::max(Y2, y);
 	}
 
 	void  Expand(int xy) { Expand(xy, xy); }
@@ -78,10 +78,12 @@ class VideoLabels {
 public:
 	std::vector<ImageLabels> Frames;
 
-	ImageLabels* FindFrame(int64_t time);
-	ImageLabels* FindOrInsertFrame(int64_t time);
-	ImageLabels* InsertFrame(int64_t time);
-	int64_t      TotalLabelCount() const;
+	ImageLabels*                 FindFrame(int64_t time);
+	ImageLabels*                 FindOrInsertFrame(int64_t time);
+	ImageLabels*                 InsertFrame(int64_t time);
+	void                         RemoveEmptyFrames();
+	ohash::map<std::string, int> CategorizedLabelCount() const;
+	int64_t                      TotalLabelCount() const;
 };
 
 // label class and associated shortcut key

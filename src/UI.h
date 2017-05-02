@@ -43,7 +43,7 @@ public:
 	std::vector<LabelClass> Classes;
 	VideoLabels             Labels;
 	LabelClass              CurrentAssignClass;
-	int                     LabelGridSize = 128;
+	int                     LabelGridSize = 256;
 	bool                    GridTopDown   = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
 
 	// Loading/Saving labels

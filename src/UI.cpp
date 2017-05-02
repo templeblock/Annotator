@@ -91,8 +91,8 @@ void UI::Render() {
 	auto fileArea = videoArea->ParseAppendNode("<div style='break:after; margin: 4ep'></div>");
 	fileArea->StyleParsef("hcenter: hcenter; width: %vpx", videoWidth);
 	auto fileName  = fileArea->ParseAppendNode("<div class='font-medium' style='cursor: hand'></div>");
-	StatusLabel    = fileArea->ParseAppendNode("<div class='font-medium' style='margin-left: 2em'></div>");
 	auto exportBtn = xo::controls::Button::NewText(fileArea, "Export");
+	StatusLabel    = fileArea->ParseAppendNode("<div class='font-medium' style='margin-left: 2em'></div>");
 	ErrorLabel     = fileArea->ParseAppendNode("<div class='font-medium' style='right: right'></div>");
 	fileName->AddText(VideoFilename);
 	fileName->OnClick([this] {
@@ -412,7 +412,16 @@ void UI::OnLoadSaveTimer() {
 		SaveQueue = package;
 	}
 
-	StatusLabel->SetText(tsf::fmt("%v labels", Labels.TotalLabelCount()));
+	auto counts = Labels.CategorizedLabelCount();
+	std::string status;
+	int total = 0;
+	for (auto& p : counts) {
+		status += tsf::fmt("%v:%d ", p.first, p.second);
+		total += p.second;
+	}
+	status += tsf::fmt("TOTAL:%d ", total);
+	StatusLabel->SetText(status);
+	//StatusLabel->SetText(tsf::fmt("%v labels", Labels.TotalLabelCount()));
 }
 
 void UI::AssignLabel(LabelClass c) {
@@ -520,6 +529,17 @@ size_t UI::FindClass(const std::string& klass) {
 
 void UI::LoadLabels() {
 	LoadVideoLabels(VideoFilename, Labels);
+	// Perform any once-off fixups here
+	
+	//for (auto& f : Labels.Frames) {
+	//	for (size_t i = f.Labels.size() - 1; i != -1; i--) {
+	//		if (f.Labels[i].Class == "normal road") {
+	//			f.Labels.erase(f.Labels.begin() + i);
+	//		}
+	//	}
+	//	//f.SetDirty();
+	//}
+	//Labels.RemoveEmptyFrames();
 }
 
 } // namespace anno

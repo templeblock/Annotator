@@ -25,8 +25,9 @@ void xoMain(xo::SysWnd* wnd) {
 	ui->Classes.push_back({'S', "straight crack"});
 	ui->Classes.push_back({'M', "manhole cover"});
 	ui->Classes.push_back({'X', "pockmarks"});
+	ui->Classes.push_back({'E', "road edge"});
 
-	ui->VideoFilename = "D:\\mldata\\GOPR0080.MP4";
+	ui->VideoFilename = "D:\\mldata\\stellenbosch-roads\\GOPR0080.MP4";
 	if (!ui->OpenVideo())
 		ui->Render();
 }

@@ -147,6 +147,22 @@ ImageLabels* VideoLabels::InsertFrame(int64_t time) {
 	return &Frames[i];
 }
 
+void VideoLabels::RemoveEmptyFrames() {
+	for (size_t i = Frames.size() - 1; i != -1; i--) {
+		if (Frames[i].Labels.size() == 0)
+			Frames.erase(Frames.begin() + i);
+	}
+}
+
+ohash::map<std::string, int> VideoLabels::CategorizedLabelCount() const {
+	ohash::map<std::string, int> counts;
+	for (const auto& f : Frames) {
+		for (const auto& lab : f.Labels)
+			counts[lab.Class]++;
+	}
+	return counts;
+}
+
 int64_t VideoLabels::TotalLabelCount() const {
 	int64_t c = 0;
 	for (const auto& f : Frames)
@@ -180,6 +196,8 @@ Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
 	auto  dir = LabelFileDir(videoFilename);
 	Error err;
 	auto  errFind = os::FindFiles(dir, [&err, &labels](const os::FindFileItem& item) -> bool {
+		if (item.IsDir)
+			return false;
 		// 000001.json
 		if (strings::EndsWith(item.Name, ".json")) {
 			std::string buf;
