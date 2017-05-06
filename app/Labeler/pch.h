@@ -15,8 +15,4 @@
 #pragma warning(pop)
 #endif
 
-extern "C" {
-#include <libavutil/motion_vector.h>
-#include <libavformat/avformat.h>
-#include <libswscale/swscale.h>
-}
+#include <Video/Video.h>

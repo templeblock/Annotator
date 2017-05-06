@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "VideoDecode.h"
+#include "Decode.h"
 
 namespace imqs {
 namespace anno {

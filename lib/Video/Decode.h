@@ -3,7 +3,7 @@
 namespace imqs {
 namespace anno {
 
-struct VideoStreamInfo {
+struct IMQS_VIDEO_API VideoStreamInfo {
 	int64_t    Duration  = 0; // AVFormatContext.duration
 	int64_t    NumFrames = 0; // AvStream.nb_frames
 	AVRational FrameRate;     // AVStream.r_frame_rate
@@ -14,7 +14,7 @@ struct VideoStreamInfo {
 	double FrameRateSeconds() const;
 };
 
-class VideoFile {
+class IMQS_VIDEO_API VideoFile {
 public:
 	static void Initialize();
 

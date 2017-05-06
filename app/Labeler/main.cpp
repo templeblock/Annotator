@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "third_party/xo/templates/xoWinMain.cpp"
-#include "VideoDecode.h"
 #include "SvgIcons.h"
 #include "LabelIO.h"
 #include "UI.h"

@@ -17,7 +17,8 @@ local common = {
 		},
 		CPPPATH = {
 			"third_party",
-			".", -- The root directory of this project
+			"lib",
+			".", -- The root directory of this project, so that you can say #include <app/Foo/foo.h>
 		},
 	},
 }
@@ -130,7 +131,7 @@ Build {
 		},
 		-- Override solutions to generate and what units to put where.
 		MsvcSolutions = {
-			['Annotator.sln'] = {}, -- receives all the units due to empty set
+			['MachineVision.sln'] = {}, -- receives all the units due to empty set
 		},
 		-- Override output directory for sln/vcxproj files.
 		MsvcSolutionDir = 'ide',

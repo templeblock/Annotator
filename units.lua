@@ -346,10 +346,49 @@ local pal = SharedLibrary {
 	IdeGenerationHints = ideHintThirdParty,
 }
 
-local Annotator = Program {
-	Name = "Annotator",
+local Video = SharedLibrary {
+	Name = "Video",
 	Depends = {
-		winCrt, xo, ffmpeg, pal, tsf,
+		winCrt, ffmpeg, pal, tsf
+	},
+	PrecompiledHeader = {
+		Source = "lib/Video/pch.cpp",
+		Header = "pch.h",
+		Pass = "PchGen",
+	},
+	Includes = {
+		"lib/Video",
+	},
+	Sources = {
+		makeGlob("lib/Video", {}),
+	}
+}
+
+local Labeler = Program {
+	Name = "Labeler",
+	Depends = {
+		winCrt, xo, ffmpeg, pal, tsf, Video
+	},
+	Libs = { 
+		{ "m", "stdc++"; Config = "linux-*" },
+	},
+	PrecompiledHeader = {
+		Source = "app/Labeler/pch.cpp",
+		Header = "pch.h",
+		Pass = "PchGen",
+	},
+	Includes = {
+		"app/Labeler", -- This is purely here for VS intellisense. With this, VS can't find pch.h from cpp files that are not in the same dir as pch.h
+	},
+	Sources = {
+		makeGlob("app/Labeler", {}),
+	}
+}
+
+local RoadProcessor = Program {
+	Name = "RoadProcessor",
+	Depends = {
+		winCrt, xo, ffmpeg, pal, tsf, Video,
 	},
 	--Env = {
 	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
@@ -358,16 +397,17 @@ local Annotator = Program {
 		{ "m", "stdc++"; Config = "linux-*" },
 	},
 	PrecompiledHeader = {
-		Source = "src/pch.cpp",
+		Source = "app/RoadProcessor/pch.cpp",
 		Header = "pch.h",
 		Pass = "PchGen",
 	},
 	Includes = {
-		"src", -- This is purely here for VS intellisense. With this, VS can't find pch.h from cpp files that are not in the same dir as pch.h
+		"app/RoadProcessor", -- This is purely here for VS intellisense. With this, VS can't find pch.h from cpp files that are not in the same dir as pch.h
 	},
 	Sources = {
-		makeGlob("src", {}),
+		makeGlob("app/RoadProcessor", {}),
 	}
 }
 
-Default(Annotator)
+Default(Labeler)
+Default(RoadProcessor)
