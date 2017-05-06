@@ -3,7 +3,7 @@
 
 #ifdef _WIN32
 #pragma warning(push)
-#pragma warning(disable: 4091)
+#pragma warning(disable : 4091)
 #include <Dbghelp.h>
 #pragma warning(pop)
 #endif
@@ -73,7 +73,7 @@ static void NextCrashDumpFilename(char (&name)[256]) {
 	strcpy(name, oldest);
 }
 
-static LONG WINAPI ExceptionHandler(EXCEPTION_POINTERS* exPointers) {
+static LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS* exPointers) {
 	if (IsBusy)
 		return EXCEPTION_EXECUTE_HANDLER;
 	IsBusy = true;
@@ -119,13 +119,41 @@ static LONG WINAPI ExceptionHandler(EXCEPTION_POINTERS* exPointers) {
 	IsBusy = false;
 	return EXCEPTION_EXECUTE_HANDLER;
 }
+
+static DWORD LastException = 0;
+
+static LONG WINAPI VectoredExceptionHandler(EXCEPTION_POINTERS* exPointers) {
+	DWORD code = exPointers->ExceptionRecord->ExceptionCode;
+	if (code == 0x406D1388) {
+		// This is the _SetThreadName function, which uses a special exception to inform the debugger of a thread name
+		// Once we have Windows 10 Creator's Edition, we can get rid of this mechanism, because they added SetThreadDescription
+		// to the kernel with that Windows version.
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+
+	// When we intercept heap corruption, we get called twice. This is here to avoid sending two crash dumps.
+	if (code == LastException)
+		return EXCEPTION_CONTINUE_SEARCH;
+
+	LastException = code;
+
+	return UnhandledExceptionHandler(exPointers);
 }
+
+} // namespace exception_handler
 
 IMQS_PAL_API void SetupCrashHandler(const char* appName) {
 	strncpy(exception_handler::ModuleName, appName, arraysize(exception_handler::ModuleName));
 	exception_handler::ModuleName[arraysize(exception_handler::ModuleName) - 1] = 0;
 
-	SetUnhandledExceptionFilter(&exception_handler::ExceptionHandler);
+	SetUnhandledExceptionFilter(&exception_handler::UnhandledExceptionHandler);
+
+	// This is necessary to catch heap corruption.
+	// http://stackoverflow.com/questions/19656946/why-setunhandledexceptionfilter-cannot-capture-some-exception-but-addvectoredexc
+	// Basically, the heap catches this itself, and calls NtTerminateProcess. But we most
+	// definitely want to be notified of it, so we also listen for it.
+	// The exception code for this is 0xC0000374
+	AddVectoredExceptionHandler(1, &exception_handler::VectoredExceptionHandler);
 }
 
 IMQS_PAL_API const char* CrashDumpDir() {
@@ -141,5 +169,5 @@ IMQS_PAL_API const char* CrashDumpDir() {
 	return "/var/log/imqs/crashdumps";
 }
 #endif
-}
-}
+} // namespace logging
+} // namespace imqs

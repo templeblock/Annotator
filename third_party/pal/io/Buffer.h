@@ -18,6 +18,7 @@ public:
 	Error Write(const void* buf, size_t len) override;
 
 	void     Add(const void* buf, size_t bytes);
+	void     AddStr(const char* str, size_t len = -1);
 	void     Ensure(size_t additionalBytes);        // If necessary, grow to accommodate an additional number of bytes
 	size_t   Remain() const { return Cap - Len; }   // Number of bytes available in buffer
 	uint8_t* WritePos() const { return Buf + Len; } // Write position
@@ -34,6 +35,20 @@ public:
 	ByteReader(const void* buf, size_t len) : Buf((const uint8_t*) buf), Len(len) {}
 
 	Error Read(void* buf, size_t& len) override;
+};
+
+// Wraps a string in a Writer
+class IMQS_PAL_API StringWriter : public Writer {
+public:
+	std::string* Str = nullptr;
+
+	StringWriter(std::string& target) : Str(&target) {}
+	StringWriter() : Str(&OwnStr) {}
+
+	Error Write(const void* buf, size_t len) override;
+
+private:
+	std::string OwnStr;
 };
 
 // Helper that is made for decoding binary streams
@@ -74,5 +89,5 @@ private:
 	Reader* Reader    = nullptr;
 	int64_t Pos       = 0;
 };
-}
-}
+} // namespace io
+} // namespace imqs

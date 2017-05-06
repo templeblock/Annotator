@@ -16,6 +16,7 @@
 #include "containers/HashBuilder.h"
 #include "containers/queue.h"
 #include "containers/smallvec.h"
+#include "encoding/csv.h"
 #include "encoding/json.h"
 #include "geom/geom2d.h"
 #include "geom/BBox2.h"

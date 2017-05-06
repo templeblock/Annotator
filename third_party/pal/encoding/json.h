@@ -4,6 +4,7 @@
 
 namespace imqs {
 
+#ifndef IMQS_PAL_DISABLE_RAPIDJSON
 // Rapidjson helper functions
 namespace rj {
 // if len is -1, then 'str' must be null terminated
@@ -33,5 +34,6 @@ IMQS_PAL_API std::vector<std::string> Keys(const rapidjson::Value& v);
 
 IMQS_PAL_API bool InOut(bool out, rapidjson::Document& doc, rapidjson::Value& v, const char* key, int64_t& value);
 IMQS_PAL_API bool InOut(bool out, rapidjson::Document& doc, rapidjson::Value& v, const char* key, std::string& value);
-}
+} // namespace rj
+#endif
 }

@@ -37,11 +37,11 @@
 
 #include <tsf/tsf.h>
 
+#ifndef IMQS_PAL_DISABLE_RAPIDJSON
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 6313 6282)
 #endif
-
 #include <rapidjson/rapidjson.h>
 #include <rapidjson/document.h>
 #include <rapidjson/allocators.h>
@@ -49,9 +49,9 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/error/en.h>
 #include <rapidjson/schema.h>
-
 #ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 #endif
 
 #include <zlib.h>

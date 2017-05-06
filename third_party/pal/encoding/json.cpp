@@ -3,6 +3,7 @@
 #include "../os/os.h"
 
 namespace imqs {
+#ifndef IMQS_PAL_DISABLE_RAPIDJSON
 namespace rj {
 
 IMQS_PAL_API Error ParseString(const char* str, size_t len, rapidjson::Document& doc) {
@@ -158,5 +159,6 @@ IMQS_PAL_API bool InOut(bool out, rapidjson::Document& doc, rapidjson::Value& v,
 		return true;
 	}
 }
-}
+} // namespace rj
+#endif
 }
