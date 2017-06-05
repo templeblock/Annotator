@@ -16,3 +16,4 @@
 #endif
 
 #include <Video/Video.h>
+#include <AI/AI.h>

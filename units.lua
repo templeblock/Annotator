@@ -364,6 +364,73 @@ local Video = SharedLibrary {
 	}
 }
 
+local AI = SharedLibrary {
+	Name = "AI",
+	Depends = {
+		winCrt, pal, tsf
+	},
+	Defines = {
+		"COMPILER_MSVC",
+	},
+	Env = {
+		LIBPATH = {
+			"C:/dev/tools/tensorflow/tensorflow/contrib/cmake/build",
+			--"C:/dev/tools/tensorflow/tensorflow/contrib/cmake/build/tf_core_framework.dir/Release",
+			--"C:/dev/tools/tensorflow/tensorflow/contrib/cmake/build/tf_core_kernels.dir/Release",
+		},
+	},
+	Libs = {
+		{
+			"Release/tf_protos_cc.lib",
+			--"Release/tf_core_gpu_kernels.lib",
+			"tf_cc_framework.dir/Release/tf_cc_framework.lib",
+			"tf_core_cpu.dir/Release/tf_core_cpu.lib",
+			--"tf_core_kernels.dir/Release/tf_core_kernels.lib",
+			"tf_core_lib.dir/Release/tf_core_lib.lib",
+			--"tf_core_direct_session.dir/Release/tf_core_direct_session.lib",
+			"tf_core_framework.dir/Release/tf_core_framework.lib",
+			--"zlib/install/lib/zlibstatic.lib",
+			--"gif/install/lib/giflib.lib",
+			--"png/install/lib/libpng12_static.lib",
+			--"jpeg/install/lib/libjpeg.lib",
+			--"jsoncpp/src/jsoncpp/src/lib_json/Release/jsoncpp.lib",
+			--"farmhash/install/lib/farmhash.lib",
+			--"highwayhash/install/lib/highwayhash.lib",
+			"protobuf/src/protobuf/Release/libprotobuf.lib",
+			--"grpc/src/grpc/Release/grpc++_unsecure.lib",
+			--"grpc/src/grpc/Release/grpc_unsecure.lib",
+			--"grpc/src/grpc/Release/gpr.lib",
+			--"wsock32.lib",
+			--"ws2_32.lib",
+			--"shlwapi.lib",
+			"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v8.0/lib/x64/cudart_static.lib",
+			"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v8.0/lib/x64/cuda.lib",
+			"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v8.0/lib/x64/cublas.lib",
+			"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v8.0/lib/x64/cublas_device.lib",
+			"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v8.0/lib/x64/cufft.lib",
+			"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v8.0/lib/x64/curand.lib",
+			"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v8.0/extras/CUPTI/libx64/cupti.lib",
+			"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v8.0/lib/x64/cudnn.lib"
+			; Config = winFilter
+		},
+	},
+	PrecompiledHeader = {
+		Source = "lib/AI/pch.cpp",
+		Header = "pch.h",
+		Pass = "PchGen",
+	},
+	Includes = {
+		"C:/dev/tools/tensorflow",
+		"C:/dev/tools/tensorflow/tensorflow/contrib/cmake/build",
+		"C:/dev/tools/tensorflow/tensorflow/contrib/cmake/build/eigen/src/eigen",
+		"C:/dev/tools/tensorflow/tensorflow/contrib/cmake/build/protobuf/src/protobuf/src",
+		"lib/AI",
+	},
+	Sources = {
+		makeGlob("lib/AI", {}),
+	}
+}
+
 local Labeler = Program {
 	Name = "Labeler",
 	Depends = {
@@ -388,7 +455,7 @@ local Labeler = Program {
 local RoadProcessor = Program {
 	Name = "RoadProcessor",
 	Depends = {
-		winCrt, xo, ffmpeg, pal, tsf, Video,
+		winCrt, xo, ffmpeg, pal, tsf, Video, AI,
 	},
 	--Env = {
 	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
