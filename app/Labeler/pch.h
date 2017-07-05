@@ -7,12 +7,14 @@
 #include <algorithm>
 
 #ifdef _MSC_VER
-#pragma warning(push)
+//#pragma warning(push)
 #pragma warning(disable: 4503)
 #endif
 #include <nlohmann-json/json.hpp>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+//#ifdef _MSC_VER
+//#pragma warning(pop)
+//#endif
 
 #include <Video/Video.h>
+#include <png.h>
+

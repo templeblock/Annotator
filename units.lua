@@ -161,6 +161,9 @@ local deploy_ssleay32_release = copyfile_to_output(vcpkg_bin .. "bin/ssleay32.dl
 local deploy_zlib_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/zlibd1.dll", winDebugFilter)
 local deploy_zlib_release = copyfile_to_output(vcpkg_bin .. "bin/zlib1.dll", winReleaseFilter)
 
+local deploy_libpng_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/libpng16d.dll", winDebugFilter)
+local deploy_libpng_release = copyfile_to_output(vcpkg_bin .. "bin/libpng16.dll", winReleaseFilter)
+
 local deploy_lz4 = copyfile_to_output(vcpkg_bin .. "bin/lz4.dll", winFilter)
 
 local deploy_avcodec_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/avcodec-57.dll", winDebugFilter)
@@ -241,6 +244,21 @@ local zlib = ExternalLibrary {
 			{ "zlibd.lib"; Config = winDebugFilter },
 			{ "zlib.lib"; Config = winReleaseFilter },
 			{ "z"; Config = linuxFilter },
+		}
+	}
+}
+
+local png = ExternalLibrary {
+	Name = "png",
+	Depends = {
+		deploy_libpng_debug,
+		deploy_libpng_release,
+	},
+	Propagate = {
+		Libs = {
+			{ "libpng16d.lib"; Config = winDebugFilter },
+			{ "libpng16.lib"; Config = winReleaseFilter },
+			{ "png"; Config = linuxFilter },
 		}
 	}
 }
@@ -434,7 +452,7 @@ local AI = SharedLibrary {
 local Labeler = Program {
 	Name = "Labeler",
 	Depends = {
-		winCrt, xo, ffmpeg, pal, tsf, Video
+		winCrt, xo, ffmpeg, pal, tsf, Video, png
 	},
 	Libs = { 
 		{ "m", "stdc++"; Config = "linux-*" },

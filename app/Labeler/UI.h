@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LabelIO.h"
+#include "Exporter.h"
 
 namespace imqs {
 namespace anno {
@@ -36,6 +37,12 @@ public:
 	xo::Image         LastFrameImg;
 	std::thread       LoadSaveThread;
 	std::atomic<bool> IsExiting;
+
+	std::thread           ExportThread;
+	xo::controls::MsgBox* ExportMsgBox = nullptr;
+	std::string           ExportProgMsg;
+	ProgressCallback      ExportCallback;
+	std::function<void()> ExportDlgClosed;
 
 	std::string             UserName;
 	size_t                  UnlabeledClass = 0; // First class must be unlabeled

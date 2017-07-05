@@ -103,9 +103,43 @@ void UI::Render() {
 			OpenVideo();
 	});
 
+	ExportCallback = [this](size_t i, size_t total) -> bool {
+		if (ExportMsgBox == nullptr)
+			return false;
+		// We can't update the DOM object directly, because that's a threading violation. The xo rendering
+		// thread could be busy reading the DOM object while we're executing here.
+		// Instead, we rely on a timer to take care of the DOM update.
+		ExportProgMsg = tsf::fmt("%v/%d frames", i, total);
+		return true;
+	};
+
+	ExportDlgClosed = [this]() {
+		ExportMsgBox = nullptr;
+		if (ExportThread.joinable())
+			ExportThread.join();
+	};
+
+	Root->OnTimer([this]{
+		if (ExportMsgBox)
+			ExportMsgBox->SetText(ExportProgMsg.c_str());
+	}, 1000);
+
 	exportBtn->OnClick([this] {
-		auto err = ExportLabeledImagePatches_Video(VideoFilename, Labels);
-		xo::controls::MsgBox::Show(Root->GetDoc(), tsf::fmt("Done with: %v", err.Message()).c_str());
+		ExportMsgBox = new xo::controls::MsgBox();
+		ExportMsgBox->Create(Root->GetDoc(), "Exporting...", "Cancel");
+		ExportMsgBox->OnClose = ExportDlgClosed;
+
+		// super lazy thread use
+		auto labelsCopy   = Labels;
+		auto filenameCopy = VideoFilename;
+		ExportThread      = std::thread([this, labelsCopy, filenameCopy] {
+			ExportLabeledImagePatches_Video(ExportTypes::Png, filenameCopy, labelsCopy, ExportCallback);
+			if (ExportMsgBox)
+				ExportMsgBox->SetText("Done");
+			ExportMsgBox = nullptr;
+		});
+		//auto err = ExportLabeledImagePatches_Video(ExportTypes::Png, VideoFilename, Labels, prog);
+		//xo::controls::MsgBox::Show(Root->GetDoc(), tsf::fmt("Done: %v", err.Message()).c_str());
 	});
 
 	TimeSliderBox = Root->ParseAppendNode("<div></div>");
@@ -412,9 +446,9 @@ void UI::OnLoadSaveTimer() {
 		SaveQueue = package;
 	}
 
-	auto counts = Labels.CategorizedLabelCount();
+	auto        counts = Labels.CategorizedLabelCount();
 	std::string status;
-	int total = 0;
+	int         total = 0;
 	for (auto& p : counts) {
 		status += tsf::fmt("%v:%d ", p.first, p.second);
 		total += p.second;
@@ -530,7 +564,7 @@ size_t UI::FindClass(const std::string& klass) {
 void UI::LoadLabels() {
 	LoadVideoLabels(VideoFilename, Labels);
 	// Perform any once-off fixups here
-	
+
 	//for (auto& f : Labels.Frames) {
 	//	for (size_t i = f.Labels.size() - 1; i != -1; i--) {
 	//		if (f.Labels[i].Class == "normal road") {
