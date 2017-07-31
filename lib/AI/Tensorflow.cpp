@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Tensorflow.h"
 
+#ifdef IMQS_TENSORFLOW
 using namespace tensorflow;
 
 namespace imqs {
@@ -31,3 +32,5 @@ void Model::Initialize() {
 
 } // namespace AI
 } // namespace imqs
+
+#endif // IMQS_TENSORFLOW

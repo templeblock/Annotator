@@ -59,6 +59,7 @@ UI::UI(xo::DomNode* root) {
 	UserName       = os::UserName();
 	Root           = root;
 	LoadSaveThread = std::thread(LoadSaveThreadFunc, this);
+	ModelLoadErr   = "Loading...";
 	Render();
 }
 
@@ -80,11 +81,11 @@ void UI::Render() {
 
 	auto   videoArea  = Root->ParseAppendNode("<div style='break:after; box-sizing: margin; width: 100%; margin: 10ep'></div>");
 	double aspect     = 1920.0 / 1080.0;
-	double videoWidth = 1400;
+	double videoWidth = 1480;
 
 	VideoCanvas = videoArea->AddCanvas();
 	VideoCanvas->StyleParse("hcenter: hcenter; border: 1px #888; border-radius: 1.5ep;");
-	VideoCanvas->SetSize((int) videoWidth, (int) (videoWidth / aspect));
+	VideoCanvas->StyleParsef("width: %dpx; height: %dpx", (int) videoWidth, (int) (videoWidth / aspect));
 	VideoCanvas->OnMouseMove([ui](xo::Event& ev) { ui->OnPaintLabel(ev); });
 	VideoCanvas->OnMouseDown([ui](xo::Event& ev) { ui->OnPaintLabel(ev); });
 
@@ -119,10 +120,11 @@ void UI::Render() {
 			ExportThread.join();
 	};
 
-	Root->OnTimer([this]{
+	Root->OnTimer([this] {
 		if (ExportMsgBox)
 			ExportMsgBox->SetText(ExportProgMsg.c_str());
-	}, 1000);
+	},
+	              1000);
 
 	exportBtn->OnClick([this] {
 		ExportMsgBox = new xo::controls::MsgBox();
@@ -136,8 +138,8 @@ void UI::Render() {
 			ExportLabeledImagePatches_Video(ExportTypes::Png, filenameCopy, labelsCopy, ExportCallback);
 			if (ExportMsgBox)
 				ExportMsgBox->SetText("Done");
-			ExportMsgBox = nullptr;
-		});
+			ExportMsgBox  = nullptr;
+        });
 		//auto err = ExportLabeledImagePatches_Video(ExportTypes::Png, VideoFilename, Labels, prog);
 		//xo::controls::MsgBox::Show(Root->GetDoc(), tsf::fmt("Done: %v", err.Message()).c_str());
 	});
@@ -147,6 +149,7 @@ void UI::Render() {
 
 	auto bottomControlBoxes = Root->ParseAppendNode("<div style='padding: 5ep'></div>");
 	auto mediaControlBox    = bottomControlBoxes->ParseAppendNode("<div></div>");
+	auto modeControlBox     = bottomControlBoxes->ParseAppendNode("<div></div>");
 	auto btnW               = "20ep";
 	auto btnH               = "20ep";
 	PlayBtn                 = xo::controls::Button::NewSvg(mediaControlBox, "media-play", btnW, btnH);
@@ -163,6 +166,12 @@ void UI::Render() {
 	});
 	//btnTest->OnClick([ui] {
 	//});
+
+	auto modeSwitch = modeControlBox->ParseAppendNode(tsf::fmt("<div>Mode: %v</div>", IsModeLabel ? "Label" : "Inference"));
+	modeSwitch->OnClick([ui] {
+		ui->IsModeLabel = !ui->IsModeLabel;
+		ui->Render();
+	});
 
 	auto        labelGroup      = bottomControlBoxes->ParseAppendNode("<div style='padding-left: 20ep; color: #333'></div>");
 	std::string shortcutsTop    = "";
@@ -187,6 +196,8 @@ void UI::Render() {
 		Root->OnKeyChar([ui](xo::Event& ev) { ui->OnKeyChar(ev); });
 		Root->OnTimer([ui]() { ui->OnLoadSaveTimer(); }, 1000);
 	}
+
+	DrawCurrentFrame();
 }
 
 void UI::RenderTimeSlider(bool first) {
@@ -332,6 +343,47 @@ bool UI::RemoveLabel(ImageLabels* frame, int gridX, int gridY) {
 	return false;
 }
 
+// Using our trained model, evaluate at intervals, and overlay
+void UI::DrawEvalOverlay() {
+	if (ModelLoadErr != "")
+		return;
+	auto cx = VideoCanvas->GetCanvas2D();
+	cx->GetImage()->CopyFrom(&LastFrameImg);
+	int vwidth, vheight;
+	Video.Dimensions(vwidth, vheight);
+	xo::Color palette[] = {
+	    {250, 0, 0, 200},
+	    {250, 250, 0, 200},
+	    {0, 250, 0, 200},
+	    {0, 250, 250, 200},
+	    {0, 0, 250, 200},
+	    {250, 0, 250, 200},
+	};
+	int lwidth  = (vwidth / LabelGridSize) * LabelGridSize;
+	int lheight = (vheight / LabelGridSize) * LabelGridSize;
+	int stride  = 128;
+	int gwidth  = 1 + (vwidth - LabelGridSize) / stride;
+	int gheight = 1 + (vheight - LabelGridSize) / stride;
+	gheight = 4;
+	auto start = time::Now();
+	for (int x = 0; x < gwidth; x++) {
+		for (int y = 0; y < gheight; y++) {
+			IMQS_ASSERT(x * stride + LabelGridSize <= (int) LastFrameImg.Width);
+			IMQS_ASSERT(y * stride + LabelGridSize <= (int) LastFrameImg.Height);
+			int py = vheight - y * stride - LabelGridSize;
+			int     c  = Model.EvalRGBAClassify(LastFrameImg.DataAt(x * stride, py), LabelGridSize, LabelGridSize, LastFrameImg.Stride);
+			int     bs = 10;
+			int     x1 = (int) (((float) x + 0.5f) * stride);
+			int     y1 = vheight - (int) (((float) y + 0.5f) * stride);
+			xo::Box r(x1, y1, x1 + bs, y1 + bs);
+			cx->FillRect(r, palette[c]);
+		}
+	}
+	auto end = time::Now();
+	double totalMS = (end - start).Milliseconds();
+	xo::Trace("Inference: %.1f ms (%.1f ms / sample)\n", totalMS, totalMS / (gwidth * gheight));
+}
+
 void UI::DrawLabelBoxes() {
 	auto cx = VideoCanvas->GetCanvas2D();
 	cx->GetImage()->CopyFrom(&LastFrameImg);
@@ -464,6 +516,8 @@ void UI::AssignLabel(LabelClass c) {
 }
 
 void UI::OnPaintLabel(xo::Event& ev) {
+	if (!IsModeLabel)
+		return;
 	if (ActionState == ActionStates::AssignLabel && (ev.Type == xo::EventMouseDown || ev.IsPressed(xo::Button::MouseLeft))) {
 		auto vpos  = CanvasToVideoPos((int) ev.PointsRel[0].x, (int) ev.PointsRel[0].y);
 		auto gpos  = VideoPosToGrid(vpos.X, vpos.Y);
@@ -487,8 +541,8 @@ void UI::OnPaintLabel(xo::Event& ev) {
 void UI::GridDimensions(int& width, int& height) {
 	int vwidth, vheight;
 	Video.Dimensions(vwidth, vheight);
-	width  = (int) ceil((float) vwidth / (float) LabelGridSize);
-	height = (int) ceil((float) vheight / (float) LabelGridSize);
+	width  = (int) floor((float) vwidth / (float) LabelGridSize);
+	height = (int) floor((float) vheight / (float) LabelGridSize);
 }
 
 // If video is shown at half it's actual resolution, then scale = 0.5
@@ -528,12 +582,25 @@ xo::Point UI::GridPosToVideo(int x, int y) {
 void UI::NextFrame() {
 	if (!Video.IsOpen())
 		return;
+
+	LastFrameImg.Alloc(xo::TexFormatRGBA8, Video.Width(), Video.Height());
+	Video.DecodeFrameRGBA(Video.Width(), Video.Height(), LastFrameImg.Data, LastFrameImg.Stride);
+
+	DrawCurrentFrame();
+}
+
+void UI::DrawCurrentFrame() {
+	if (!Video.IsOpen() || LastFrameImg.Width == 0)
+		return;
+
+	VideoCanvas->SetImageSizeOnly(Video.Width(), Video.Height());
 	auto cx = VideoCanvas->GetCanvas2D();
-	Video.DecodeFrameRGBA(cx->Width(), cx->Height(), cx->RowPtr(0), cx->Stride());
-	LastFrameImg.Alloc(xo::TexFormatRGBA8, cx->Width(), cx->Height());
-	LastFrameImg.CopyFrom(cx->GetImage());
+	cx->GetImage()->CopyFrom(&LastFrameImg);
 	VideoCanvas->ReleaseAndInvalidate(cx);
-	DrawLabelBoxes();
+	if (IsModeLabel)
+		DrawLabelBoxes();
+	else
+		DrawEvalOverlay();
 	RenderTimeSlider();
 }
 

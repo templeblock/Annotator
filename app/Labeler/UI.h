@@ -52,6 +52,11 @@ public:
 	int                     LabelGridSize = 256;
 	bool                    GridTopDown   = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
 
+	// Inference
+	AI::Model   Model;
+	std::string ModelLoadErr;
+	bool        IsModeLabel = true; // else inference
+
 	// Loading/Saving labels
 	std::atomic<LoadSavePackage*> SaveQueue;         // Dirty frames waiting to be saved by save thread
 	std::atomic<LoadSavePackage*> LoadQueue;         // Frames loaded by load/save thread. Waiting for us to merge them into our doc
@@ -72,9 +77,11 @@ private:
 	void   Play();
 	void   Stop();
 	void   DrawLabelBoxes();
+	void   DrawEvalOverlay();
 	void   AssignLabel(LabelClass c);
 	void   GridDimensions(int& width, int& height);
 	void   NextFrame();
+	void   DrawCurrentFrame();
 	size_t FindClass(const std::string& klass);
 	void   LoadLabels();
 

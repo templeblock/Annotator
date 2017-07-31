@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef IMQS_TENSORFLOW
+
 namespace imqs {
 namespace AI {
 
@@ -11,3 +13,5 @@ public:
 
 } // namespace AI
 } // namespace imqs
+
+#endif

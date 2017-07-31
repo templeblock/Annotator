@@ -3,6 +3,7 @@
 
 #include <xo/xo/xo.h>
 #include <pal/pal.h>
+#include <AI/AI.h>
 
 #include <algorithm>
 

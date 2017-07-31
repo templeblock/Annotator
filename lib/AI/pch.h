@@ -4,6 +4,13 @@
 #include <pal/pal.h>
 #include "common.h"
 
+#ifdef _MSC_VER
+#define IMQS_AI_API __declspec(dllexport)
+#else
+#define IMQS_AI_API
+#endif
+
+#ifdef IMQS_TENSORFLOW
 // We REALLY want to keep the Tensorflow dependency chain out of our downstream projects
 #include <cstdio>
 #include <functional>
@@ -30,9 +37,4 @@
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-
-#ifdef _MSC_VER
-#define IMQS_AI_API __declspec(dllexport)
-#else
-#define IMQS_AI_API
-#endif
+#endif // IMQS_TENSORFLOW

@@ -12,9 +12,12 @@ void xoMain(xo::SysWnd* wnd) {
 	wnd->Doc()->ClassParse("shortcut", "font-size: 15ep; color: #000; width: 1em");
 
 	svg::LoadAll(wnd->Doc());
-	wnd->SetPosition(xo::Box(0, 0, 1500, 970), xo::SysWnd::SetPosition_Size);
+	wnd->SetPosition(xo::Box(0, 0, 1600, 1020), xo::SysWnd::SetPosition_Size);
 
 	auto ui = new UI(&wnd->Doc()->Root);
+
+	auto err = ui->Model.Load("c:\\mldata\\cp\\model.cntk");
+	ui->ModelLoadErr = err.Message();
 
 	ui->Classes.push_back({'U', "unlabeled"}); // first class must be unlabeled - as embodied by UI::UnlabeledClass
 	ui->Classes.push_back({'R', "normal road"});
@@ -26,7 +29,7 @@ void xoMain(xo::SysWnd* wnd) {
 	ui->Classes.push_back({'X', "pockmarks"});
 	ui->Classes.push_back({'E', "road edge"});
 
-	ui->VideoFilename = "D:\\mldata\\stellenbosch-roads\\GOPR0080.MP4";
+	ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
 	if (!ui->OpenVideo())
 		ui->Render();
 }

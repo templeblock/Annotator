@@ -233,6 +233,99 @@ local libcurl = ExternalLibrary {
 	}
 }
 
+local cntk_bin = "third_party/cntk/Windows/lib/" 
+
+local cntk_dlls_raw = {
+	"Cntk.BinaryConvolutionExample-2.0",
+	"Cntk.Composite-2.0",
+	"Cntk.Core-2.0",
+	"Cntk.Core.CSBinding-2.0",
+	"Cntk.Core.JavaBinding-2.0",
+	"Cntk.Core.Managed-2.0",
+	"Cntk.Deserializers.Binary-2.0",
+	"Cntk.Deserializers.HTK-2.0",
+	"Cntk.Deserializers.Image-2.0",
+	"Cntk.Deserializers.TextFormat-2.0",
+	"Cntk.Eval-2.0",
+	"Cntk.Eval.Wrapper-2.0",
+	"Cntk.ExtensibilityExamples-2.0",
+	"Cntk.Math-2.0",
+	"Cntk.PerformanceProfiler-2.0",
+	"Cntk.Reader.Binary.Deprecated-2.0",
+	"Cntk.Reader.DSSM-2.0",
+	"Cntk.Reader.HTKMLF-2.0",
+	"Cntk.Reader.LMSequence-2.0",
+	"Cntk.Reader.LUSequence-2.0",
+	"Cntk.Reader.SparsePC-2.0",
+	"Cntk.Reader.SVMBinary-2.0",
+	"Cntk.Reader.UCIFast-2.0",
+}
+
+local cntk_libs_raw = {
+	"Cntk.Actions-2.0",
+	"Cntk.BinaryConvolutionExample-2.0",
+	"Cntk.Common-2.0",
+	"Cntk.Composite-2.0",
+	"Cntk.ComputationNetwork-2.0",
+	"Cntk.Core-2.0",
+	"Cntk.Core.CSBinding-2.0",
+	"Cntk.Core.JavaBinding-2.0",
+	"Cntk.Deserializers.Binary-2.0",
+	"Cntk.Deserializers.HTK-2.0",
+	"Cntk.Deserializers.Image-2.0",
+	"Cntk.Deserializers.TextFormat-2.0",
+	"Cntk.Eval-2.0",
+	"Cntk.ExtensibilityExamples-2.0",
+	"Cntk.Math-2.0",
+	"Cntk.Math.Cuda-2.0",
+	"Cntk.PerformanceProfiler-2.0",
+	"Cntk.Reader-2.0",
+	"Cntk.Reader.Binary.Deprecated-2.0",
+	"Cntk.Reader.DSSM-2.0",
+	"Cntk.Reader.HTKMLF-2.0",
+	"Cntk.Reader.LMSequence-2.0",
+	"Cntk.Reader.LUSequence-2.0",
+	"Cntk.Reader.SparsePC-2.0",
+	"Cntk.Reader.SVMBinary-2.0",
+	"Cntk.Reader.UCIFast-2.0",
+	"Cntk.SequenceTrainingLib-2.0",
+	"Cntk.SGD-2.0",
+}
+
+local cntk_deploy = {}
+for i, dll in ipairs(cntk_dlls_raw) do
+	cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. dll .. "d.dll", winDebugFilter)
+	cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. dll .. ".dll", winReleaseFilter)
+end
+
+cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. "cublas64_80.dll", winFilter)
+cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. "cudart64_80.dll", winFilter)
+cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. "cudnn64_5.dll", winFilter)
+cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. "curand64_80.dll", winFilter)
+cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. "cusparse64_80.dll", winFilter)
+cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. "nvml.dll", winFilter)
+cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. "mkl_cntk_p.dll", winFilter) -- Used in CPU mode
+cntk_deploy[#cntk_deploy + 1] = copyfile_to_output(cntk_bin .. "libiomp5md.dll", winFilter) -- Used in CPU mode (used by mkl_cntk_p.dll)
+
+local cntk_libs = {}
+for i, lib in ipairs(cntk_libs_raw) do
+	cntk_libs[#cntk_libs + 1] = { lib .. "d.lib"; Config = winDebugFilter }
+	cntk_libs[#cntk_libs + 1] = { lib .. ".lib"; Config = winReleaseFilter }
+end
+
+local cntk = ExternalLibrary {
+	Name = "cntk",
+	Depends = cntk_deploy,
+	Propagate = {
+		Libs = cntk_libs,
+		Env = {
+			LIBPATH = {
+				{ "third_party/cntk/Windows/lib"; Config = "win64-*" },
+			}
+		}
+	}
+}
+
 local zlib = ExternalLibrary {
 	Name = "zlib",
 	Depends = {
@@ -382,6 +475,9 @@ local Video = SharedLibrary {
 	}
 }
 
+--[[
+-- Abandonware on trying to use Tensorflow.
+-- CNTK has a much better C++ right now (2017-07-27)
 local AI = SharedLibrary {
 	Name = "AI",
 	Depends = {
@@ -448,11 +544,30 @@ local AI = SharedLibrary {
 		makeGlob("lib/AI", {}),
 	}
 }
+--]]
+
+local AI = SharedLibrary {
+	Name = "AI",
+	Depends = {
+		winCrt, pal, tsf, cntk
+	},
+	PrecompiledHeader = {
+		Source = "lib/AI/pch.cpp",
+		Header = "pch.h",
+		Pass = "PchGen",
+	},
+	Includes = {
+		"lib/AI",
+	},
+	Sources = {
+		makeGlob("lib/AI", {}),
+	}
+}
 
 local Labeler = Program {
 	Name = "Labeler",
 	Depends = {
-		winCrt, xo, ffmpeg, pal, tsf, Video, png
+		winCrt, xo, ffmpeg, pal, tsf, Video, png, AI, cntk
 	},
 	Libs = { 
 		{ "m", "stdc++"; Config = "linux-*" },
@@ -475,9 +590,9 @@ local RoadProcessor = Program {
 	Depends = {
 		winCrt, xo, ffmpeg, pal, tsf, Video, AI,
 	},
-	--Env = {
-	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
-	--},
+	Env = {
+		PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
+	},
 	Libs = { 
 		{ "m", "stdc++"; Config = "linux-*" },
 	},

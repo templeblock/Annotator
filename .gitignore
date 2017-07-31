@@ -3,3 +3,4 @@
 /ide
 pkg/
 CMakeFiles/
+/third_party/cntk/Windows

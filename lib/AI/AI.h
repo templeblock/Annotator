@@ -8,4 +8,8 @@
 #define IMQS_AI_API
 #endif
 
+#ifdef IMQS_TENSORFLOW
 #include "Tensorflow.h"
+#endif
+
+#include "CNTK.h"
