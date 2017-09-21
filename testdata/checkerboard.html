@@ -1,0 +1,37 @@
+<!DOCTYPE HTML>
+<html style='height: 100%; margin: 0'>
+	<body style='height: 100%; margin: 0; display: flex; flex: auto; padding: 0px'>
+		<canvas id='can' style='width: 100%; height: 100%; margin: 0' />
+	</body>
+<html>
+
+<script>
+	var redraw = function() {
+		var can = document.getElementById('can');
+		can.width = can.offsetWidth;
+		can.height = can.offsetHeight;
+		var ctx = can.getContext('2d');
+		var W, H, size;
+		if (can.width > can.height) {
+			W = 7;
+			H = 6;
+		} else {
+			W = 6;
+			H = 7;
+		}
+		size = Math.min(can.width / W, can.height / H);
+		size = Math.floor(size);
+		for (var x = 0; x < W; x++) {
+			for (var y = 0; y < H; y++) {
+				var black = ((x ^ y) & 1) == 0;
+				ctx.fillStyle = black ? "#000" : "#fff";
+				ctx.fillRect(x * size, y * size, size, size);
+			}
+		}
+	};
+	redraw();
+
+	window.addEventListener('resize', function() {
+		redraw();
+	});
+</script>
