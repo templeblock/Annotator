@@ -131,6 +131,12 @@ local ideHintThirdParty = {
 	}
 }
 
+local ideHintLibrary = {
+	Msvc = {
+		SolutionFolder = "Libraries"
+	}
+}
+
 local ideHintApp = {
 	Msvc = {
 		SolutionFolder = "Applications"
@@ -161,8 +167,14 @@ local deploy_ssleay32_release = copyfile_to_output(vcpkg_bin .. "bin/ssleay32.dl
 local deploy_zlib_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/zlibd1.dll", winDebugFilter)
 local deploy_zlib_release = copyfile_to_output(vcpkg_bin .. "bin/zlib1.dll", winReleaseFilter)
 
-local deploy_libpng_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/libpng16d.dll", winDebugFilter)
-local deploy_libpng_release = copyfile_to_output(vcpkg_bin .. "bin/libpng16.dll", winReleaseFilter)
+local deploy_png_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/libpng16d.dll", winDebugFilter)
+local deploy_png_release = copyfile_to_output(vcpkg_bin .. "bin/libpng16.dll", winReleaseFilter)
+
+local deploy_tiff_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/tiffd.dll", winDebugFilter)
+local deploy_tiff_release = copyfile_to_output(vcpkg_bin .. "bin/tiff.dll", winReleaseFilter)
+
+local deploy_jpeg_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/jpeg62.dll", winDebugFilter)
+local deploy_jpeg_release = copyfile_to_output(vcpkg_bin .. "bin/jpeg62.dll", winReleaseFilter)
 
 local deploy_lz4 = copyfile_to_output(vcpkg_bin .. "bin/lz4.dll", winFilter)
 
@@ -181,6 +193,15 @@ local deploy_avformat_release = copyfile_to_output(vcpkg_bin .. "bin/avformat-57
 local deploy_avutil_release = copyfile_to_output(vcpkg_bin .. "bin/avutil-55.dll", winReleaseFilter)
 local deploy_swresample_release = copyfile_to_output(vcpkg_bin .. "bin/swresample-2.dll", winReleaseFilter)
 local deploy_swscale_release = copyfile_to_output(vcpkg_bin .. "bin/swscale-4.dll", winReleaseFilter)
+
+local deploy_opencv_core_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_core320d.dll", winDebugFilter)
+local deploy_opencv_core_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_core320.dll", winReleaseFilter)
+local deploy_opencv_flann_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_flann320d.dll", winDebugFilter)
+local deploy_opencv_flann_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_flann320.dll", winReleaseFilter)
+local deploy_opencv_features2d_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_features2d320d.dll", winDebugFilter)
+local deploy_opencv_features2d_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_features2d320.dll", winReleaseFilter)
+local deploy_opencv_imgproc_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_imgproc320d.dll", winDebugFilter)
+local deploy_opencv_imgproc_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_imgproc320.dll", winReleaseFilter)
 
 local deploy_xo_debug = copyfile_to_output("third_party/xo/t2-output/win64-msvc2015-debug-default/xo.dll", winDebugFilter)
 local deploy_xo_release = copyfile_to_output("third_party/xo/t2-output/win64-msvc2015-release-default/xo.dll", winReleaseFilter)
@@ -236,60 +257,60 @@ local libcurl = ExternalLibrary {
 local cntk_bin = "third_party/cntk/Windows/lib/" 
 
 local cntk_dlls_raw = {
-	"Cntk.BinaryConvolutionExample-2.0",
-	"Cntk.Composite-2.0",
-	"Cntk.Core-2.0",
-	"Cntk.Core.CSBinding-2.0",
-	"Cntk.Core.JavaBinding-2.0",
-	"Cntk.Core.Managed-2.0",
-	"Cntk.Deserializers.Binary-2.0",
-	"Cntk.Deserializers.HTK-2.0",
-	"Cntk.Deserializers.Image-2.0",
-	"Cntk.Deserializers.TextFormat-2.0",
-	"Cntk.Eval-2.0",
-	"Cntk.Eval.Wrapper-2.0",
-	"Cntk.ExtensibilityExamples-2.0",
-	"Cntk.Math-2.0",
-	"Cntk.PerformanceProfiler-2.0",
-	"Cntk.Reader.Binary.Deprecated-2.0",
-	"Cntk.Reader.DSSM-2.0",
-	"Cntk.Reader.HTKMLF-2.0",
-	"Cntk.Reader.LMSequence-2.0",
-	"Cntk.Reader.LUSequence-2.0",
-	"Cntk.Reader.SparsePC-2.0",
-	"Cntk.Reader.SVMBinary-2.0",
-	"Cntk.Reader.UCIFast-2.0",
+	"Cntk.BinaryConvolutionExample-2.2",
+	"Cntk.Composite-2.2",
+	"Cntk.Core-2.2",
+	--"Cntk.Core.CSBinding-2.2",
+	--"Cntk.Core.JavaBinding-2.2",
+	"Cntk.Core.Managed-2.2",
+	"Cntk.Deserializers.Binary-2.2",
+	"Cntk.Deserializers.HTK-2.2",
+	"Cntk.Deserializers.Image-2.2",
+	"Cntk.Deserializers.TextFormat-2.2",
+	"Cntk.Eval-2.2",
+	--"Cntk.Eval.Wrapper-2.2",
+	"Cntk.ExtensibilityExamples-2.2",
+	"Cntk.Math-2.2",
+	"Cntk.PerformanceProfiler-2.2",
+	--"Cntk.Reader.Binary.Deprecated-2.2",
+	"Cntk.Reader.DSSM-2.2",
+	"Cntk.Reader.HTKMLF-2.2",
+	"Cntk.Reader.LMSequence-2.2",
+	"Cntk.Reader.LUSequence-2.2",
+	"Cntk.Reader.SparsePC-2.2",
+	"Cntk.Reader.SVMBinary-2.2",
+	"Cntk.Reader.UCIFast-2.2",
 }
 
 local cntk_libs_raw = {
-	"Cntk.Actions-2.0",
-	"Cntk.BinaryConvolutionExample-2.0",
-	"Cntk.Common-2.0",
-	"Cntk.Composite-2.0",
-	"Cntk.ComputationNetwork-2.0",
-	"Cntk.Core-2.0",
-	"Cntk.Core.CSBinding-2.0",
-	"Cntk.Core.JavaBinding-2.0",
-	"Cntk.Deserializers.Binary-2.0",
-	"Cntk.Deserializers.HTK-2.0",
-	"Cntk.Deserializers.Image-2.0",
-	"Cntk.Deserializers.TextFormat-2.0",
-	"Cntk.Eval-2.0",
-	"Cntk.ExtensibilityExamples-2.0",
-	"Cntk.Math-2.0",
-	"Cntk.Math.Cuda-2.0",
-	"Cntk.PerformanceProfiler-2.0",
-	"Cntk.Reader-2.0",
-	"Cntk.Reader.Binary.Deprecated-2.0",
-	"Cntk.Reader.DSSM-2.0",
-	"Cntk.Reader.HTKMLF-2.0",
-	"Cntk.Reader.LMSequence-2.0",
-	"Cntk.Reader.LUSequence-2.0",
-	"Cntk.Reader.SparsePC-2.0",
-	"Cntk.Reader.SVMBinary-2.0",
-	"Cntk.Reader.UCIFast-2.0",
-	"Cntk.SequenceTrainingLib-2.0",
-	"Cntk.SGD-2.0",
+	"Cntk.Actions-2.2",
+	"Cntk.BinaryConvolutionExample-2.2",
+	"Cntk.Common-2.2",
+	"Cntk.Composite-2.2",
+	"Cntk.ComputationNetwork-2.2",
+	"Cntk.Core-2.2",
+	--"Cntk.Core.CSBinding-2.2",
+	--"Cntk.Core.JavaBinding-2.2",
+	"Cntk.Deserializers.Binary-2.2",
+	"Cntk.Deserializers.HTK-2.2",
+	"Cntk.Deserializers.Image-2.2",
+	"Cntk.Deserializers.TextFormat-2.2",
+	"Cntk.Eval-2.2",
+	--"Cntk.ExtensibilityExamples-2.2",
+	"Cntk.Math-2.2",
+	"Cntk.Math.Cuda-2.2",
+	"Cntk.PerformanceProfiler-2.2",
+	"Cntk.Reader-2.2",
+	--"Cntk.Reader.Binary.Deprecated-2.2",
+	"Cntk.Reader.DSSM-2.2",
+	"Cntk.Reader.HTKMLF-2.2",
+	"Cntk.Reader.LMSequence-2.2",
+	"Cntk.Reader.LUSequence-2.2",
+	"Cntk.Reader.SparsePC-2.2",
+	"Cntk.Reader.SVMBinary-2.2",
+	"Cntk.Reader.UCIFast-2.2",
+	"Cntk.SequenceTrainingLib-2.2",
+	"Cntk.SGD-2.2",
 }
 
 local cntk_deploy = {}
@@ -344,8 +365,8 @@ local zlib = ExternalLibrary {
 local png = ExternalLibrary {
 	Name = "png",
 	Depends = {
-		deploy_libpng_debug,
-		deploy_libpng_release,
+		deploy_png_debug,
+		deploy_png_release,
 	},
 	Propagate = {
 		Libs = {
@@ -367,6 +388,34 @@ local lz4 = ExternalLibrary {
 			{ "lz4"; Config = linuxFilter },
 		}
 	}
+}
+
+local opencv = ExternalLibrary {
+	Name = "opencv",
+	Depends = {
+		deploy_opencv_core_debug,
+		deploy_opencv_core_release,
+		deploy_opencv_flann_debug,
+		deploy_opencv_flann_release,
+		deploy_opencv_features2d_debug,
+		deploy_opencv_features2d_release,
+		deploy_opencv_imgproc_debug,
+		deploy_opencv_imgproc_release,
+		deploy_jpeg_debug,
+		deploy_jpeg_release,
+		deploy_png_debug,
+		deploy_png_release,
+		deploy_tiff_debug,
+		deploy_tiff_release,
+		deploy_zlib_debug,
+		deploy_zlib_release,
+	},
+	Propagate = {
+		Libs = {
+			{"opencv_core320d.lib", "opencv_features2d320d.lib", "opencv_imgproc320d.lib"; Config = winDebugFilter },
+			{"opencv_core320.lib", "opencv_features2d320.lib", "opencv_imgproc320.lib"; Config = winReleaseFilter },
+		},
+	},
 }
 
 local xo = ExternalLibrary {
@@ -430,15 +479,64 @@ local uberlog = StaticLibrary {
 	Sources = {
 		"uberlog.cpp",
 		"uberlog.h",
-		--"tsf.cpp",
-		--"tsf.h",
+		"tsf.cpp",
+		"tsf.h",
+	},
+	IdeGenerationHints = ideHintThirdParty,
+}
+
+local phttp = StaticLibrary {
+	Name = "phttp",
+	Depends = { winCrt, },
+	Sources = {
+		"third_party/phttp/phttp.cpp",
+		"third_party/phttp/phttp.h",
+		"third_party/phttp/sha1.c",
+		"third_party/phttp/http11/http11_parser.c",
+	},
+	IdeGenerationHints = ideHintThirdParty,
+}
+
+local tinyxml2 = StaticLibrary {
+	Name = "tinyxml2",
+	Depends = { winCrt, },
+	Sources = {
+		"third_party/tinyxml2/tinyxml2.cpp",
+		"third_party/tinyxml2/tinyxml2.h",
+	},
+	IdeGenerationHints = ideHintThirdParty,
+}
+
+local minizip = StaticLibrary {
+	Name = "minizip",
+	Depends = { winCrt, },
+	Defines = {
+		"HAVE_ZLIB",
+		{	"__USE_FILE_OFFSET64",
+			"__USE_LARGEFILE64",
+			"_LARGEFILE64_SOURCE",
+			"_FILE_OFFSET_BIT=64"; Config = linuxFilter }
+	},
+	Sources = {
+		FGlob {
+			Dir = "third_party/minizip/src",
+			Extensions = { ".c", ".h" },
+			Filters = { 
+				{ Pattern = "_lzma"; Config = "ignore" },
+				{ Pattern = "_aes"; Config = "ignore" },
+				{ Pattern = "_bzip"; Config = "ignore" },
+				{ Pattern = "_win32"; Config = winFilter },
+				{ Pattern = "_posix"; Config = linuxFilter },
+			},
+			Recursive = false,
+		}
 	},
 	IdeGenerationHints = ideHintThirdParty,
 }
 
 local pal = SharedLibrary {
 	Name = "pal",
-	Depends = { winCrt, uberlog, utfz, tsf, libcurl, zlib, lz4 },
+	Depends = { winCrt, uberlog, utfz, tsf, libcurl, minizip, zlib, lz4, tinyxml2 },
 	Includes = {
 		"third_party/pal",
 	},
@@ -472,7 +570,8 @@ local Video = SharedLibrary {
 	},
 	Sources = {
 		makeGlob("lib/Video", {}),
-	}
+	},
+	IdeGenerationHints = ideHintLibrary,
 }
 
 --[[
@@ -561,7 +660,8 @@ local AI = SharedLibrary {
 	},
 	Sources = {
 		makeGlob("lib/AI", {}),
-	}
+	},
+	IdeGenerationHints = ideHintLibrary,
 }
 
 local Labeler = Program {
@@ -582,17 +682,18 @@ local Labeler = Program {
 	},
 	Sources = {
 		makeGlob("app/Labeler", {}),
-	}
+	},
+	IdeGenerationHints = ideHintApp,
 }
 
 local RoadProcessor = Program {
 	Name = "RoadProcessor",
 	Depends = {
-		winCrt, xo, ffmpeg, pal, tsf, Video, AI,
+		winCrt, xo, ffmpeg, pal, tsf, Video, AI, cntk
 	},
-	Env = {
-		PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
-	},
+	--Env = {
+	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
+	--},
 	Libs = { 
 		{ "m", "stdc++"; Config = "linux-*" },
 	},
@@ -606,8 +707,62 @@ local RoadProcessor = Program {
 	},
 	Sources = {
 		makeGlob("app/RoadProcessor", {}),
-	}
+	},
+	IdeGenerationHints = ideHintApp,
+}
+
+local CameraCalibrator = Program {
+	Name = "CameraCalibrator",
+	Depends = {
+		winCrt, pal, opencv,
+	},
+	Env = {
+		PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
+	},
+	Libs = { 
+		{ "m", "stdc++"; Config = "linux-*" },
+	},
+	PrecompiledHeader = {
+		Source = "app/CameraCalibrator/pch.cpp",
+		Header = "pch.h",
+		Pass = "PchGen",
+	},
+	Includes = {
+		"app/CameraCalibrator", -- This is purely here for VS intellisense
+	},
+	Sources = {
+		makeGlob("app/CameraCalibrator", {}),
+	},
+	IdeGenerationHints = ideHintApp,
+}
+
+local FrameServer = Program {
+	Name = "FrameServer",
+	Depends = {
+		winCrt, Video, pal, phttp, uberlog, tsf
+	},
+	Env = {
+		PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
+	},
+	Libs = { 
+		{ "Ws2_32.lib"; Config = winFilter },
+		{ "m", "stdc++"; Config = "linux-*" },
+	},
+	PrecompiledHeader = {
+		Source = "app/FrameServer/pch.cpp",
+		Header = "pch.h",
+		Pass = "PchGen",
+	},
+	Includes = {
+		"app/FrameServer", -- This is purely here for VS intellisense
+	},
+	Sources = {
+		makeGlob("app/FrameServer", {}),
+	},
+	IdeGenerationHints = ideHintApp,
 }
 
 Default(Labeler)
 Default(RoadProcessor)
+Default(CameraCalibrator)
+Default(FrameServer)

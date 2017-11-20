@@ -207,7 +207,7 @@ Error VideoFile::TranslateErr(int ret, const char* whileBusyWith) {
 	default:
 		av_strerror(ret, errBuf, sizeof(errBuf));
 		if (whileBusyWith)
-			return Error::Fmt("%v: Error %", whileBusyWith, errBuf);
+			return Error::Fmt("%v: %v", whileBusyWith, errBuf);
 		else
 			return Error::Fmt("AVERROR %v", errBuf);
 	}

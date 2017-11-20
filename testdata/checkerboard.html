@@ -1,8 +1,101 @@
 <!DOCTYPE HTML>
-<html style='height: 100%; margin: 0'>
+<style>
+	.black {
+		background-color: #000;
+		width: 150px;
+		height: 150px;
+		display: block;
+		float: left;
+	}
+	.white {
+		background-color: #fff;
+		width: 150px;
+		height: 150px;
+		display: block;
+		float: left;
+	}
+</style>
+<html style='height: 100%'>
+<body style='line-height: 0px; text-align: left'>
+<!--
 	<body style='height: 100%; margin: 0; display: flex; flex: auto; padding: 0px'>
 		<canvas id='can' style='width: 100%; height: 100%; margin: 0' />
 	</body>
+-->
+
+	<!-- landscape -->
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+
+	<br style='clear: both'/>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+
+	<br style='clear: both'/>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+
+	<br style='clear: both'/>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+
+	<br style='clear: both'/>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+
+	<br style='clear: both'/>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+	<div class='white'></div>
+	<div class='black'></div>
+
+</body>
 <html>
 
 <script>
@@ -13,11 +106,11 @@
 		var ctx = can.getContext('2d');
 		var W, H, size;
 		if (can.width > can.height) {
-			W = 7;
-			H = 6;
+			W = 8;
+			H = 5;
 		} else {
-			W = 6;
-			H = 7;
+			W = 5;
+			H = 8;
 		}
 		size = Math.min(can.width / W, can.height / H);
 		size = Math.floor(size);
@@ -29,9 +122,8 @@
 			}
 		}
 	};
-	redraw();
-
-	window.addEventListener('resize', function() {
-		redraw();
-	});
+	//redraw();
+	//window.addEventListener('resize', function() {
+	//	redraw();
+	//});
 </script>
