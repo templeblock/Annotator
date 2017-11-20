@@ -11,7 +11,12 @@ IMQS_PAL_API std::string ItoA(int value, int base = 10);
 IMQS_PAL_API std::string I64toA(int64_t value, int base = 10);
 
 namespace strings {
-IMQS_PAL_API void ToHex(const void* buf, size_t len, char* out);
+IMQS_PAL_API void ToHex(uint8_t val, char* out);                 // Does not add a null terminator
+IMQS_PAL_API void ToHex(const void* buf, size_t len, char* out); // Always adds a null terminator, so length of 'out' must be len * 2 + 1
+IMQS_PAL_API std::string ToHex(const void* buf, size_t len);
+
+IMQS_PAL_API uint8_t FromHex8(char c);                           // Convert one hex character to an integer
+IMQS_PAL_API uint32_t FromHex32(const char* s, size_t len = -1); // Convert two characters at a time, starting at the front of the string.
 
 IMQS_PAL_API std::string tolower(const std::string& s);
 IMQS_PAL_API std::string toupper(const std::string& s);
@@ -23,6 +28,7 @@ IMQS_PAL_API bool eqnocase(const std::string& a, const std::string& b); // Retur
 // Replace all occurrences of 'find' with 'replacement'
 IMQS_PAL_API std::string Replace(const std::string& s, const std::string& find, const std::string& replacement);
 
+IMQS_PAL_API bool StartsWith(const char* s, const char* prefix);
 IMQS_PAL_API bool StartsWith(const std::string& s, const char* prefix);
 IMQS_PAL_API bool EndsWith(const std::string& s, const char* suffix);
 
@@ -62,5 +68,5 @@ IMQS_PAL_API std::vector<std::string> Split(const char* s, int delim);
 IMQS_PAL_API std::vector<std::string> Split(const std::string& s, int delim);
 
 IMQS_PAL_API std::string Join(const std::vector<std::string>& parts, const char* joiner);
-}
-}
+} // namespace strings
+} // namespace imqs

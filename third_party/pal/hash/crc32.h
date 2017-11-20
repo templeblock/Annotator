@@ -1,6 +1,8 @@
 // clang-format off
 #pragma once
 
+#include <string>
+
 namespace imqs {
 namespace hash {
 
@@ -121,6 +123,11 @@ inline uint32_t crc32_append(uint32_t crc, const void* buf, size_t len)
 inline uint32_t crc32(const void* buf, size_t len)
 {
 	return ~crc32_append(0xffffffff, buf, len);
+}
+
+inline uint32_t crc32(const std::string& s)
+{
+	return crc32(s.c_str(), s.size());
 }
 
 } // namespace hash

@@ -110,11 +110,15 @@ public:
 	int Milliseconds() const { return (int) (Nsec / 1000000); }
 
 	// We should adopt the Go date format string technique, which is genius. For now, we hardcode this.
-	// Returns the number of characters written, excluding the null terminator (27 for Zulu, and 31 otherwise)
-	size_t Format8601(char* buf, int timezone_offset_minutes = 0) const;
-	Error  Parse8601(const char* str, size_t len); // Parse ISO 8601 time (2013-10-11T22:14:15.003123Z)
-	void   FormatHttp(char* buf) const;            // Buf must be at least 30 characters (29 + null terminator).
-	Error  ParseHttp(const char* str, size_t len); // Parse HTTP time (Sun, 06 Nov 1994 08:49:37 GMT)
+	// Returns the number of characters written, excluding the null terminator
+	// (length of 27 for Zulu, and 31 otherwise). In other words, buffer size must
+	// be 28 for Zulu, and 32 otherwise.
+	size_t      Format8601(char* buf, int timezone_offset_minutes = 0) const;
+	std::string Format8601(int timezone_offset_minutes = 0) const;
+	Error       Parse8601(const char* str, size_t len); // Parse ISO 8601 time (2013-10-11T22:14:15.003123Z)
+	void        FormatHttp(char* buf) const;            // Buf must be at least 30 characters (29 + null terminator).
+	std::string FormatHttp() const;
+	Error       ParseHttp(const char* str, size_t len); // Parse HTTP time (Sun, 06 Nov 1994 08:49:37 GMT)
 
 	int64_t SubMicro(Time t) const;         // Return number of microseconds between this and t.
 	Time    PlusMicro(int64_t micro) const; // Return this time with microseconds added to it.
@@ -187,5 +191,18 @@ IMQS_PAL_API int64_t PerformanceCounter();
 
 // Return the frequency (ticks per second) of PerformanceCounter()
 IMQS_PAL_API int64_t PerformanceFrequency();
+
+inline std::string Time::Format8601(int timezone_offset_minutes) const {
+	char buf[32];
+	Format8601(buf, timezone_offset_minutes);
+	return buf;
 }
+
+inline std::string Time::FormatHttp() const {
+	char buf[30];
+	FormatHttp(buf);
+	return buf;
 }
+
+} // namespace time
+} // namespace imqs

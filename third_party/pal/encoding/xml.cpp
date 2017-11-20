@@ -1,0 +1,42 @@
+#include "pch.h"
+#include "../os/os.h"
+#include "xml.h"
+
+namespace imqs {
+namespace xml {
+
+bool Serializer::GetAttrib(tinyxml2::XMLElement* el, const char* name, std::string& val) {
+	const char* v = el->Attribute(name);
+	if (v)
+		val = v;
+	return v != nullptr;
+}
+
+IMQS_PAL_API Error ToError(tinyxml2::XMLError err) {
+	return Error(tinyxml2::XMLDocument::ErrorIDToName(err));
+}
+
+IMQS_PAL_API Error ParseFile(const std::string& filename, tinyxml2::XMLDocument& doc) {
+	std::string buf;
+	auto        err = os::ReadWholeFile(filename, buf);
+	if (!err.OK())
+		return err;
+	auto xerr = doc.Parse(buf.c_str(), buf.size());
+	if (xerr != tinyxml2::XMLError::XML_SUCCESS)
+		return Error::Fmt("Error parsing xml in %v: %v", filename, tinyxml2::XMLDocument::ErrorIDToName(xerr));
+	return Error();
+}
+
+IMQS_PAL_API Error ParseString(const std::string& str, tinyxml2::XMLDocument& doc) {
+	return ParseString(str.c_str(), doc, str.size());
+}
+
+IMQS_PAL_API Error ParseString(const char* str, tinyxml2::XMLDocument& doc, size_t strLen) {
+	auto xerr = doc.Parse(str, strLen);
+	if (xerr != tinyxml2::XMLError::XML_SUCCESS)
+		return Error::Fmt("Error parsing xml: %v", tinyxml2::XMLDocument::ErrorIDToName(xerr));
+	return Error();
+}
+
+} // namespace xml
+} // namespace imqs

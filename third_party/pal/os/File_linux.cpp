@@ -46,19 +46,19 @@ Error File::Open(const std::string& filename) {
 }
 
 Error File::Create(const std::string& filename) {
-	int r = open(filename.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0666);
+	int r = open(filename.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0660);
 	if (r == -1)
 		return ErrorFrom_errno();
 	FD = r;
 	return Error();
 }
 
-Error File::Seek(int64_t offset, SeekWhence whence, int64_t& newPosition) {
+Error File::SeekWithResult(int64_t offset, io::SeekWhence whence, int64_t& newPosition) {
 	int m = 0;
 	switch (whence) {
-	case SeekWhence::Begin: m = SEEK_SET; break;
-	case SeekWhence::Current: m = SEEK_CUR; break;
-	case SeekWhence::End: m = SEEK_END; break;
+	case io::SeekWhence::Begin: m = SEEK_SET; break;
+	case io::SeekWhence::Current: m = SEEK_CUR; break;
+	case io::SeekWhence::End: m = SEEK_END; break;
 	}
 	off_t r = lseek(FD, offset, m);
 	if (r == -1)
@@ -72,5 +72,5 @@ void File::Close() {
 		close(FD);
 	FD = -1;
 }
-}
-}
+} // namespace os
+} // namespace imqs

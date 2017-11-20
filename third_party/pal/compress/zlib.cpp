@@ -133,6 +133,7 @@ Error Compressor::Write(const void* buf, size_t len) {
 	}
 	return Error();
 }
-}
-}
-}
+
+} // namespace zlib
+} // namespace compress
+} // namespace imqs

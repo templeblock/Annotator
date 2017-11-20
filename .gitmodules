@@ -13,3 +13,12 @@
 [submodule "third_party/vcpkg"]
 	path = third_party/vcpkg
 	url = https://github.com/Microsoft/vcpkg.git
+[submodule "third_party/phttp"]
+	path = third_party/phttp
+	url = https://github.com/bmharper/phttp
+[submodule "third_party/tinyxml2"]
+	path = third_party/tinyxml2
+	url = https://github.com/leethomason/tinyxml2.git
+[submodule "third_party/minizip"]
+	path = third_party/minizip
+	url = https://github.com/nmoinvaz/minizip.git

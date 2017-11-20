@@ -16,6 +16,16 @@ public:
 	BBox2() {
 	}
 
+	BBox2(T x1, T y1, T x2, T y2) : X1(x1), Y1(y1), X2(x2), Y2(y2) {
+	}
+
+	static BBox2 Normalized(T x1, T y1, T x2, T y2) {
+		BBox2 b;
+		b.ExpandToFit(x1, y1);
+		b.ExpandToFit(x2, y2);
+		return b;
+	}
+
 	void Reset() {
 		*this = BBox2();
 	}
@@ -33,6 +43,14 @@ public:
 		       b.Y2 >= Y1 && b.Y1 <= Y2;
 	}
 
+	// Clips this box, so that it is inside 'b'
+	void ClipTo(const BBox2& b) {
+		X1 = std::max(X1, b.X1);
+		Y1 = std::max(Y1, b.Y1);
+		X2 = std::min(X2, b.X2);
+		Y2 = std::min(Y2, b.Y2);
+	}
+
 	// Returns true if the other box is inside or equal to this box.
 	bool IsInsideMe(const BBox2& b) const {
 		return b.X1 >= X1 && b.Y1 >= Y1 &&
@@ -48,7 +66,9 @@ public:
 	}
 };
 
-typedef BBox2<double> BBox2d;
-typedef BBox2<float>  BBox2f;
-}
-}
+typedef BBox2<double>  BBox2d;
+typedef BBox2<float>   BBox2f;
+typedef BBox2<int32_t> BBox2i32;
+typedef BBox2<int64_t> BBox2i64;
+} // namespace geom2d
+} // namespace imqs

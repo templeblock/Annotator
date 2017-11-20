@@ -16,8 +16,13 @@ File::~File() {
 Error File::Write(const void* buf, size_t len) {
 	IMQS_ASSERT(len < UINT32_MAX);
 
-	if (!WriteFile(FH, buf, (DWORD) len, nullptr, nullptr))
+	DWORD written = 0;
+	if (!WriteFile(FH, buf, (DWORD) len, &written, nullptr))
 		return ErrorFrom_GetLastError();
+
+	if (written != len)
+		return Error::Fmt("Wrote %v bytes to file, but expected to write %v", written, len);
+
 	return Error();
 }
 
@@ -40,14 +45,14 @@ Error File::Create(const std::string& filename) {
 	return WinCreateFile(filename, GENERIC_READ | GENERIC_WRITE, 0, CREATE_ALWAYS, 0);
 }
 
-Error File::Seek(int64_t offset, SeekWhence whence, int64_t& newPosition) {
+Error File::SeekWithResult(int64_t offset, io::SeekWhence whence, int64_t& newPosition) {
 	LARGE_INTEGER woffset;
 	woffset.QuadPart = offset;
 	int m            = 0;
 	switch (whence) {
-	case SeekWhence::Begin: m = FILE_BEGIN; break;
-	case SeekWhence::Current: m = FILE_CURRENT; break;
-	case SeekWhence::End: m = FILE_END; break;
+	case io::SeekWhence::Begin: m = FILE_BEGIN; break;
+	case io::SeekWhence::Current: m = FILE_CURRENT; break;
+	case io::SeekWhence::End: m = FILE_END; break;
 	}
 	if (!SetFilePointerEx(FH, woffset, (LARGE_INTEGER*) &newPosition, m))
 		return ErrorFrom_GetLastError();
@@ -66,5 +71,5 @@ Error File::WinCreateFile(const std::string& filename, DWORD desiredAccess, DWOR
 		return ErrorFrom_GetLastError();
 	return Error();
 }
-}
-}
+} // namespace os
+} // namespace imqs

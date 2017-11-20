@@ -190,11 +190,6 @@ public:
 	static Response Perform(const std::string& method, const std::string& url, size_t bodyBytes, const void* body, const std::string& caCertsFilePath = "", const HeaderMap& headers = HeaderMap());
 	static void     Perform(const Request& request, Response& response);
 	static bool     IsLocalHost(const char* url);
-
-private:
-	static size_t CurlMyRead(void* ptr, size_t size, size_t nmemb, void* data);
-	static size_t CurlMyWrite(void* ptr, size_t size, size_t nmemb, void* data);
-	static size_t CurlMyHeaders(void* ptr, size_t size, size_t nmemb, void* data);
 };
 
 // Stateful HTTP connection.
@@ -217,8 +212,24 @@ public:
 	Response Perform(const std::string& method, const std::string& url, size_t bodyBytes, const void* body, const std::string& caCertsFilePath = "", const HeaderMap& headers = HeaderMap());
 	void     Perform(const Request& request, Response& response);
 
+	// Attempt to cancel the current transfer, potentially from another thread.
+	// This was added in order to speed up shutdown, by aborting an operation
+	// that is currently in progress. Calling this function will set IsCancelled to true,
+	// which in turn will cause our Curl read/write callback functions to return 0,
+	// which Curl interprets as a cancellation response. This is the officially
+	// recommended mechanism for canceling a Curl transfer.
+	void Cancel();
+	bool IsCancelled() const { return Cancelled; }
+
 private:
-	void* CurlC;
+	void*             CurlC           = nullptr;
+	uint8_t*          ReadPtr         = nullptr; // Only valid while a transfer is taking place
+	Response*         CurrentResponse = nullptr; // Only valid while a transfer is taking place
+	std::atomic<bool> Cancelled;
+
+	static size_t CurlMyRead(void* ptr, size_t size, size_t nmemb, void* data);
+	static size_t CurlMyWrite(void* ptr, size_t size, size_t nmemb, void* data);
+	static size_t CurlMyHeaders(void* ptr, size_t size, size_t nmemb, void* data);
 };
-}
-}
+} // namespace http
+} // namespace imqs

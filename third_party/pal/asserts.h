@@ -10,4 +10,7 @@ IMQS_PAL_API void IMQS_NORETURN Die(const char* file, int line, const char* msg)
 
 // NOTE: This is compiled in all builds (Debug, Release)
 #define IMQS_ASSERT(f) (void) ((f) || (imqs::Die(__FILE__, __LINE__, #f), 0))
-}
+
+// Set a callback function that is called whenever Die() is called. You might want to log the issue, for example.
+IMQS_PAL_API void SetAssertCallback(void* context, void (*callback)(void* context, const char* file, int line, const char* msg));
+} // namespace imqs

@@ -8,3 +8,7 @@
 #include <utfz/utfz.h>
 #include <curl/curl.h>
 
+#include <minizip/src/mz.h>
+//#include <minizip/src/mz_strm.h>
+#include <minizip/src/mz_strm_mem.h>
+#include <minizip/src/mz_zip.h>

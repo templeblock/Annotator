@@ -74,6 +74,15 @@ public:
 	bool        operator!=(const StaticError& e) const { return !(*this == e); }
 	Error       operator=(const Error& e);
 
+	// This is useful for chaining up a series of operations, any of which may fail, but it doesn't
+	// matter if you execute some of them when others have failed. If the error is OK(), then it will
+	// be replaced by anything not OK, but an existing error will remain so.
+	// example:
+	//   auto err = Read();
+	//   err |= Read();
+	//   return err;
+	Error operator|=(const Error& e);
+
 	// Disabling these, because I don't see how they are meaningful
 	//bool        operator==(const Error& e) const;
 	//bool        operator!=(const Error& e) const { return !(*this == e); }
@@ -89,4 +98,11 @@ private:
 
 	bool IsStatic() const { return (Msg & StaticBit) != 0; }
 };
+
+inline Error Error::operator|=(const Error& e) {
+	if (OK())
+		*this = e;
+	return *this;
 }
+
+} // namespace imqs

@@ -466,53 +466,6 @@ bool Response::FirstSetCookie(Cookie& cookie) const {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-size_t Client::CurlMyRead(void* ptr, size_t size, size_t nmemb, void* data) {
-	size_t    tot   = size * nmemb;
-	uint8_t** rdata = (uint8_t**) data;
-	memcpy(ptr, *rdata, tot);
-	*rdata += tot;
-	return tot;
-}
-
-size_t Client::CurlMyWrite(void* ptr, size_t size, size_t nmemb, void* data) {
-	Response* r   = (Response*) data;
-	size_t    tot = size * nmemb;
-	for (size_t i = 0; i < tot; i++)
-		r->Body += (char) ((uint8_t*) ptr)[i];
-	return tot;
-}
-
-size_t Client::CurlMyHeaders(void* ptr, size_t size, size_t nmemb, void* data) {
-	Response*   r        = (Response*) data;
-	size_t      tot      = size * nmemb;
-	size_t      mytot    = tot;
-	size_t      valStart = 0;
-	const char* line     = (const char*) ptr;
-
-	// discard the closing \r\n from the header line
-	if (mytot >= 2 && line[mytot - 2] == '\r' && line[mytot - 1] == '\n')
-		mytot -= 2;
-
-	if (mytot != 0) {
-		r->Headers.push_back(HeaderItem());
-		HeaderItem& item = r->Headers.back();
-		for (size_t i = 0; i < mytot; i++) {
-			if (valStart == 0 && line[i] == ':') {
-				valStart = i + 1;
-				item.Key.assign(line, i);
-				break;
-			}
-		}
-
-		// skip whitespace at start of value (ie Content-Length: 123) - skip the space before the 123.
-		for (; valStart < mytot && line[valStart] == ' '; valStart++) {
-		}
-
-		item.Value.assign(line + valStart, mytot - valStart);
-	}
-	return tot;
-}
-
 Response Client::Get(const std::string& url, const HeaderMap& headers) {
 	Connection c;
 	return c.Get(url, headers);
@@ -551,6 +504,7 @@ bool Client::IsLocalHost(const char* url) {
 
 Connection::Connection() {
 	CurlC = nullptr;
+	Cancelled = false;
 }
 
 Connection::~Connection() {
@@ -579,7 +533,8 @@ Response Connection::Post(const std::string& url, const HeaderMap& headers) {
 Response Connection::Perform(const std::string& method, const std::string& url, size_t bodyBytes, const void* body, const std::string& caCertsFilePath, const HeaderMap& headers) {
 	Request request;
 	request.Method = method;
-	request.Body.assign((const char*) body, bodyBytes);
+	if (bodyBytes)
+		request.Body.assign((const char*) body, bodyBytes);
 	request.Url        = url;
 	request.CACertFile = caCertsFilePath;
 
@@ -602,7 +557,7 @@ void Connection::Perform(const Request& request, Response& response) {
 	    request.Method != "CONNECT" && // untested
 	    request.Method != "PATCH" &&   // untested
 	    request.Method != "OPTIONS"    // untested
-	    ) {
+	) {
 		IMQS_DIE_MSG((std::string("Client: Invalid HTTP verb ") + request.Method).c_str());
 	}
 
@@ -620,16 +575,17 @@ void Connection::Perform(const Request& request, Response& response) {
 	curl_easy_setopt(CurlC, CURLOPT_UPLOAD, 0);
 	curl_easy_setopt(CurlC, CURLOPT_INFILESIZE, 0);
 
-	uint8_t* readData = (uint8_t*) &request.Body[0];
+	ReadPtr         = (uint8_t*) &request.Body[0];
+	CurrentResponse = &response;
 
 	// initialize with this new request's parameters
 	curl_easy_setopt(CurlC, CURLOPT_URL, request.Url.c_str());
-	curl_easy_setopt(CurlC, CURLOPT_READFUNCTION, Client::CurlMyRead);
-	curl_easy_setopt(CurlC, CURLOPT_WRITEFUNCTION, Client::CurlMyWrite);
-	curl_easy_setopt(CurlC, CURLOPT_HEADERFUNCTION, Client::CurlMyHeaders);
-	curl_easy_setopt(CurlC, CURLOPT_READDATA, &readData);
-	curl_easy_setopt(CurlC, CURLOPT_WRITEDATA, &response);
-	curl_easy_setopt(CurlC, CURLOPT_HEADERDATA, &response);
+	curl_easy_setopt(CurlC, CURLOPT_READFUNCTION, CurlMyRead);
+	curl_easy_setopt(CurlC, CURLOPT_WRITEFUNCTION, CurlMyWrite);
+	curl_easy_setopt(CurlC, CURLOPT_HEADERFUNCTION, CurlMyHeaders);
+	curl_easy_setopt(CurlC, CURLOPT_READDATA, this);
+	curl_easy_setopt(CurlC, CURLOPT_WRITEDATA, this);
+	curl_easy_setopt(CurlC, CURLOPT_HEADERDATA, this);
 	curl_easy_setopt(CurlC, CURLOPT_TIMEOUT_MS, request.TimeoutMilliseconds);
 	curl_easy_setopt(CurlC, CURLOPT_NOSIGNAL, 1);
 	curl_easy_setopt(CurlC, CURLOPT_CAINFO, request.CACertFile != "" ? request.CACertFile.c_str() : nullptr);
@@ -686,12 +642,12 @@ void Connection::Perform(const Request& request, Response& response) {
 	res = curl_easy_perform(CurlC);
 
 	switch (res) {
-	case CURLE_OK: response.Err                    = Error(); break;
+	case CURLE_OK: response.Err = Error(); break;
 	case CURLE_COULDNT_RESOLVE_PROXY: response.Err = ErrResolveProxyFailed; break;
-	case CURLE_COULDNT_RESOLVE_HOST: response.Err  = ErrResolveHostFailed; break;
-	case CURLE_COULDNT_CONNECT: response.Err       = ErrConnectedFailed; break;
-	case CURLE_OPERATION_TIMEDOUT: response.Err    = ErrTimeout; break;
-	case CURLE_TOO_MANY_REDIRECTS: response.Err    = ErrTooManyRedirects; break;
+	case CURLE_COULDNT_RESOLVE_HOST: response.Err = ErrResolveHostFailed; break;
+	case CURLE_COULDNT_CONNECT: response.Err = ErrConnectedFailed; break;
+	case CURLE_OPERATION_TIMEDOUT: response.Err = ErrTimeout; break;
+	case CURLE_TOO_MANY_REDIRECTS: response.Err = ErrTooManyRedirects; break;
 	default:
 		response.Err = Error(tsf::fmt("libcurl error %v", res));
 		break;
@@ -704,6 +660,69 @@ void Connection::Perform(const Request& request, Response& response) {
 	if (headers)
 		curl_easy_setopt(CurlC, CURLOPT_HTTPHEADER, nullptr);
 	curl_slist_free_all(headers);
+
+	ReadPtr         = nullptr;
+	CurrentResponse = nullptr;
 }
+
+void Connection::Cancel() {
+	Cancelled = true;
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+size_t Connection::CurlMyRead(void* ptr, size_t size, size_t nmemb, void* data) {
+	Connection* self = (Connection*) data;
+	if (self->Cancelled)
+		return 0;
+	size_t tot = size * nmemb;
+	memcpy(ptr, self->ReadPtr, tot);
+	self->ReadPtr += tot;
+	return tot;
 }
+
+size_t Connection::CurlMyWrite(void* ptr, size_t size, size_t nmemb, void* data) {
+	Connection* self = (Connection*) data;
+	if (self->Cancelled)
+		return 0;
+	size_t tot = size * nmemb;
+	self->CurrentResponse->Body.append((const char*) ptr, tot);
+	return tot;
+}
+
+size_t Connection::CurlMyHeaders(void* ptr, size_t size, size_t nmemb, void* data) {
+	Connection* self = (Connection*) data;
+	if (self->Cancelled)
+		return 0;
+	size_t      tot      = size * nmemb;
+	size_t      mytot    = tot;
+	size_t      valStart = 0;
+	const char* line     = (const char*) ptr;
+
+	// discard the closing \r\n from the header line
+	if (mytot >= 2 && line[mytot - 2] == '\r' && line[mytot - 1] == '\n')
+		mytot -= 2;
+
+	if (mytot != 0) {
+		self->CurrentResponse->Headers.push_back(HeaderItem());
+		HeaderItem& item = self->CurrentResponse->Headers.back();
+		for (size_t i = 0; i < mytot; i++) {
+			if (valStart == 0 && line[i] == ':') {
+				valStart = i + 1;
+				item.Key.assign(line, i);
+				break;
+			}
+		}
+
+		// skip whitespace at start of value (ie Content-Length: 123) - skip the space before the 123.
+		for (; valStart < mytot && line[valStart] == ' '; valStart++) {
+		}
+
+		item.Value.assign(line + valStart, mytot - valStart);
+	}
+	return tot;
+}
+
+} // namespace http
+} // namespace imqs

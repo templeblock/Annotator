@@ -161,4 +161,49 @@ IMQS_PAL_API bool InOut(bool out, rapidjson::Document& doc, rapidjson::Value& v,
 }
 } // namespace rj
 #endif
+
+namespace nj {
+IMQS_PAL_API Error ParseFile(const std::string& filename, nlohmann::json& doc) {
+	std::string buf;
+	auto        err = os::ReadWholeFile(filename, buf);
+	if (!err.OK())
+		return err;
+
+	try {
+		doc = nlohmann::json::parse(buf.begin(), buf.end());
+		return Error();
+	} catch (std::exception& e) {
+		return Error::Fmt("Error parsing JSON from %v: %v", filename, e.what());
+	}
 }
+
+IMQS_PAL_API bool GetBool(const nlohmann::json& v, const char* key, bool defaultValue) {
+	auto it = v.find(key);
+	if (it != v.end() && it->is_boolean())
+		return it->get<bool>();
+	return defaultValue;
+}
+
+IMQS_PAL_API std::string GetString(const nlohmann::json& v, const char* key, std::string defaultValue) {
+	auto it = v.find(key);
+	if (it != v.end() && it->is_string())
+		return it->get<std::string>();
+	return defaultValue;
+}
+
+IMQS_PAL_API int GetInt(const nlohmann::json& v, const char* key, int defaultValue) {
+	auto it = v.find(key);
+	if (it != v.end() && it->is_number_integer())
+		return it->get<int>();
+	return defaultValue;
+}
+
+IMQS_PAL_API int64_t GetInt64(const nlohmann::json& v, const char* key, int64_t defaultValue) {
+	auto it = v.find(key);
+	if (it != v.end() && it->is_number_integer())
+		return it->get<int64_t>();
+	return defaultValue;
+}
+
+} // namespace nj
+} // namespace imqs

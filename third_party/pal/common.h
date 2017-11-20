@@ -54,6 +54,18 @@
 #endif
 #endif
 
+// This is unfortunate, but on VS 2015, if you enclose the inclusion of
+// nlohmann-json/json.hpp inside a push/pop statement, then the warnings
+// still appear. This breaks compilation, because we compile with /WX.
+// Warning 4503 is about a decorated identifier length being too long,
+// typically because of complex templates, so I don't feel too bad about
+// disabling this for the rest of our code too.
+#ifdef _MSC_VER
+#pragma warning(disable : 4503)
+#endif
+#include <nlohmann-json/json.hpp>
+
+#include <tinyxml2/tinyxml2.h>
 #include <zlib.h>
 #include <lz4.h>
 

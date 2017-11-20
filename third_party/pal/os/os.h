@@ -12,11 +12,11 @@ const char PathSeparator = '\\';
 const char PathSeparator = '/';
 #endif
 
-extern IMQS_PAL_API StaticError ErrEACCESS;
-extern IMQS_PAL_API StaticError ErrEEXIST;
-extern IMQS_PAL_API StaticError ErrEINVAL;
+extern IMQS_PAL_API StaticError ErrEACCESS; // Access denied, or similar
+extern IMQS_PAL_API StaticError ErrEEXIST;  // Object already exists
+extern IMQS_PAL_API StaticError ErrEINVAL;  // Invalid input value to function
 extern IMQS_PAL_API StaticError ErrEMFILE;
-extern IMQS_PAL_API StaticError ErrENOENT;
+extern IMQS_PAL_API StaticError ErrENOENT; // Not found
 
 struct FileAttributes {
 	imqs::time::Time TimeCreate; // Creation time
@@ -35,6 +35,7 @@ IMQS_PAL_API Error ErrorFrom_GetLastError(DWORD err);
 IMQS_PAL_API void Sleep(imqs::time::Duration d);
 
 IMQS_PAL_API Error Stat(const std::string& path, FileAttributes& attribs);
+IMQS_PAL_API bool  PathExists(const std::string& path);
 IMQS_PAL_API bool  IsExist(Error err);                 // Returns true if the error indicates that a path already exists
 IMQS_PAL_API bool  IsNotExist(Error err);              // Returns true if the error indicates that a path does not exist
 IMQS_PAL_API Error MkDir(const std::string& dir);      // Create a directory
@@ -93,11 +94,19 @@ IMQS_PAL_API bool        IsDebuggerPresent();
 IMQS_PAL_API void        SetThreadName(const char* name); // Useful for debugging. Only implemented on Windows 10 with SetThreadDescription
 IMQS_PAL_API std::string ProcessPath();                   // Get the path of the currently executing process (eg c:\programs\foo.exe, or /usr/bin/foo)
 IMQS_PAL_API std::string HostName();
-IMQS_PAL_API std::string UserName();                                    // Not usable for security purposes on Linux (trivial for a user to spoof)
-IMQS_PAL_API ohash::map<std::string, std::string> AllEnvironmentVars(); // Retrieve environment variables
-IMQS_PAL_API std::string EnvironmentVar(const char* var);               // Retrieve environment variable
-IMQS_PAL_API std::string FindInSystemPath(const std::string& filename); // Search the system PATH for the given filename
-IMQS_PAL_API std::string ExecutableExtension();                         // ".exe" on windows, and "" on other platforms
-IMQS_PAL_API std::string SharedLibraryExtension();                      // ".dll" on windows, and ".so" on other platforms
+IMQS_PAL_API std::string UserName();                                             // Not usable for security purposes on Linux (trivial for a user to spoof)
+IMQS_PAL_API ohash::map<std::string, std::string> GetAllEnv();                   // Retrieve environment variables
+IMQS_PAL_API std::string GetEnv(const char* var);                                // Retrieve environment variable
+IMQS_PAL_API bool        SetEnv(const std::string& var, const std::string& val); // Set environment variable (always overwrite, even if already exists). To delete a variable, set 'val' to an empty string.
+IMQS_PAL_API std::string FindInSystemPath(const std::string& filename);          // Search the system PATH for the given filename
+IMQS_PAL_API std::string ExecutableExtension();                                  // ".exe" on windows, and "" on other platforms
+IMQS_PAL_API std::string SharedLibraryExtension();                               // ".dll" on windows, and ".so" on other platforms
+IMQS_PAL_API void        TraceStr(const char* str);                              // Trace to OutputDebugString, or puts(stdout) on linux
+
+// Write to OutputDebugString, or stdout on linux
+template <typename... Args>
+void Trace(const char* format_str, const Args&... args) {
+	TraceStr(tsf::fmt(format_str, args...).c_str());
 }
+} // namespace os
 } // namespace imqs

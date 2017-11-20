@@ -6,6 +6,8 @@
 namespace imqs {
 namespace math {
 
+#define IMQS_PI 3.1415926535897932384626433832795
+
 template <typename FT>
 class Traits {
 public:
@@ -29,6 +31,26 @@ public:
 	static double Max() { return DBL_MAX; }
 	static bool   IsNaN(double v) { return v != v; }
 	static bool   Finite(double v) { return std::isfinite(v); }
+};
+
+template <>
+class Traits<int32_t> {
+public:
+	static int32_t Epsilon() { return 0; }
+	static int32_t Min() { return INT32_MIN; }
+	static int32_t Max() { return INT32_MAX; }
+	static bool    IsNaN(int32_t v) { return false; }
+	static bool    Finite(int32_t v) { return true; }
+};
+
+template <>
+class Traits<int64_t> {
+public:
+	static int64_t Epsilon() { return 0; }
+	static int64_t Min() { return INT64_MIN; }
+	static int64_t Max() { return INT64_MAX; }
+	static bool    IsNaN(int64_t v) { return false; }
+	static bool    Finite(int64_t v) { return true; }
 };
 
 // If v is less than zero, return -1
@@ -55,5 +77,17 @@ int Compare(const T& a, const T& b) {
 		return 1;
 	return 0;
 }
+
+template <typename T>
+T Clamp(const T& v, const T& vmin, const T& vmax) {
+	if (v < vmin)
+		return vmin;
+	if (v > vmax)
+		return vmax;
+	return v;
 }
-}
+
+inline bool IsFinite(float v) { return v == v; }
+inline bool IsFinite(double v) { return v == v; }
+} // namespace math
+} // namespace imqs

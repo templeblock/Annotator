@@ -33,7 +33,7 @@ IMQS_PAL_API Error Compress(const void* raw, size_t rawLen, void*& enc, size_t& 
 IMQS_PAL_API Error DeflateInit(z_stream& stream, uint32_t flags);
 
 // Stream compressor
-// When finished, you must flush the compressor by writing zero bytes to it.
+// When finished, you must flush the compressor by writing zero bytes to it. For example, Write(nullptr, 0).
 class IMQS_PAL_API Compressor : public io::Writer {
 public:
 	io::Writer* Target = nullptr; // Destination of compressed bytes
@@ -54,6 +54,7 @@ private:
 	uint64_t   TotalCompressed = 0;
 	io::Buffer OutBuf;
 };
-}
-}
-}
+
+} // namespace zlib
+} // namespace compress
+} // namespace imqs

@@ -40,17 +40,19 @@ public:
 
 	bool operator==(const Guid& b) const;
 	bool operator!=(const Guid& b) const;
+	bool operator<(const Guid& b) const;
 
 	uint32_t Hash32() const;
+	bool     IsNull() const { return Qwords[0] == 0 && Qwords[1] == 0; }
 
 private:
 	static Guid InternalCreate(bool secure);
 };
-}
+} // namespace imqs
 
 namespace ohash {
 template <>
 inline hashkey_t gethashcode(const imqs::Guid& g) {
 	return (hashkey_t) g.Hash32();
 }
-}
+} // namespace ohash

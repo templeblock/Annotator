@@ -36,6 +36,10 @@ public:
 		AddBytes(v.c_str(), v.length());
 	}
 
+	void Add(const char* s) {
+		AddBytes(s, strlen(s));
+	}
+
 	void Add(const HashBuilder& v) {
 		AddBytes(v.Buf, v.Len);
 	}
@@ -58,4 +62,4 @@ private:
 			GrowForAdditional(len);
 	}
 };
-}
+} // namespace imqs

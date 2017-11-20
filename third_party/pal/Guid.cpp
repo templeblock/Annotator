@@ -82,7 +82,11 @@ bool Guid::operator!=(const Guid& b) const {
 	return !(*this == b);
 }
 
+bool Guid::operator<(const Guid& b) const {
+	return memcmp(this, &b, sizeof(*this)) < 0;
+}
+
 uint32_t Guid::Hash32() const {
 	return Dwords[0] ^ Dwords[1] ^ Dwords[2] ^ Dwords[3];
 }
-}
+} // namespace imqs

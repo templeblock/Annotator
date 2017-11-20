@@ -154,6 +154,11 @@ IMQS_PAL_API Error Stat(const std::string& path, FileAttributes& attribs) {
 #endif
 }
 
+IMQS_PAL_API bool PathExists(const std::string& path) {
+	FileAttributes a;
+	return Stat(path, a).OK();
+}
+
 IMQS_PAL_API bool IsExist(Error err) {
 	return err == ErrEEXIST;
 }
@@ -386,7 +391,7 @@ IMQS_PAL_API Error FileLength(const std::string& filename, uint64_t& len) {
 		return err;
 
 	int64_t pos = -1;
-	err         = f.Seek(0, SeekWhence::End, pos);
+	err         = f.SeekWithResult(0, io::SeekWhence::End, pos);
 	if (!err.OK())
 		return err;
 
@@ -460,15 +465,11 @@ IMQS_PAL_API Error FindFiles(const std::string& _dir, std::function<bool(const F
 		return ErrorFrom_errno(errno);
 
 	FindFileItem item;
-	item.Root = fixed;
-	struct dirent  block;
+	item.Root           = fixed;
 	struct dirent* iter = nullptr;
 	Error          err;
 	while (true) {
-		if (readdir_r(d, &block, &iter) != 0) {
-			err = ErrorFrom_errno(errno);
-			break;
-		}
+		iter = readdir(d);
 		// NULL iter signals end of iteration
 		if (iter == nullptr)
 			break;
@@ -682,7 +683,7 @@ IMQS_PAL_API std::string UserName() {
 #endif
 }
 
-IMQS_PAL_API ohash::map<std::string, std::string> AllEnvironmentVars() {
+IMQS_PAL_API ohash::map<std::string, std::string> GetAllEnv() {
 	ohash::map<std::string, std::string> vars;
 #ifdef _WIN32
 	wchar_t* env = GetEnvironmentStringsW();
@@ -708,25 +709,43 @@ IMQS_PAL_API ohash::map<std::string, std::string> AllEnvironmentVars() {
 	return vars;
 }
 
-IMQS_PAL_API std::string EnvironmentVar(const char* var) {
+IMQS_PAL_API std::string GetEnv(const char* var) {
 #ifdef _WIN32
-	wchar_t buf[512];
-	DWORD   len = 512;
-	DWORD   r   = GetEnvironmentVariableW(towide(var).c_str(), buf, len);
-	if (r < 512)
+	const size_t staticSize = 512;
+	wchar_t      buf[staticSize];
+	buf[0]    = 0;
+	DWORD len = (DWORD) staticSize;
+	DWORD r   = GetEnvironmentVariableW(towide(var).c_str(), buf, len);
+	if (r < staticSize)
 		return toutf8(buf);
 	wchar_t* dbuf = new wchar_t[r];
+	dbuf[0]       = 0;
 	r             = GetEnvironmentVariableW(towide(var).c_str(), dbuf, r);
 	auto res      = toutf8(dbuf);
 	delete[] dbuf;
 	return res;
 #else
-	return getenv(var);
+	char* e = getenv(var);
+	return e ? e : "";
+#endif
+}
+
+IMQS_PAL_API bool SetEnv(const std::string& var, const std::string& val) {
+#ifdef _WIN32
+	if (val == "")
+		return SetEnvironmentVariableW(towide(var).c_str(), nullptr) == TRUE;
+	else
+		return SetEnvironmentVariableW(towide(var).c_str(), towide(val).c_str()) == TRUE;
+#else
+	if (val == "")
+		return unsetenv(var.c_str()) == 0;
+	else
+		return setenv(var.c_str(), val.c_str(), 1) == 0;
 #endif
 }
 
 IMQS_PAL_API std::string FindInSystemPath(const std::string& filename) {
-	auto path = EnvironmentVar("PATH");
+	auto path = GetEnv("PATH");
 	if (path == "")
 		return "";
 	auto paths = strings::Split(path, SYSTEM_PATH_SPLITTER);
@@ -754,6 +773,15 @@ IMQS_PAL_API std::string SharedLibraryExtension() {
 	return ".so";
 #endif
 }
+
+IMQS_PAL_API void TraceStr(const char* str) {
+#ifdef _WIN32
+	OutputDebugStringW(towide(str).c_str());
+#else
+	write(fileno(stdout), str, strlen(str));
+#endif
+}
+
 } // namespace os
 } // namespace imqs
 

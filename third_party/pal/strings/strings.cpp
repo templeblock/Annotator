@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "strings.h"
+#include "../modp/modp_b16.h"
 
 namespace imqs {
 
@@ -62,6 +63,13 @@ IMQS_PAL_API std::string I64toA(int64_t value, int base) {
 }
 
 namespace strings {
+
+IMQS_PAL_API void ToHex(uint8_t val, char* out) {
+	const char* lut = "0123456789ABCDEF";
+	out[0]          = lut[val >> 4];
+	out[1]          = lut[val & 15];
+}
+
 IMQS_PAL_API void ToHex(const void* buf, size_t len, char* out) {
 	const char* lut = "0123456789ABCDEF";
 	auto        src = (const uint8_t*) buf;
@@ -70,6 +78,41 @@ IMQS_PAL_API void ToHex(const void* buf, size_t len, char* out) {
 		out[1] = lut[*src & 15];
 	}
 	*out = 0;
+}
+
+IMQS_PAL_API std::string ToHex(const void* buf, size_t len) {
+	std::string s;
+	s.resize(len * 2);
+	ToHex(buf, len, &s[0]);
+	return s;
+}
+
+IMQS_PAL_API uint8_t FromHex8(char c) {
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a';
+	if (c >= 'A' && c <= 'F')
+		return c - 'A';
+	return 0;
+}
+
+IMQS_PAL_API uint32_t FromHex32(const char* s, size_t len) {
+	if (len == -1)
+		len = strlen(s);
+	len = std::min(len, (size_t) 8);
+	uint8_t dst[4];
+	size_t  r = modp_b16_decode((char*) dst, s, len);
+	switch (r) {
+	case (size_t) -1: return -1;
+	case 0: return 0;
+	case 1: return dst[0];
+	case 2: return ((uint32_t) dst[0] << 8) | dst[1];
+	case 3: return ((uint32_t) dst[0] << 16) | ((uint32_t) dst[1] << 8) | dst[2];
+	case 4: return ((uint32_t) dst[0] << 24) | ((uint32_t) dst[1] << 16) | ((uint32_t) dst[2] << 8) | dst[3];
+	}
+	IMQS_DIE(); // should not be reachable
+	return 0;
 }
 
 IMQS_PAL_API std::string tolower(const std::string& s) {
@@ -152,6 +195,15 @@ IMQS_PAL_API std::string Replace(const std::string& s, const std::string& find, 
 		i = j + find.length();
 	}
 	return r;
+}
+
+IMQS_PAL_API bool StartsWith(const char* s, const char* prefix) {
+	size_t i = 0;
+	for (; s[i] && prefix[i]; i++) {
+		if (s[i] != prefix[i])
+			break;
+	}
+	return prefix[i] == 0;
 }
 
 IMQS_PAL_API bool StartsWith(const std::string& s, const char* prefix) {
@@ -243,5 +295,5 @@ IMQS_PAL_API std::string Join(const std::vector<std::string>& parts, const char*
 	}
 	return r;
 }
-}
-}
+} // namespace strings
+} // namespace imqs

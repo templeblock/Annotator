@@ -36,4 +36,14 @@ IMQS_PAL_API bool InOut(bool out, rapidjson::Document& doc, rapidjson::Value& v,
 IMQS_PAL_API bool InOut(bool out, rapidjson::Document& doc, rapidjson::Value& v, const char* key, std::string& value);
 } // namespace rj
 #endif
-}
+
+// nlohmann:json helpers
+namespace nj {
+IMQS_PAL_API Error ParseFile(const std::string& filename, nlohmann::json& doc);
+
+IMQS_PAL_API bool GetBool(const nlohmann::json& v, const char* key, bool defaultValue = false);
+IMQS_PAL_API std::string GetString(const nlohmann::json& v, const char* key, std::string defaultValue = "");
+IMQS_PAL_API int         GetInt(const nlohmann::json& v, const char* key, int defaultValue = 0);
+IMQS_PAL_API int64_t GetInt64(const nlohmann::json& v, const char* key, int64_t defaultValue = 0);
+} // namespace nj
+} // namespace imqs
