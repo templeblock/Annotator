@@ -5,3 +5,4 @@ vcpkg install lz4:x64-windows
 vcpkg install zlib:x64-windows
 vcpkg install libpng:x64-windows
 vcpkg install libjpeg-turbo:x64-windows
+vcpkg install opencv[contrib,core,eigen,flann,jpeg,opengl,png,tiff]:x64-windows

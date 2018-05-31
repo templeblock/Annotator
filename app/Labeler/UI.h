@@ -52,8 +52,10 @@ public:
 	int                     LabelGridSize = 256;
 	bool                    GridTopDown   = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
 
+#ifdef IMQS_AI_API
 	// Inference
-	AI::Model   Model;
+	AI::Model Model;
+#endif
 	std::string ModelLoadErr;
 	bool        IsModeLabel = true; // else inference
 

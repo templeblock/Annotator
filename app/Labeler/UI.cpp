@@ -135,10 +135,10 @@ void UI::Render() {
 		auto labelsCopy   = Labels;
 		auto filenameCopy = VideoFilename;
 		ExportThread      = std::thread([this, labelsCopy, filenameCopy] {
-			ExportLabeledImagePatches_Video(ExportTypes::Png, filenameCopy, labelsCopy, ExportCallback);
-			if (ExportMsgBox)
-				ExportMsgBox->SetText("Done");
-			ExportMsgBox  = nullptr;
+            ExportLabeledImagePatches_Video(ExportTypes::Png, filenameCopy, labelsCopy, ExportCallback);
+            if (ExportMsgBox)
+                ExportMsgBox->SetText("Done");
+            ExportMsgBox = nullptr;
         });
 		//auto err = ExportLabeledImagePatches_Video(ExportTypes::Png, VideoFilename, Labels, prog);
 		//xo::controls::MsgBox::Show(Root->GetDoc(), tsf::fmt("Done: %v", err.Message()).c_str());
@@ -178,7 +178,7 @@ void UI::Render() {
 	std::string shortcutsBottom = "";
 	auto        addShortcut     = [](std::string& shortcuts, const char* key, const char* title) {
         shortcuts += tsf::fmt("<div style='width: 10em'><span class='shortcut'>%v</span>%v</div>", key, title);
-    };
+	};
 	size_t half = Classes.size() / 2;
 	for (size_t i = 0; i < half; i++)
 		addShortcut(shortcutsTop, Classes[i].KeyStr().c_str(), Classes[i].Class.c_str());
@@ -347,6 +347,7 @@ bool UI::RemoveLabel(ImageLabels* frame, int gridX, int gridY) {
 void UI::DrawEvalOverlay() {
 	if (ModelLoadErr != "")
 		return;
+#ifdef IMQS_AI_API
 	auto cx = VideoCanvas->GetCanvas2D();
 	cx->GetImage()->CopyFrom(&LastFrameImg);
 	int vwidth, vheight;
@@ -364,13 +365,13 @@ void UI::DrawEvalOverlay() {
 	int stride  = 128;
 	int gwidth  = 1 + (vwidth - LabelGridSize) / stride;
 	int gheight = 1 + (vheight - LabelGridSize) / stride;
-	gheight = 4;
-	auto start = time::Now();
+	gheight     = 4;
+	auto start  = time::Now();
 	for (int x = 0; x < gwidth; x++) {
 		for (int y = 0; y < gheight; y++) {
 			IMQS_ASSERT(x * stride + LabelGridSize <= (int) LastFrameImg.Width);
 			IMQS_ASSERT(y * stride + LabelGridSize <= (int) LastFrameImg.Height);
-			int py = vheight - y * stride - LabelGridSize;
+			int     py = vheight - y * stride - LabelGridSize;
 			int     c  = Model.EvalRGBAClassify(LastFrameImg.DataAt(x * stride, py), LabelGridSize, LabelGridSize, LastFrameImg.Stride);
 			int     bs = 10;
 			int     x1 = (int) (((float) x + 0.5f) * stride);
@@ -379,9 +380,10 @@ void UI::DrawEvalOverlay() {
 			cx->FillRect(r, palette[c]);
 		}
 	}
-	auto end = time::Now();
+	auto   end     = time::Now();
 	double totalMS = (end - start).Milliseconds();
 	xo::Trace("Inference: %.1f ms (%.1f ms / sample)\n", totalMS, totalMS / (gwidth * gheight));
+#endif
 }
 
 void UI::DrawLabelBoxes() {

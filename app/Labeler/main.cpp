@@ -16,8 +16,10 @@ void xoMain(xo::SysWnd* wnd) {
 
 	auto ui = new UI(&wnd->Doc()->Root);
 
-	auto err = ui->Model.Load("c:\\mldata\\cp\\model.cntk");
+#ifdef IMQS_AI_API
+	auto err         = ui->Model.Load("c:\\mldata\\cp\\model.cntk");
 	ui->ModelLoadErr = err.Message();
+#endif
 
 	ui->Classes.push_back({'U', "unlabeled"}); // first class must be unlabeled - as embodied by UI::UnlabeledClass
 	ui->Classes.push_back({'R', "normal road"});

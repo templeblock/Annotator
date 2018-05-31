@@ -3,13 +3,13 @@
 
 #include <xo/xo/xo.h>
 #include <pal/pal.h>
-#include <AI/AI.h>
+//#include <AI/AI.h>
 
 #include <algorithm>
 
 #ifdef _MSC_VER
 //#pragma warning(push)
-#pragma warning(disable: 4503)
+#pragma warning(disable : 4503)
 #endif
 #include <nlohmann-json/json.hpp>
 //#ifdef _MSC_VER
@@ -18,4 +18,3 @@
 
 #include <Video/Video.h>
 #include <png.h>
-

@@ -197,14 +197,14 @@ local deploy_avutil_release = copyfile_to_output(vcpkg_bin .. "bin/avutil-55.dll
 local deploy_swresample_release = copyfile_to_output(vcpkg_bin .. "bin/swresample-2.dll", winReleaseFilter)
 local deploy_swscale_release = copyfile_to_output(vcpkg_bin .. "bin/swscale-4.dll", winReleaseFilter)
 
-local deploy_opencv_core_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_core320d.dll", winDebugFilter)
-local deploy_opencv_core_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_core320.dll", winReleaseFilter)
-local deploy_opencv_flann_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_flann320d.dll", winDebugFilter)
-local deploy_opencv_flann_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_flann320.dll", winReleaseFilter)
-local deploy_opencv_features2d_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_features2d320d.dll", winDebugFilter)
-local deploy_opencv_features2d_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_features2d320.dll", winReleaseFilter)
-local deploy_opencv_imgproc_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_imgproc320d.dll", winDebugFilter)
-local deploy_opencv_imgproc_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_imgproc320.dll", winReleaseFilter)
+local deploy_opencv_core_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_core341d.dll", winDebugFilter)
+local deploy_opencv_core_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_core341.dll", winReleaseFilter)
+local deploy_opencv_flann_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_flann341d.dll", winDebugFilter)
+local deploy_opencv_flann_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_flann341.dll", winReleaseFilter)
+local deploy_opencv_features2d_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_features2d341d.dll", winDebugFilter)
+local deploy_opencv_features2d_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_features2d341.dll", winReleaseFilter)
+local deploy_opencv_imgproc_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/opencv_imgproc341d.dll", winDebugFilter)
+local deploy_opencv_imgproc_release = copyfile_to_output(vcpkg_bin .. "bin/opencv_imgproc341.dll", winReleaseFilter)
 
 local deploy_xo_debug = copyfile_to_output("third_party/xo/t2-output/win64-msvc2015-debug-default/xo.dll", winDebugFilter)
 local deploy_xo_release = copyfile_to_output("third_party/xo/t2-output/win64-msvc2015-release-default/xo.dll", winReleaseFilter)
@@ -430,8 +430,8 @@ local opencv = ExternalLibrary {
 	},
 	Propagate = {
 		Libs = {
-			{"opencv_core320d.lib", "opencv_features2d320d.lib", "opencv_imgproc320d.lib"; Config = winDebugFilter },
-			{"opencv_core320.lib", "opencv_features2d320.lib", "opencv_imgproc320.lib"; Config = winReleaseFilter },
+			{"opencv_core341d.lib", "opencv_features2d341d.lib", "opencv_imgproc341d.lib"; Config = winDebugFilter },
+			{"opencv_core341.lib", "opencv_features2d341.lib", "opencv_imgproc341.lib"; Config = winReleaseFilter },
 		},
 	},
 }
@@ -702,7 +702,7 @@ local AI = SharedLibrary {
 local Labeler = Program {
 	Name = "Labeler",
 	Depends = {
-		winCrt, xo, ffmpeg, pal, tsf, Video, png, AI, cntk
+		winCrt, xo, ffmpeg, pal, tsf, Video, png
 	},
 	Libs = { 
 		{ "m", "stdc++"; Config = "linux-*" },
