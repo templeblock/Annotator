@@ -98,7 +98,7 @@ void UI::Render() {
 	fileName->AddText(VideoFilename);
 	fileName->OnClick([this] {
 		std::vector<std::pair<std::string, std::string>> types = {
-		    {"Video Files", "*.mp4;*.avi;*.mkv"},
+		    {"Video Files", "*.mp4;*.avi;*.mkv;*.mov"},
 		};
 		if (xo::osdialogs::BrowseForFileOpen(Root->GetDoc(), types, VideoFilename))
 			OpenVideo();
@@ -595,7 +595,7 @@ void UI::DrawCurrentFrame() {
 	if (!Video.IsOpen() || LastFrameImg.Width == 0)
 		return;
 
-	VideoCanvas->SetImageSizeOnly(Video.Width(), Video.Height());
+	VideoCanvas->SetImageSizeOnly(LastFrameImg.Width, LastFrameImg.Height);
 	auto cx = VideoCanvas->GetCanvas2D();
 	cx->GetImage()->CopyFrom(&LastFrameImg);
 	VideoCanvas->ReleaseAndInvalidate(cx);
