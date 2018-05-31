@@ -152,7 +152,7 @@ local unicode = ExternalLibrary {
 
 local vcpkg_bin = "third_party/vcpkg/installed/x64-windows/"
 
-local deploy_libcurl_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/libcurl.dll", winDebugFilter)
+local deploy_libcurl_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/libcurl-d.dll", winDebugFilter)
 local deploy_libcurl_release = copyfile_to_output(vcpkg_bin .. "bin/libcurl.dll", winReleaseFilter)
 
 local deploy_libssh2_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/libssh2.dll", winDebugFilter)
@@ -176,7 +176,10 @@ local deploy_tiff_release = copyfile_to_output(vcpkg_bin .. "bin/tiff.dll", winR
 local deploy_jpeg_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/jpeg62.dll", winDebugFilter)
 local deploy_jpeg_release = copyfile_to_output(vcpkg_bin .. "bin/jpeg62.dll", winReleaseFilter)
 
-local deploy_lz4 = copyfile_to_output(vcpkg_bin .. "bin/lz4.dll", winFilter)
+local deploy_libjpeg_turbo = copyfile_to_output(vcpkg_bin .. "bin/turbojpeg.dll", winFilter)
+
+local deploy_lz4_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/lz4d.dll", winDebugFilter)
+local deploy_lz4_release = copyfile_to_output(vcpkg_bin .. "bin/lz4.dll", winReleaseFilter)
 
 local deploy_avcodec_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/avcodec-57.dll", winDebugFilter)
 local deploy_avdevice_debug = copyfile_to_output(vcpkg_bin .. "debug/bin/avdevice-57.dll", winDebugFilter)
@@ -248,7 +251,7 @@ local libcurl = ExternalLibrary {
 	},
 	Propagate = {
 		Libs = {
-			{ "libcurl_imp.lib"; Config = winFilter },
+			{ "libcurl.lib"; Config = winFilter },
 			{ "curl"; Config = linuxFilter },
 		}
 	}
@@ -377,14 +380,29 @@ local png = ExternalLibrary {
 	}
 }
 
-local lz4 = ExternalLibrary {
-	Name = "lz4",
+local libjpeg_turbo = ExternalLibrary {
+	Name = "libjpeg_turbo",
 	Depends = {
-		deploy_lz4,
+		deploy_libjpeg_turbo,
 	},
 	Propagate = {
 		Libs = {
-			{ "lz4.lib"; Config = winFilter },
+			{ "turbojpeg.lib"; Config = winFilter },
+			--{ "turbojpeg"; Config = linuxFilter }, -- switched to Mapnik's one
+		}
+	}
+}
+
+local lz4 = ExternalLibrary {
+	Name = "lz4",
+	Depends = {
+		deploy_lz4_debug,
+		deploy_lz4_release,
+	},
+	Propagate = {
+		Libs = {
+			{ "lz4d.lib"; Config = winDebugFilter },
+			{ "lz4.lib"; Config = winReleaseFilter },
 			{ "lz4"; Config = linuxFilter },
 		}
 	}
@@ -538,21 +556,38 @@ local pal = SharedLibrary {
 	Name = "pal",
 	Depends = { winCrt, uberlog, utfz, tsf, libcurl, minizip, zlib, lz4, tinyxml2 },
 	Includes = {
-		"third_party/pal",
+		"lib/pal",
 	},
 	Libs = {
 		{ "Dbghelp.lib"; Config = winFilter },
 		{ "uuid", "curl"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
-		Source = "third_party/pal/pch.cpp",
+		Source = "lib/pal/pch.cpp",
 		Header = "pch.h",
 		Pass = "PchGen",
 	},
 	Sources = {
-		makeGlob("third_party/pal", {}),
+		makeGlob("lib/pal", {}),
 	},
-	IdeGenerationHints = ideHintThirdParty,
+	IdeGenerationHints = ideHintLibrary,
+}
+
+local gfx = StaticLibrary {
+	Name = "gfx",
+	Depends = { winCrt, pal, libjpeg_turbo, png },
+	PrecompiledHeader = {
+		Source = "lib/gfx/pch.cpp",
+		Header = "pch.h",
+		Pass = "PchGen",
+	},
+	Includes = {
+		"lib/gfx",
+	},
+	Sources = {
+		makeGlob("lib/gfx", {})
+	},
+	IdeGenerationHints = ideHintLibrary,
 }
 
 local Video = SharedLibrary {
@@ -739,7 +774,7 @@ local CameraCalibrator = Program {
 local FrameServer = Program {
 	Name = "FrameServer",
 	Depends = {
-		winCrt, Video, pal, phttp, uberlog, tsf
+		winCrt, Video, pal, phttp, uberlog, tsf, gfx, libjpeg_turbo, png, lz4
 	},
 	Env = {
 		PROGOPTS = { "/SUBSYSTEM:CONSOLE" },

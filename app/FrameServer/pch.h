@@ -4,6 +4,7 @@
 #include <pal/pal.h>
 #include <algorithm>
 #include <Video/Video.h>
+#include <gfx/gfx.h>
 
 #include <phttp/phttp.h>
 
