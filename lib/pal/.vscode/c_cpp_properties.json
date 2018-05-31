@@ -1,0 +1,53 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceRoot}",
+                "${workspaceRoot}/../..",
+                "${workspaceRoot}/../../third_party"
+            ],
+            "defines": [],
+            "intelliSenseMode": "clang-x64",
+            "browse": {
+                "path": [
+                    "${workspaceRoot}",
+                    "${workspaceRoot}/../.."
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            },
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c11",
+            "cppStandard": "c++17"
+        },
+        {
+            "name": "Win32",
+            "includePath": [
+                "C:/Program Files (x86)/Windows Kits/10/Include/10.0.10150.0/ucrt/",
+                "C:/Program Files (x86)/Microsoft Visual Studio 14.0/VC/include/",
+                "${workspaceRoot}",
+                "${workspaceRoot}/../../",
+                "${workspaceRoot}/../../third_party"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE"
+            ],
+            "intelliSenseMode": "msvc-x64",
+            "browse": {
+                "path": [
+                    "C:/Program Files (x86)/Windows Kits/10/Include/10.0.10150.0/ucrt/",
+                    "C:/Program Files (x86)/Microsoft Visual Studio 14.0/VC/include/",
+                    "${workspaceRoot}",
+                    "${workspaceRoot}/../../"
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            },
+            "cStandard": "c11",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
