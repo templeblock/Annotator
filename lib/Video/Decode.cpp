@@ -2,7 +2,7 @@
 #include "Decode.h"
 
 namespace imqs {
-namespace anno {
+namespace video {
 
 StaticError VideoFile::ErrNeedMoreData("Codec needs more data");
 
@@ -270,5 +270,5 @@ void VideoFile::FlushCachedFrames() {
 			break;
 	}
 }
-} // namespace anno
+} // namespace video
 } // namespace imqs

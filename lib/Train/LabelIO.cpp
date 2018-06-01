@@ -44,7 +44,7 @@ struct adl_serializer<imqs::anno::Label> {
 */
 
 namespace imqs {
-namespace anno {
+namespace train {
 
 Error Rect::FromJson(const nlohmann::json& j) {
 	X1 = j["x1"];
@@ -183,37 +183,37 @@ std::string LabelClass::KeyStr() const {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::string LabelFileDir(std::string videoFilename) {
+IMQS_TRAIN_API std::string LabelFileDir(std::string videoFilename) {
 	return path::Dir(videoFilename) + "/labels/" + path::Filename(videoFilename);
 }
 
-std::string ImagePatchDir(std::string videoFilename) {
+IMQS_TRAIN_API std::string ImagePatchDir(std::string videoFilename) {
 	return path::Dir(videoFilename) + "/patches/" + path::Filename(videoFilename);
 }
 
-Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
+IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
 	labels.Frames.clear();
 	auto  dir = LabelFileDir(videoFilename);
 	Error err;
 	auto  errFind = os::FindFiles(dir, [&err, &labels](const os::FindFileItem& item) -> bool {
-		if (item.IsDir)
-			return false;
-		// 000001.json
-		if (strings::EndsWith(item.Name, ".json")) {
-			std::string buf;
-			err = os::ReadWholeFile(item.FullPath(), buf);
-			if (!err.OK())
-				return false;
-			auto        j = json::parse(buf.c_str());
-			ImageLabels frame;
-			frame.Time = AtoI64(item.Name.c_str());
-			err        = frame.FromJson(j);
-			if (!err.OK())
-				return false;
-			labels.Frames.emplace_back(std::move(frame));
-		}
-		return true;
-	});
+        if (item.IsDir)
+            return false;
+        // 000001.json
+        if (strings::EndsWith(item.Name, ".json")) {
+            std::string buf;
+            err = os::ReadWholeFile(item.FullPath(), buf);
+            if (!err.OK())
+                return false;
+            auto        j = json::parse(buf.c_str());
+            ImageLabels frame;
+            frame.Time = AtoI64(item.Name.c_str());
+            err        = frame.FromJson(j);
+            if (!err.OK())
+                return false;
+            labels.Frames.emplace_back(std::move(frame));
+        }
+        return true;
+    });
 	std::sort(labels.Frames.begin(), labels.Frames.end());
 
 	if (!errFind.OK())
@@ -222,7 +222,7 @@ Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
 }
 
 // Save one labeled frame. By saving at image granularity instead of video granularity, we allow concurrent labeling by many people
-Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame) {
+IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame) {
 	auto dir = LabelFileDir(videoFilename);
 	auto err = os::MkDirAll(dir);
 	if (!err.OK())
@@ -233,7 +233,7 @@ Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame) {
 	return os::WriteWholeFile(dir + "/" + fn, j.dump(4));
 }
 
-int MergeVideoLabels(const VideoLabels& src, VideoLabels& dst) {
+IMQS_TRAIN_API int MergeVideoLabels(const VideoLabels& src, VideoLabels& dst) {
 	int nnew = 0;
 	for (const auto& sframe : src.Frames) {
 		auto dframe = dst.FindOrInsertFrame(sframe.Time);
@@ -245,5 +245,5 @@ int MergeVideoLabels(const VideoLabels& src, VideoLabels& dst) {
 	return nnew;
 }
 
-} // namespace anno
+} // namespace train
 } // namespace imqs

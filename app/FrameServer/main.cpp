@@ -34,17 +34,17 @@ struct ImqsLz4ImageHeader {
 };
 
 static void EncodeFrame(string codec, const void* buf, int width, int height, int stride, int quality, phttp::Response& w) {
-	gfx::ImageIO     io;
-	Error            err;
-	void*            encbuf  = nullptr;
-	size_t           encsize = 0;
-	gfx::ImageFormat iformat = gfx::ImageFormat::Null;
+	gfx::ImageIO   io;
+	Error          err;
+	void*          encbuf  = nullptr;
+	size_t         encsize = 0;
+	gfx::ImageType itype   = gfx::ImageType::Null;
 	if (codec == "png") {
-		iformat = gfx::ImageFormat::Png;
+		itype = gfx::ImageType::Png;
 		w.SetHeader("Content-Type", "image/png");
 		err = io.SavePng(false, width, height, stride, buf, quality != -1 ? quality : 5, encbuf, encsize);
 	} else if (codec == "jpeg") {
-		iformat = gfx::ImageFormat::Jpeg;
+		itype = gfx::ImageType::Jpeg;
 		w.SetHeader("Content-Type", "image/jpeg");
 		err = io.SaveJpeg(width, height, stride, buf, quality != -1 ? quality : 95, encbuf, encsize);
 	} else if (codec == "lz4") {
@@ -65,8 +65,8 @@ static void EncodeFrame(string codec, const void* buf, int width, int height, in
 
 	w.Status = 200;
 	w.Body.assign((const char*) encbuf, encsize);
-	if (iformat != gfx::ImageFormat::Null)
-		io.FreeEncodedBuffer(iformat, encbuf);
+	if (itype != gfx::ImageType::Null)
+		io.FreeEncodedBuffer(itype, encbuf);
 	else
 		free(encbuf);
 }

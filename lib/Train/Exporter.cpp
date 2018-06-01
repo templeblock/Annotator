@@ -2,9 +2,9 @@
 #include "Exporter.h"
 
 namespace imqs {
-namespace anno {
+namespace train {
 
-static void WriteRawCifar10(const xo::Texture& tex, uint8_t label, uint8_t* buf) {
+static void WriteRawCifar10(const gfx::Image& img, uint8_t label, uint8_t* buf) {
 	// 1st byte is label
 	buf[0] = label;
 	buf++;
@@ -15,26 +15,26 @@ static void WriteRawCifar10(const xo::Texture& tex, uint8_t label, uint8_t* buf)
 	if (planar) {
 		// RRR GGG BBB
 		for (int chan = 0; chan < 3; chan++) {
-			for (uint32_t y = 0; y < tex.Height; y++) {
-				auto src = (uint8_t*) tex.DataAtLine(y);
+			for (uint32_t y = 0; y < img.Height; y++) {
+				auto src = (uint8_t*) img.Line(y);
 				src += chan;
-				auto dst    = buf + y * tex.Width;
-				int  srcBPP = (int) tex.BytesPerPixel();
-				for (uint32_t x = 0; x < tex.Width; x++) {
+				auto dst    = buf + y * img.Width;
+				int  srcBPP = (int) img.BytesPerPixel();
+				for (uint32_t x = 0; x < img.Width; x++) {
 					*dst = *src;
 					dst++;
 					src += srcBPP;
 				}
 			}
-			buf += tex.Width * tex.Height;
+			buf += img.Width * img.Height;
 		}
 	} else {
 		// RGB RGB RGB
-		for (uint32_t y = 0; y < tex.Height; y++) {
-			auto src    = (uint8_t*) tex.DataAtLine(y);
-			auto dst    = buf + y * tex.Width * 3;
-			int  srcBPP = (int) tex.BytesPerPixel();
-			for (uint32_t x = 0; x < tex.Width; x++) {
+		for (uint32_t y = 0; y < img.Height; y++) {
+			auto src    = (uint8_t*) img.Line(y);
+			auto dst    = buf + y * img.Width * 3;
+			int  srcBPP = (int) img.BytesPerPixel();
+			for (uint32_t x = 0; x < img.Width; x++) {
 				dst[0] = src[0];
 				dst[1] = src[1];
 				dst[2] = src[2];
@@ -45,49 +45,19 @@ static void WriteRawCifar10(const xo::Texture& tex, uint8_t label, uint8_t* buf)
 	}
 }
 
-Error SavePng(const xo::Texture& tex, std::string filename) {
-	FILE* f = fopen(filename.c_str(), "wb");
-	if (!f)
-		return Error::Fmt("Error opening %v for writing", filename);
-
-	// libpng doesn't accept RGBA for an RGB image, and we don't want to save an alpha channel, so
-	// we need to transform our data from RGBA to RGB before giving it to libpng
-	uint8_t*  rgb  = (uint8_t*) imqs_malloc_or_die(tex.Width * tex.Height * 3);
-	uint8_t** rows = (uint8_t**) imqs_malloc_or_die(tex.Height * sizeof(void*));
-	for (int i = 0; i < (int) tex.Height; i++) {
-		auto rgba = (uint8_t*) tex.DataAtLine(i);
-		auto line = rgb + i * tex.Width * 3;
-		rows[i]   = line;
-		int width = tex.Width;
-		for (int j = 0; j < width; j++) {
-			*line++ = rgba[0];
-			*line++ = rgba[1];
-			*line++ = rgba[2];
-			rgba += 4;
-		}
-	}
-
-	// there's no libpng error checking here, but there should be (expect out of disk space)
-
-	auto pp = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-	auto ip = png_create_info_struct(pp);
-	png_init_io(pp, f);
-	png_set_IHDR(pp, ip, tex.Width, tex.Height, 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-	png_set_compression_level(pp, 1);
-	png_write_info(pp, ip);
-	png_write_image(pp, rows);
-	png_write_end(pp, nullptr);
-	png_destroy_write_struct(&pp, &ip);
-
-	free(rows);
-	free(rgb);
-
-	fclose(f);
-
-	return Error();
+Error SavePng(const gfx::Image& img, std::string filename) {
+	gfx::ImageIO imgIO;
+	void*        encbuf  = nullptr;
+	size_t       encsize = 0;
+	auto         err     = imgIO.SavePng(false, img.Width, img.Height, img.Stride, img.Data, 1, encbuf, encsize);
+	if (!err.OK())
+		return err;
+	err = os::WriteWholeFile(filename, encbuf, encsize);
+	imgIO.FreeEncodedBuffer(gfx::ImageType::Png, encbuf);
+	return err;
 }
 
-Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t frameTime, const ImageLabels& labels, const ohash::map<std::string, int>& labelToIndex, const xo::Image& frameImg) {
+Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t frameTime, const ImageLabels& labels, const ohash::map<std::string, int>& labelToIndex, const gfx::Image& frameImg) {
 	if (labels.Labels.size() == 0)
 		return Error();
 
@@ -134,14 +104,12 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 	if (!err.OK())
 		return err;
 
-	VideoFile video;
+	video::VideoFile video;
 	err = video.OpenFile(videoFilename);
 	if (!err.OK())
 		return err;
 
-	xo::Image img;
-	if (!img.Alloc(xo::TexFormatRGBA8, video.Width(), video.Height()))
-		return Error("Out of memory allocating image buffer");
+	gfx::Image img(gfx::ImageFormat::RGBA, video.Width(), video.Height());
 
 	// Establish a mapping from label (a string) to an integer class.
 	// The ML libraries just want an integer for the class, not a string.
@@ -191,5 +159,5 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 	return Error();
 }
 
-} // namespace anno
+} // namespace train
 } // namespace imqs

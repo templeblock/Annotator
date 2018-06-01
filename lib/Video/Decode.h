@@ -1,7 +1,7 @@
 #pragma once
 
 namespace imqs {
-namespace anno {
+namespace video {
 
 struct IMQS_VIDEO_API VideoStreamInfo {
 	int64_t    Duration  = 0; // AVFormatContext.duration
@@ -63,5 +63,5 @@ inline void VideoFile::Dimensions(int& width, int& height) const {
 	height = VideoDecCtx->height;
 }
 
-} // namespace anno
+} // namespace video
 } // namespace imqs

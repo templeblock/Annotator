@@ -1,9 +1,9 @@
 #pragma once
 
 namespace imqs {
-namespace anno {
+namespace train {
 
-struct Point {
+struct IMQS_TRAIN_API Point {
 	int X = 0;
 	int Y = 0;
 
@@ -11,7 +11,7 @@ struct Point {
 	Point(int x, int y) : X(x), Y(y) {}
 };
 
-struct Rect {
+struct IMQS_TRAIN_API Rect {
 	int X1 = 0;
 	int Y1 = 0;
 	int X2 = 0;
@@ -46,7 +46,7 @@ struct Rect {
 };
 
 // A single labeled region inside an image
-class Label {
+class IMQS_TRAIN_API Label {
 public:
 	Rect        Rect;
 	std::string Class;
@@ -57,7 +57,7 @@ public:
 };
 
 // Set of labels for an image (image is usually a single frame from a video)
-class ImageLabels {
+class IMQS_TRAIN_API ImageLabels {
 public:
 	int64_t            Time = 0; // Video time in microseconds (0 = start of video)
 	std::vector<Label> Labels;
@@ -74,7 +74,7 @@ public:
 };
 
 // Labels for a video
-class VideoLabels {
+class IMQS_TRAIN_API VideoLabels {
 public:
 	std::vector<ImageLabels> Frames;
 
@@ -87,7 +87,7 @@ public:
 };
 
 // label class and associated shortcut key
-class LabelClass {
+class IMQS_TRAIN_API LabelClass {
 public:
 	int         Key = 0; // Shortcut key (Unicode character)
 	std::string Class;   // Class label
@@ -98,11 +98,11 @@ public:
 	std::string KeyStr() const;
 };
 
-std::string LabelFileDir(std::string videoFilename);
-std::string ImagePatchDir(std::string videoFilename);
-Error       LoadVideoLabels(std::string videoFilename, VideoLabels& labels);
-Error       SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);
-int         MergeVideoLabels(const VideoLabels& src, VideoLabels& dst); // Returns number of new frames
+IMQS_TRAIN_API std::string LabelFileDir(std::string videoFilename);
+IMQS_TRAIN_API std::string ImagePatchDir(std::string videoFilename);
+IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels);
+IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);
+IMQS_TRAIN_API int   MergeVideoLabels(const VideoLabels& src, VideoLabels& dst); // Returns number of new frames
 
-} // namespace anno
+} // namespace train
 } // namespace imqs

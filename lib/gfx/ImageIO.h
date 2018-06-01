@@ -20,13 +20,13 @@ public:
 	// Save to an image format.
 	// lossy Q is applicable to jpeg
 	// lossless Q is applicable to png
-	Error Save(int width, int height, int stride, const void* buf, ImageFormat format, bool withAlpha, int lossyQ_0_to_100, int losslessQ_1_to_9, void*& encBuf, size_t& encSize);
+	Error Save(int width, int height, int stride, const void* buf, ImageType type, bool withAlpha, int lossyQ_0_to_100, int losslessQ_1_to_9, void*& encBuf, size_t& encSize);
 
 	// Decodes a png or jpeg image into an RGBA memory buffer
 	Error Load(const void* encBuf, size_t encLen, int& width, int& height, void*& buf);
 
 	// Free an encoded buffer. The jpeg-turbo compressor uses a special allocator, so we need to free it specially too.
-	static void FreeEncodedBuffer(ImageFormat format, void* encBuf);
+	static void FreeEncodedBuffer(ImageType type, void* encBuf);
 
 	// Decodes a png image into an RGBA memory buffer
 	Error LoadPng(const void* pngBuf, size_t pngLen, int& width, int& height, void*& buf);

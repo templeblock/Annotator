@@ -6,7 +6,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define IMQS_VIDEO_API __declspec(dllimport)
 #else
 #define IMQS_VIDEO_API

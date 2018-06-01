@@ -1,12 +1,11 @@
 #include "pch.h"
 #include "third_party/xo/templates/xoWinMain.cpp"
 #include "SvgIcons.h"
-#include "LabelIO.h"
 #include "UI.h"
 
 void xoMain(xo::SysWnd* wnd) {
 	using namespace imqs::anno;
-	VideoFile::Initialize();
+	imqs::video::VideoFile::Initialize();
 
 	wnd->Doc()->ClassParse("font-medium", "font-size: 14ep");
 	wnd->Doc()->ClassParse("shortcut", "font-size: 15ep; color: #000; width: 1em");

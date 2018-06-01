@@ -19,10 +19,10 @@ ImageIO::~ImageIO() {
 		tjDestroy(JpegEncoder);
 }
 
-Error ImageIO::Save(int width, int height, int stride, const void* buf, ImageFormat format, bool withAlpha, int lossyQ_0_to_100, int losslessQ_1_to_9, void*& encBuf, size_t& encSize) {
-	switch (format) {
-	case ImageFormat::Jpeg: return SaveJpeg(width, height, stride, buf, lossyQ_0_to_100, encBuf, encSize);
-	case ImageFormat::Png: return SavePng(withAlpha, width, height, stride, buf, losslessQ_1_to_9, encBuf, encSize);
+Error ImageIO::Save(int width, int height, int stride, const void* buf, ImageType type, bool withAlpha, int lossyQ_0_to_100, int losslessQ_1_to_9, void*& encBuf, size_t& encSize) {
+	switch (type) {
+	case ImageType::Jpeg: return SaveJpeg(width, height, stride, buf, lossyQ_0_to_100, encBuf, encSize);
+	case ImageType::Png: return SavePng(withAlpha, width, height, stride, buf, losslessQ_1_to_9, encBuf, encSize);
 	default: return Error("Unsupported image type for compression");
 	}
 }
@@ -37,9 +37,9 @@ Error ImageIO::Load(const void* encBuf, size_t encLen, int& width, int& height, 
 	return LoadJpeg(encBuf, encLen, width, height, buf);
 }
 
-void ImageIO::FreeEncodedBuffer(ImageFormat format, void* encBuf) {
-	switch (format) {
-	case ImageFormat::Jpeg:
+void ImageIO::FreeEncodedBuffer(ImageType type, void* encBuf) {
+	switch (type) {
+	case ImageType::Jpeg:
 		tjFree((unsigned char*) encBuf);
 		break;
 	default:

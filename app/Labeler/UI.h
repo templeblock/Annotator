@@ -1,8 +1,5 @@
 #pragma once
 
-#include "LabelIO.h"
-#include "Exporter.h"
-
 namespace imqs {
 namespace anno {
 
@@ -10,8 +7,8 @@ namespace anno {
 class UI {
 public:
 	struct LoadSavePackage {
-		std::string VideoFilename;
-		VideoLabels Labels;
+		std::string        VideoFilename;
+		train::VideoLabels Labels;
 	};
 
 	enum class PlayStates {
@@ -33,24 +30,24 @@ public:
 	int64_t           PlayTimer     = 0;
 	int64_t           OnDestroyEv   = 0;
 	std::string       VideoFilename;
-	VideoFile         Video;
+	video::VideoFile  Video;
 	xo::Image         LastFrameImg;
 	std::thread       LoadSaveThread;
 	std::atomic<bool> IsExiting;
 
-	std::thread           ExportThread;
-	xo::controls::MsgBox* ExportMsgBox = nullptr;
-	std::string           ExportProgMsg;
-	ProgressCallback      ExportCallback;
-	std::function<void()> ExportDlgClosed;
+	std::thread             ExportThread;
+	xo::controls::MsgBox*   ExportMsgBox = nullptr;
+	std::string             ExportProgMsg;
+	train::ProgressCallback ExportCallback;
+	std::function<void()>   ExportDlgClosed;
 
-	std::string             UserName;
-	size_t                  UnlabeledClass = 0; // First class must be unlabeled
-	std::vector<LabelClass> Classes;
-	VideoLabels             Labels;
-	LabelClass              CurrentAssignClass;
-	int                     LabelGridSize = 256;
-	bool                    GridTopDown   = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
+	std::string                    UserName;
+	size_t                         UnlabeledClass = 0; // First class must be unlabeled
+	std::vector<train::LabelClass> Classes;
+	train::VideoLabels             Labels;
+	train::LabelClass              CurrentAssignClass;
+	int                            LabelGridSize = 256;
+	bool                           GridTopDown   = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
 
 #ifdef IMQS_AI_API
 	// Inference
@@ -80,7 +77,7 @@ private:
 	void   Stop();
 	void   DrawLabelBoxes();
 	void   DrawEvalOverlay();
-	void   AssignLabel(LabelClass c);
+	void   AssignLabel(train::LabelClass c);
 	void   GridDimensions(int& width, int& height);
 	void   NextFrame();
 	void   DrawCurrentFrame();
@@ -98,9 +95,9 @@ private:
 
 	// The labels in our label store use raw video pixel coordinate rectangles.
 	// Here we map those arbitrary rectangles back to our fixed grid.
-	ohash::map<uint64_t, Label> ExtractLabelsForGrid();
-	Label*                      FindOrInsertLabel(ImageLabels* frame, int gridX, int gridY);
-	bool                        RemoveLabel(ImageLabels* frame, int gridX, int gridY); // Returns true if a label was found and removed
+	ohash::map<uint64_t, train::Label> ExtractLabelsForGrid();
+	train::Label*                      FindOrInsertLabel(train::ImageLabels* frame, int gridX, int gridY);
+	bool                               RemoveLabel(train::ImageLabels* frame, int gridX, int gridY); // Returns true if a label was found and removed
 
 	uint64_t MakeGridCoord64(int x, int y) {
 		return ((uint64_t) x << 32) | (uint64_t) y;

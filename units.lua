@@ -680,6 +680,25 @@ local AI = SharedLibrary {
 }
 --]]
 
+local Train = SharedLibrary {
+	Name = "Train",
+	Depends = {
+		winCrt, pal, tsf, Video, gfx, libjpeg_turbo, png
+	},
+	PrecompiledHeader = {
+		Source = "lib/Train/pch.cpp",
+		Header = "pch.h",
+		Pass = "PchGen",
+	},
+	Includes = {
+		"lib/Train",
+	},
+	Sources = {
+		makeGlob("lib/Train", {}),
+	},
+	IdeGenerationHints = ideHintLibrary,
+}
+
 local AI = SharedLibrary {
 	Name = "AI",
 	Depends = {
@@ -702,7 +721,7 @@ local AI = SharedLibrary {
 local Labeler = Program {
 	Name = "Labeler",
 	Depends = {
-		winCrt, xo, ffmpeg, pal, tsf, Video, png
+		winCrt, xo, ffmpeg, Train, Video, pal, tsf, png, 
 	},
 	Libs = { 
 		{ "m", "stdc++"; Config = "linux-*" },

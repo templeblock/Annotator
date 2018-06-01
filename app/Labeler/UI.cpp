@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "UI.h"
-#include "Exporter.h"
+
+using namespace imqs::train;
 
 namespace imqs {
 namespace anno {
@@ -135,9 +136,13 @@ void UI::Render() {
 		auto labelsCopy   = Labels;
 		auto filenameCopy = VideoFilename;
 		ExportThread      = std::thread([this, labelsCopy, filenameCopy] {
-            ExportLabeledImagePatches_Video(ExportTypes::Png, filenameCopy, labelsCopy, ExportCallback);
-            if (ExportMsgBox)
-                ExportMsgBox->SetText("Done");
+            auto err = ExportLabeledImagePatches_Video(ExportTypes::Png, filenameCopy, labelsCopy, ExportCallback);
+            if (ExportMsgBox) {
+                if (err.OK())
+                    ExportMsgBox->SetText("Done");
+                else
+                    ExportMsgBox->SetText(tsf::fmt("Error: %v", err.Message()).c_str());
+            }
             ExportMsgBox = nullptr;
         });
 		//auto err = ExportLabeledImagePatches_Video(ExportTypes::Png, VideoFilename, Labels, prog);

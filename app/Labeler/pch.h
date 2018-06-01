@@ -17,4 +17,5 @@
 //#endif
 
 #include <Video/Video.h>
+#include <Train/Train.h>
 #include <png.h>
