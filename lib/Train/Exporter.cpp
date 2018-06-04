@@ -58,6 +58,11 @@ Error SaveImageFile(gfx::ImageIO& imgIO, const gfx::Image& img, gfx::ImageType f
 	return err;
 }
 
+static Error MakeClassDir(string baseDir, string className) {
+	auto classDir = baseDir + "/" + strings::Replace(className, " ", "_");
+	return os::MkDirAll(classDir);
+}
+
 Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t frameTime, const ImageLabels& labels, const ohash::map<std::string, int>& labelToIndex, const gfx::Image& frameImg) {
 	if (labels.Labels.size() == 0)
 		return Error();
@@ -69,22 +74,31 @@ Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t
 			return err;
 	}
 
-	int      dim     = labels.Labels[0].Rect.Width(); // assume all rectangles are the same size, and that width == height
-	size_t   bufSize = 1 + dim * dim * 3;
-	uint8_t* buf     = (uint8_t*) imqs_malloc_or_die(bufSize);
+	int dim = labels.Labels[0].Rect.Width(); // assume all rectangles are the same size, and that width == height
 
-	gfx::ImageIO imgIO;
+	if (type == ExportTypes::Cifar10) {
+		size_t   bufSize = 1 + dim * dim * 3;
+		uint8_t* buf     = (uint8_t*) imqs_malloc_or_die(bufSize);
 
-	for (const auto& patch : labels.Labels) {
-		IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
-		auto patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
-		if (type == ExportTypes::Cifar10) {
-			uint8_t klass = labelToIndex.get(patch.Class);
+		for (const auto& patch : labels.Labels) {
+			IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
+			auto    patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
+			uint8_t klass    = labelToIndex.get(patch.Class);
 			WriteRawCifar10(patchTex, klass, buf);
 			auto err = f.Write(buf, bufSize);
 			if (!err.OK())
 				return err;
-		} else if (type == ExportTypes::Png || type == ExportTypes::Jpeg) {
+		}
+
+		free(buf);
+	} else {
+		Error firstErr;
+#pragma omp parallel for
+		for (int i = 0; i < (int) labels.Labels.size(); i++) {
+			const auto& patch = labels.Labels[i];
+			IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
+			auto           patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
+			gfx::ImageIO   imgIO;
 			gfx::ImageType filetype;
 			string         ext;
 			if (type == ExportTypes::Png) {
@@ -95,18 +109,16 @@ Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t
 				ext      = ".jpeg";
 			}
 			auto classDir = dir + "/" + strings::Replace(patch.Class, " ", "_");
-			auto err      = os::MkDirAll(classDir);
-			if (!err.OK())
-				return err;
 			auto filename = classDir + "/" + tsf::fmt("%09d-%04d-%04d-%04d-%04d.%v", frameTime, patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height(), ext);
-			err           = SaveImageFile(imgIO, patchTex, filetype, filename);
-			if (!err.OK())
-				return err;
+			auto err      = SaveImageFile(imgIO, patchTex, filetype, filename);
+			if (!err.OK()) {
+#pragma omp critical(firstError)
+				firstErr = err;
+				break;
+			}
 		}
+		return firstErr;
 	}
-
-	free(buf);
-
 	return Error();
 }
 
@@ -127,15 +139,21 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 	// The ML libraries just want an integer for the class, not a string.
 	ohash::map<std::string, int> labelToIndex = labels.ClassToIndex();
 
+	for (auto klass : labels.Classes()) {
+		err = MakeClassDir(dir, klass);
+		if (!err.OK())
+			return err;
+	}
+
 	int64_t lastFrameTime = 0;
 	int64_t micro         = 1000000;
 	bool    abort         = false;
 
 	for (size_t i = 0; i < labels.Frames.size() && !abort; i++) {
 		const auto& frame = labels.Frames[i];
-		// Only seek if frame is more than 5 seconds into the future. Haven't measured optimal metric to use here.
-		if (frame.Time - lastFrameTime > 5 * micro) {
-			int64_t buffer = 3 * micro; // seek 3 seconds behind frame target
+		// Only seek if frame is more than 20 seconds into the future. Haven't measured optimal metric to use here.
+		if (frame.Time - lastFrameTime > 20 * micro) {
+			int64_t buffer = 5 * micro; // seek 5 seconds behind frame target
 			err            = video.SeekToMicrosecond(frame.Time - buffer);
 			if (!err.OK())
 				return err;
