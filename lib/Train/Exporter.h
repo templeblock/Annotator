@@ -8,6 +8,7 @@ namespace train {
 enum class ExportTypes {
 	Cifar10, // One .bin file for every frame. Format inside .bin is cifar10 format, which is one byte for label, followed by raw RGB planes.
 	Png,     // One directory per class, with all images for that class inside the directory.
+	Jpeg,    // Same as png, but jpeg at 95% quality
 };
 
 typedef std::function<bool(size_t pos, size_t total)> ProgressCallback;

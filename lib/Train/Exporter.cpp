@@ -47,15 +47,14 @@ static void WriteRawCifar10(const gfx::Image& img, uint8_t label, uint8_t* buf) 
 	}
 }
 
-Error SavePng(const gfx::Image& img, std::string filename) {
-	gfx::ImageIO imgIO;
-	void*        encbuf  = nullptr;
-	size_t       encsize = 0;
-	auto         err     = imgIO.SavePng(false, img.Width, img.Height, img.Stride, img.Data, 1, encbuf, encsize);
+Error SaveImageFile(gfx::ImageIO& imgIO, const gfx::Image& img, gfx::ImageType filetype, std::string filename) {
+	void*  encbuf  = nullptr;
+	size_t encsize = 0;
+	auto   err     = imgIO.Save(img.Width, img.Height, img.Stride, img.Data, filetype, false, 95, 1, encbuf, encsize);
 	if (!err.OK())
 		return err;
 	err = os::WriteWholeFile(filename, encbuf, encsize);
-	imgIO.FreeEncodedBuffer(gfx::ImageType::Png, encbuf);
+	imgIO.FreeEncodedBuffer(filetype, encbuf);
 	return err;
 }
 
@@ -74,6 +73,8 @@ Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t
 	size_t   bufSize = 1 + dim * dim * 3;
 	uint8_t* buf     = (uint8_t*) imqs_malloc_or_die(bufSize);
 
+	gfx::ImageIO imgIO;
+
 	for (const auto& patch : labels.Labels) {
 		IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
 		auto patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
@@ -83,13 +84,22 @@ Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t
 			auto err = f.Write(buf, bufSize);
 			if (!err.OK())
 				return err;
-		} else if (type == ExportTypes::Png) {
+		} else if (type == ExportTypes::Png || type == ExportTypes::Jpeg) {
+			gfx::ImageType filetype;
+			string         ext;
+			if (type == ExportTypes::Png) {
+				filetype = gfx::ImageType::Png;
+				ext      = ".png";
+			} else {
+				filetype = gfx::ImageType::Jpeg;
+				ext      = ".jpeg";
+			}
 			auto classDir = dir + "/" + strings::Replace(patch.Class, " ", "_");
 			auto err      = os::MkDirAll(classDir);
 			if (!err.OK())
 				return err;
-			auto filename = classDir + "/" + tsf::fmt("%09d-%04d-%04d-%04d-%04d.png", frameTime, patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
-			err           = SavePng(patchTex, filename);
+			auto filename = classDir + "/" + tsf::fmt("%09d-%04d-%04d-%04d-%04d.%v", frameTime, patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height(), ext);
+			err           = SaveImageFile(imgIO, patchTex, filetype, filename);
 			if (!err.OK())
 				return err;
 		}
@@ -115,11 +125,7 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 
 	// Establish a mapping from label (a string) to an integer class.
 	// The ML libraries just want an integer for the class, not a string.
-	ohash::map<std::string, int> labelToIndex;
-	for (const auto& frame : labels.Frames) {
-		for (const auto& lab : frame.Labels)
-			labelToIndex.insert(lab.Class, labelToIndex.size());
-	}
+	ohash::map<std::string, int> labelToIndex = labels.ClassToIndex();
 
 	int64_t lastFrameTime = 0;
 	int64_t micro         = 1000000;

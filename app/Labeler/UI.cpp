@@ -138,7 +138,7 @@ void UI::Render() {
 		auto labelsCopy   = Labels;
 		auto filenameCopy = VideoFilename;
 		ExportThread      = std::thread([this, labelsCopy, filenameCopy] {
-            auto err = ExportLabeledImagePatches_Video(ExportTypes::Png, filenameCopy, labelsCopy, ExportCallback);
+            auto err = ExportLabeledImagePatches_Video(ExportTypes::Jpeg, filenameCopy, labelsCopy, ExportCallback);
             if (ExportMsgBox) {
                 if (err.OK())
                     ExportMsgBox->SetText("Done");
