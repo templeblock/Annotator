@@ -70,6 +70,9 @@ public:
 	void Render();
 
 private:
+	int VideoCanvasWidth  = 0;
+	int VideoCanvasHeight = 0;
+
 	void   RenderTimeSlider(bool first = false);
 	void   FlipPlayState();
 	void   SeekFromUI(xo::Event& ev);
@@ -79,6 +82,7 @@ private:
 	void   DrawEvalOverlay();
 	void   AssignLabel(train::LabelClass c);
 	void   GridDimensions(int& width, int& height);
+	void   PrevFrame();
 	void   NextFrame();
 	void   DrawCurrentFrame();
 	size_t FindClass(const std::string& klass);

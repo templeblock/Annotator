@@ -683,7 +683,7 @@ local AI = SharedLibrary {
 local Train = SharedLibrary {
 	Name = "Train",
 	Depends = {
-		winCrt, pal, tsf, Video, gfx, libjpeg_turbo, png
+		winCrt, pal, tsf, Video, gfx, libjpeg_turbo, png, lz4
 	},
 	PrecompiledHeader = {
 		Source = "lib/Train/pch.cpp",
@@ -793,7 +793,7 @@ local CameraCalibrator = Program {
 local FrameServer = Program {
 	Name = "FrameServer",
 	Depends = {
-		winCrt, Video, pal, phttp, uberlog, tsf, gfx, libjpeg_turbo, png, lz4
+		winCrt, Video, Train, phttp, uberlog, tsf, gfx, pal, libjpeg_turbo, png, lz4
 	},
 	Env = {
 		PROGOPTS = { "/SUBSYSTEM:CONSOLE" },

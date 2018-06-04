@@ -94,10 +94,39 @@ VideoStreamInfo VideoFile::GetVideoStreamInfo() {
 	return inf;
 }
 
+Error VideoFile::SeekToPreviousFrame() {
+	auto timePerFrame = av_inv_q(VideoStream->avg_frame_rate);
+	auto t            = av_mul_q({(int) LastFramePTS, 1}, VideoStream->time_base);
+	t                 = av_sub_q(t, timePerFrame);
+
+	if (t.num < 0)
+		t.num = 0;
+
+	t = av_div_q(t, VideoStream->time_base);
+	// I expect den to always be 1 here, but not sure
+	IMQS_ASSERT(t.den == 1);
+	int64_t pts = t.num / t.den;
+
+	int r = av_seek_frame(FmtCtx, VideoStreamIdx, pts, AVSEEK_FLAG_BACKWARD);
+	if (r >= 0)
+		LastSeekPTS = pts;
+	return Error();
+}
+
 Error VideoFile::SeekToFrame(int64_t frame) {
-	double ts = av_q2d(VideoStream->time_base);
-	double t  = frame / ts;
-	int    r  = av_seek_frame(FmtCtx, VideoStreamIdx, (int64_t) t, 0);
+	// frame rate = number of frames per second. So to get seconds/frame, we divide by frame rate.
+	auto t = av_div_q({(int) frame, 1}, VideoStream->avg_frame_rate);
+
+	// divide by time_base to get PTS
+	auto tb = av_div_q(t, VideoStream->time_base);
+
+	// I'm not sure that av_div_q will always give denominator of 1, but the fraction
+	// *should* be exact.
+	int64_t pts = tb.num / tb.den;
+
+	int r = av_seek_frame(FmtCtx, VideoStreamIdx, pts, 0);
+	if (r >= 0)
+		LastSeekPTS = pts;
 	return Error();
 }
 
@@ -107,9 +136,15 @@ Error VideoFile::SeekToFraction(double fraction_0_to_1) {
 }
 
 Error VideoFile::SeekToMicrosecond(int64_t microsecond) {
-	double ts = av_q2d(VideoStream->time_base);
-	double t  = ((double) microsecond / 1000000.0) / ts;
-	int    r  = av_seek_frame(FmtCtx, VideoStreamIdx, (int64_t) t, 0);
+	double  ts  = av_q2d(VideoStream->time_base);
+	double  t   = ((double) microsecond / 1000000.0) / ts;
+	int64_t pts = (int64_t) t;
+	int     r   = av_seek_frame(FmtCtx, VideoStreamIdx, pts, 0);
+	// Don't set LastSeekPTS here, because this is not an accurate point. Also, accurate seeking is NOT what
+	// you want, when scrolling through a video. In that case, you want keyframe seeking, which is what
+	// we do here, because we exclude the AVSEEK_FLAG_ANY flag.
+	//if (r >= 0)
+	//	LastSeekPTS = pts;
 	return Error();
 }
 
@@ -134,40 +169,72 @@ int64_t VideoFile::LastFrameAVTime() const {
 */
 
 Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
-	bool haveFrame = false;
-	while (!haveFrame) {
-		int r = avcodec_receive_frame(VideoDecCtx, Frame);
-		switch (r) {
-		case 0:
-			haveFrame = true;
-			break;
-		case AVERROR_EOF:
-			return ErrEOF;
-		case AVERROR(EAGAIN): {
-			// need more data
-			AVPacket pkt;
-			av_init_packet(&pkt);
-			pkt.data = nullptr;
-			pkt.size = 0;
-			r        = av_read_frame(FmtCtx, &pkt);
-			if (r != 0)
-				return TranslateErr(r, "av_read_frame");
-			r = avcodec_send_packet(VideoDecCtx, &pkt);
-			av_packet_unref(&pkt);
-			if (r == AVERROR_INVALIDDATA) {
-				// skip over invalid data, and keep trying
-			} else if (r != 0) {
-				return TranslateErr(r, "avcodec_send_packet");
-			}
-			break;
-		}
-		default:
-			return TranslateErr(r, "avcodec_receive_frame");
-		}
-	}
-	IMQS_ASSERT(haveFrame);
+	// Allow for multiple attempts, if we have just performed a seek.
+	// After performing a seek, the codec will often emit what looks like a previously buffered
+	// frame. If the first frame that we receive is not the one that we seeked to, then
+	// we throw that frame away.
+	// NOTE: This can be very expensive, if you are far ahead of your last keyframe.
+	// However, sometimes that's what the user wants.
+	int wasBehind = 0;
 
-	LastFramePTS = Frame->pts;
+	for (int attempt = 0; attempt < 200; attempt++) {
+		bool haveFrame = false;
+		while (!haveFrame) {
+			int r = avcodec_receive_frame(VideoDecCtx, Frame);
+			switch (r) {
+			case 0:
+				haveFrame = true;
+				break;
+			case AVERROR_EOF:
+				return ErrEOF;
+			case AVERROR(EAGAIN): {
+				// need more data
+				AVPacket pkt;
+				av_init_packet(&pkt);
+				pkt.data = nullptr;
+				pkt.size = 0;
+				r        = av_read_frame(FmtCtx, &pkt);
+				if (r != 0)
+					return TranslateErr(r, "av_read_frame");
+				r = avcodec_send_packet(VideoDecCtx, &pkt);
+				av_packet_unref(&pkt);
+				if (r == AVERROR_INVALIDDATA) {
+					// skip over invalid data, and keep trying
+				} else if (r != 0) {
+					return TranslateErr(r, "avcodec_send_packet");
+				}
+				break;
+			}
+			default:
+				return TranslateErr(r, "avcodec_receive_frame");
+			}
+		}
+		IMQS_ASSERT(haveFrame);
+
+		LastFramePTS = Frame->pts;
+
+		//auto msg     = tsf::fmt("LastFramePTS: %d\n", (int) LastFramePTS);
+		//OutputDebugStringA(msg.c_str());
+
+		// If there was no recent seek operation, then just accept whatever we get
+		if (LastSeekPTS == -1)
+			break;
+
+		// If there was a seek operation, then allow multiple attempts until we get to the frame we want
+		if (LastFramePTS == LastSeekPTS)
+			break;
+
+		bool isBehind = LastFramePTS < LastSeekPTS;
+		if (wasBehind && !isBehind) {
+			// We started decoding behind our seek position, and now we've decoded ahead of it, so this means that
+			// our seek position was not exact. This is the appropriate place to jump out (or perhaps, one frame back,
+			// but this is probably fine).
+			break;
+		}
+		wasBehind = isBehind;
+	}
+
+	LastSeekPTS = -1;
 
 	if (SwsCtx && (SwsDstW != width) || (SwsDstH != height)) {
 		sws_freeContext(SwsCtx);

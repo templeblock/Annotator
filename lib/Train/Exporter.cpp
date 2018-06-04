@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "Exporter.h"
 
+using namespace std;
+
 namespace imqs {
 namespace train {
 
@@ -15,12 +17,12 @@ static void WriteRawCifar10(const gfx::Image& img, uint8_t label, uint8_t* buf) 
 	if (planar) {
 		// RRR GGG BBB
 		for (int chan = 0; chan < 3; chan++) {
-			for (uint32_t y = 0; y < img.Height; y++) {
+			for (uint32_t y = 0; y < (uint32_t) img.Height; y++) {
 				auto src = (uint8_t*) img.Line(y);
 				src += chan;
 				auto dst    = buf + y * img.Width;
 				int  srcBPP = (int) img.BytesPerPixel();
-				for (uint32_t x = 0; x < img.Width; x++) {
+				for (uint32_t x = 0; x < (uint32_t) img.Width; x++) {
 					*dst = *src;
 					dst++;
 					src += srcBPP;
@@ -30,11 +32,11 @@ static void WriteRawCifar10(const gfx::Image& img, uint8_t label, uint8_t* buf) 
 		}
 	} else {
 		// RGB RGB RGB
-		for (uint32_t y = 0; y < img.Height; y++) {
+		for (uint32_t y = 0; y < (uint32_t) img.Height; y++) {
 			auto src    = (uint8_t*) img.Line(y);
 			auto dst    = buf + y * img.Width * 3;
 			int  srcBPP = (int) img.BytesPerPixel();
-			for (uint32_t x = 0; x < img.Width; x++) {
+			for (uint32_t x = 0; x < (uint32_t) img.Width; x++) {
 				dst[0] = src[0];
 				dst[1] = src[1];
 				dst[2] = src[2];
@@ -155,6 +157,146 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 			}
 		}
 	}
+
+	return Error();
+}
+
+static void ConvertRGBAtoRGB(bool channelsFirst, int srcStride, const uint8_t* src, int dstStride, uint8_t* dst, int width, int height) {
+	// convert RGBA to RGB
+	if (channelsFirst) {
+		for (int y = 0; y < height; y++) {
+			auto* srcLine  = src + srcStride * y;
+			auto* dstLineR = dst + dstStride * y;
+			auto* dstLineG = dst + dstStride * y + height * dstStride;
+			auto* dstLineB = dst + dstStride * y + height * dstStride * 2;
+			for (int x = 0; x < width; x++) {
+				*dstLineR = srcLine[0];
+				*dstLineG = srcLine[1];
+				*dstLineB = srcLine[2];
+				dstLineR++;
+				dstLineG++;
+				dstLineB++;
+				srcLine += 4;
+			}
+		}
+	} else {
+		for (int y = 0; y < height; y++) {
+			auto* srcLine = src + srcStride * y;
+			auto* dstLine = dst + dstStride * y;
+			for (int x = 0; x < width; x++) {
+				dstLine[0] = srcLine[0];
+				dstLine[1] = srcLine[1];
+				dstLine[2] = srcLine[2];
+				dstLine += 3;
+				srcLine += 4;
+			}
+		}
+	}
+}
+
+#pragma pack(push)
+#pragma pack(4)
+struct BatchHeader {
+	int32_t Version     = 0;
+	int32_t BatchSize   = 0;
+	int32_t ImgWidth    = 0;
+	int32_t ImgHeight   = 0;
+	int32_t ImgChannels = 0;
+	int32_t RawSize     = 0; // If zero, then uncompressed
+};
+#pragma pack(pop)
+
+// Export a labeled batch into a data format that can be easily turned into a numpy array, or pytorch tensor.
+// 'batch' contains a list of pairs, where the first part of the pair is the frame index (not the frame time),
+// and the second part is the label index within that frame.
+IMQS_TRAIN_API Error ExportLabeledBatch(bool channelsFirst, bool compress, const std::vector<std::pair<int, int>>& batch, video::VideoFile& video, const VideoLabels& labels, std::string& encoded) {
+	int    sampleWidth  = 0;
+	int    sampleHeight = 0;
+	size_t dstImageSize = 0;
+	int    dstStride    = 0;
+	int    lastFrame    = -1;
+
+	gfx::Image frameBuf(gfx::ImageFormat::RGBA, video.Width(), video.Height());
+
+	// store labels separately, and add them in at the end
+	string dstLabels;
+	dstLabels.resize(sizeof(int) * batch.size());
+	int* dstLabelsPtr = (int*) dstLabels.data();
+
+	string dstImage;
+	auto   classToIndex = labels.ClassToIndex();
+
+	for (size_t i = 0; i < batch.size(); i++) {
+		const auto& p = batch[i];
+		if ((unsigned) p.first >= labels.Frames.size())
+			return Error::Fmt("Invalid frame number %v (number of frames is %v)", p.first, labels.Frames.size());
+
+		const auto& frame = labels.Frames[p.first];
+
+		if ((unsigned) p.second >= frame.Labels.size())
+			return Error::Fmt("Invalid label number %v, in frame %v (number of labels is %v)", p.second, p.first, frame.Labels.size());
+
+		const auto& label = frame.Labels[p.second];
+		if (sampleWidth == 0) {
+			sampleWidth  = label.Rect.Width();
+			sampleHeight = label.Rect.Height();
+			// now that we know the sample size, we can allocate our entire buffer up front
+			dstStride    = channelsFirst ? sampleWidth : sampleWidth * 3;
+			dstImageSize = sampleWidth * sampleHeight * 3;
+			dstImage.resize(batch.size() * dstImageSize);
+		} else if (sampleWidth != label.Rect.Width() || sampleHeight != label.Rect.Height()) {
+			return Error::Fmt("Label %v.%v has different dimensions (%v, %v) to the other labels (%v, %v)", label.Rect.Width(), label.Rect.Height(), sampleWidth, sampleHeight);
+		}
+
+		if (p.first != lastFrame) {
+			auto err = video.SeekToMicrosecond(frame.Time);
+			if (!err.OK())
+				return Error::Fmt("Error seeking to frame %v: %v", p.first, err.Message());
+			err = video.DecodeFrameRGBA(video.Width(), video.Height(), frameBuf.Data, frameBuf.Stride);
+			if (!err.OK())
+				return Error::Fmt("Error decoding frame %v: %v", p.first, err.Message());
+			lastFrame = p.first;
+		}
+
+		auto     wnd    = frameBuf.Window(label.Rect.X1, label.Rect.Y1, label.Rect.Width(), label.Rect.Height());
+		uint8_t* dstBuf = (uint8_t*) dstImage.data() + i * dstImageSize;
+		ConvertRGBAtoRGB(channelsFirst, wnd.Stride, wnd.Data, dstStride, dstBuf, wnd.Width, wnd.Height);
+
+		dstLabelsPtr[i] = classToIndex.get(label.Class);
+	}
+
+	// append labels to images, so it's one contiguous block of bytes
+	dstImage += dstLabels;
+
+	BatchHeader head;
+	head.Version     = 1;
+	head.ImgWidth    = sampleWidth;
+	head.ImgHeight   = sampleHeight;
+	head.ImgChannels = 3;
+	head.BatchSize   = (int) batch.size();
+
+	// f = final buffer, which can be either compressed or uncompressed
+	size_t fsize = dstImage.size();
+	void*  fbuf  = (void*) dstImage.data();
+
+	if (compress) {
+		head.RawSize = (int) dstImage.size();
+		fsize        = LZ4F_compressFrameBound(dstImage.size(), nullptr);
+		fbuf         = imqs_malloc_or_die(fsize);
+		fsize        = LZ4F_compressFrame(fbuf, fsize, dstImage.data(), dstImage.size(), nullptr);
+		IMQS_ASSERT(!LZ4F_isError(fsize));
+	} else {
+		head.RawSize = 0;
+	}
+
+	encoded.resize(sizeof(head) + fsize);
+	uint8_t* enc = (uint8_t*) encoded.c_str();
+
+	memcpy(enc, &head, sizeof(head));
+	memcpy(enc + sizeof(head), fbuf, fsize);
+
+	if (compress)
+		free(fbuf);
 
 	return Error();
 }

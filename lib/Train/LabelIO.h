@@ -83,7 +83,10 @@ public:
 	ImageLabels*                 InsertFrame(int64_t time);
 	void                         RemoveEmptyFrames();
 	ohash::map<std::string, int> CategorizedLabelCount() const;
+	std::vector<std::string>     Classes() const; // Classes are sorted alphabetically
+	ohash::map<std::string, int> ClassToIndex() const;
 	int64_t                      TotalLabelCount() const;
+	nlohmann::json               ToJson() const;
 };
 
 // label class and associated shortcut key

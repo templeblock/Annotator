@@ -1,7 +1,7 @@
 #define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES 1
 #define _CRT_SECURE_NO_WARNINGS 1
 
-#include <pal/pal.h>
+#include <lib/pal/pal.h>
 #include "common.h"
 
 #ifdef _MSC_VER
@@ -19,7 +19,7 @@
 
 #ifdef _MSC_VER
 #pragma warning(push)
-#pragma warning(disable: 4244 4267 4554 4800)
+#pragma warning(disable : 4244 4267 4554 4800)
 #endif
 
 #include <tensorflow/cc/ops/standard_ops.h>

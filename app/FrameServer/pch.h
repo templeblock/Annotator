@@ -1,10 +1,12 @@
 #define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES 1
 #define _CRT_SECURE_NO_WARNINGS 1
 
-#include <pal/pal.h>
 #include <algorithm>
-#include <Video/Video.h>
-#include <gfx/gfx.h>
+
+#include <lib/pal/pal.h>
+#include <lib/Video/Video.h>
+#include <lib/Train/Train.h>
+#include <lib/gfx/gfx.h>
 
 #include <phttp/phttp.h>
 

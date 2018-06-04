@@ -28,6 +28,7 @@ public:
 	Error           OpenFile(std::string filename);
 	std::string     GetFilename() const { return Filename; }
 	VideoStreamInfo GetVideoStreamInfo();
+	Error           SeekToPreviousFrame();
 	Error           SeekToFrame(int64_t frame);
 	Error           SeekToFraction(double fraction_0_to_1);
 	Error           SeekToMicrosecond(int64_t microsecond);
@@ -50,7 +51,8 @@ private:
 	SwsContext*      SwsCtx         = nullptr;
 	int              SwsDstW        = 0;
 	int              SwsDstH        = 0;
-	int64_t          LastFramePTS   = 0; // PTS = presentation time stamp (ie time when frame should be shown to user)
+	int64_t          LastFramePTS   = 0;  // PTS = presentation time stamp (ie time when frame should be shown to user)
+	int64_t          LastSeekPTS    = -1; // Set to a value other than -1, if we have just executed a seek operation
 
 	static Error TranslateErr(int ret, const char* whileBusyWith = nullptr);
 	static Error OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, int& stream_idx, AVCodecContext*& dec_ctx);

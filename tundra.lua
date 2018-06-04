@@ -17,7 +17,6 @@ local common = {
 		},
 		CPPPATH = {
 			"third_party",
-			"lib",
 			".", -- The root directory of this project, so that you can say #include <app/Foo/foo.h>
 		},
 	},

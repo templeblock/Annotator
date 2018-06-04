@@ -31,6 +31,7 @@ void xoMain(xo::SysWnd* wnd) {
 	ui->Classes.push_back({'E', "road edge"});
 
 	ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
+	//ui->VideoFilename = "C:\\mldata\\StellenboschFuji\\4K-F2\\DSCF1008.MOV";
 	if (!ui->OpenVideo())
 		ui->Render();
 }

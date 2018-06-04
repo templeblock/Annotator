@@ -2,8 +2,8 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 
 #include <xo/xo/xo.h>
-#include <pal/pal.h>
-//#include <AI/AI.h>
+#include <lib/pal/pal.h>
+//#include <lib/AI/AI.h>
 
 #include <algorithm>
 
@@ -16,6 +16,6 @@
 //#pragma warning(pop)
 //#endif
 
-#include <Video/Video.h>
-#include <Train/Train.h>
+#include <lib/Video/Video.h>
+#include <lib/Train/Train.h>
 #include <png.h>

@@ -80,18 +80,20 @@ void UI::Render() {
 	auto ui = this;
 	Root->Clear();
 
-	auto   videoArea  = Root->ParseAppendNode("<div style='break:after; box-sizing: margin; width: 100%; margin: 10ep'></div>");
-	double aspect     = 1920.0 / 1080.0;
-	double videoWidth = 1480;
+	auto   videoArea = Root->ParseAppendNode("<div style='break:after; box-sizing: margin; width: 100%; margin: 10ep'></div>");
+	double aspect    = 1920.0 / 1080.0;
+	//double videoWidth = 1540;
+	VideoCanvasWidth  = 1540;
+	VideoCanvasHeight = (int) (VideoCanvasWidth / aspect);
 
 	VideoCanvas = videoArea->AddCanvas();
 	VideoCanvas->StyleParse("hcenter: hcenter; border: 1px #888; border-radius: 1.5ep;");
-	VideoCanvas->StyleParsef("width: %dpx; height: %dpx", (int) videoWidth, (int) (videoWidth / aspect));
+	VideoCanvas->StyleParsef("width: %dpx; height: %dpx", VideoCanvasWidth, VideoCanvasHeight);
 	VideoCanvas->OnMouseMove([ui](xo::Event& ev) { ui->OnPaintLabel(ev); });
 	VideoCanvas->OnMouseDown([ui](xo::Event& ev) { ui->OnPaintLabel(ev); });
 
 	auto fileArea = videoArea->ParseAppendNode("<div style='break:after; margin: 4ep'></div>");
-	fileArea->StyleParsef("hcenter: hcenter; width: %vpx", videoWidth);
+	fileArea->StyleParsef("hcenter: hcenter; width: %vpx", VideoCanvasWidth);
 	auto fileName  = fileArea->ParseAppendNode("<div class='font-medium' style='cursor: hand'></div>");
 	auto exportBtn = xo::controls::Button::NewText(fileArea, "Export");
 	StatusLabel    = fileArea->ParseAppendNode("<div class='font-medium' style='margin-left: 2em'></div>");
@@ -152,7 +154,7 @@ void UI::Render() {
 	TimeSliderBox = Root->ParseAppendNode("<div></div>");
 	RenderTimeSlider(true);
 
-	auto bottomControlBoxes = Root->ParseAppendNode("<div style='padding: 5ep'></div>");
+	auto bottomControlBoxes = Root->ParseAppendNode("<div style='padding: 4ep'></div>");
 	auto mediaControlBox    = bottomControlBoxes->ParseAppendNode("<div></div>");
 	auto modeControlBox     = bottomControlBoxes->ParseAppendNode("<div></div>");
 	auto btnW               = "20ep";
@@ -211,7 +213,7 @@ void UI::RenderTimeSlider(bool first) {
 
 	if (first) {
 		TimeSliderBox->Clear();
-		TimeSliderBox->StyleParse("break:after; margin: 16ep 8ep; padding: 0ep; box-sizing: margin; width: 100%; height: 34ep; border-radius: 3ep; background: #eee");
+		TimeSliderBox->StyleParse("break:after; margin: 16ep 4ep; padding: 0ep; box-sizing: margin; width: 100%; height: 24ep; border-radius: 3ep; background: #eee");
 		TimeSliderBox->ParseAppendNode("<div style='position: absolute; width: 100%; height: 100%'></div>");                                                         // tick container
 		TimeSliderBox->ParseAppendNode("<div style='background: #ccc3; border: 1px #888; width: 5ep; height: 120%; vcenter: vcenter; border-radius: 2.5ep'></div>"); // caret
 
@@ -273,7 +275,8 @@ void UI::SeekFromUI(xo::Event& ev) {
 	float mouseX = ev.PointsRel[0].x / box->ContentWidthPx(); // percentage
 	mouseX       = xo::Clamp(mouseX, 0.f, 1.f);
 	Video.SeekToFraction(mouseX);
-	// I've been too lazy to understand why we need to burn a frame after seeking.
+	// When seeking by fraction, we just seek to a keyframe, and the codec buffer still has data inside it. So that's
+	// why we need to burn a frame.
 	NextFrame();
 	NextFrame();
 }
@@ -448,9 +451,11 @@ void UI::DrawLabelBoxes() {
 
 void UI::OnKeyChar(xo::Event& ev) {
 	switch (ev.KeyChar) {
-	case ',':
 	case ' ':
 		FlipPlayState();
+		break;
+	case ',':
+		PrevFrame();
 		break;
 	case '.':
 		NextFrame();
@@ -556,10 +561,31 @@ void UI::GridDimensions(int& width, int& height) {
 xo::Vec2f UI::VideoScaleOnCanvas() {
 	int vwidth, vheight;
 	Video.Dimensions(vwidth, vheight);
-	auto cx      = VideoCanvas->GetCanvas2D();
-	int  cwidth  = cx->Width();
-	int  cheight = cx->Height();
-	VideoCanvas->ReleaseCanvas(cx);
+	int cwidth  = VideoCanvasWidth;
+	int cheight = VideoCanvasHeight;
+	/*
+	// This doesn't work, because the DocUI system is busy using the layout, while it's processing events.
+	// So long story short -- this stuff needs work, and we just have to hack around it.
+	auto rd      = VideoCanvas->GetDoc()->Group->RenderDoc;
+	auto layout  = rd->AcquireLatestLayout();
+	if (layout) {
+		auto node = layout->Node(VideoCanvas);
+		if (node) {
+			cwidth  = node->ContentWidthPx();
+			cheight = node->ContentHeightPx();
+		}
+		rd->ReleaseLayout(layout);
+	}
+	*/
+	/*
+	if (cwidth == 1) {
+		// legacy path, should never be used
+		auto cx = VideoCanvas->GetCanvas2D();
+		cwidth  = cx->Width();
+		cheight = cx->Height();
+		VideoCanvas->ReleaseCanvas(cx);
+	}
+	*/
 	return xo::Vec2f(vwidth / (float) cwidth, vheight / (float) cheight);
 }
 
@@ -584,6 +610,14 @@ xo::Point UI::GridPosToVideo(int x, int y) {
 	if (!GridTopDown)
 		y = vheight - y;
 	return xo::Point(x, y);
+}
+
+void UI::PrevFrame() {
+	if (!Video.IsOpen())
+		return;
+
+	Video.SeekToPreviousFrame();
+	NextFrame();
 }
 
 void UI::NextFrame() {

@@ -14,9 +14,14 @@ SessionStore::~SessionStore() {
 }
 
 Error SessionStore::CreateSession(std::string path, std::string& id) {
-	auto ses = make_shared<Session>();
-	auto err = ses->Video.OpenFile(path::SafeJoin(RootPath, path));
+	auto ses      = make_shared<Session>();
+	auto fullpath = path::SafeJoin(RootPath, path);
+	auto err      = ses->Video.OpenFile(fullpath);
 	if (!err.OK())
+		return err;
+
+	err = train::LoadVideoLabels(fullpath, ses->Labels);
+	if (!err.OK() && !os::IsNotExist(err))
 		return err;
 
 	char buf[20];
@@ -32,7 +37,7 @@ Error SessionStore::CreateSession(std::string path, std::string& id) {
 	Sessions.insert(id, it);
 	Lock.unlock();
 
-	Log->Info("Created session %v: %v", id, path);
+	Log->Info("Created session %v: %v (%v labeled frames)", id, path, ses->Labels.Frames.size());
 
 	return Error();
 }

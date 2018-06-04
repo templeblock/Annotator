@@ -2,18 +2,18 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 
 #include <xo/xo/xo.h>
-#include <pal/pal.h>
+#include <lib/pal/pal.h>
 
 #include <algorithm>
 
 #ifdef _MSC_VER
 #pragma warning(push)
-#pragma warning(disable: 4503)
+#pragma warning(disable : 4503)
 #endif
 #include <nlohmann-json/json.hpp>
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
 
-#include <Video/Video.h>
-#include <AI/AI.h>
+#include <lib/Video/Video.h>
+#include <lib/AI/AI.h>

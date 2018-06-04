@@ -33,6 +33,8 @@ struct ImqsLz4ImageHeader {
 	uint32_t Reserved2 = 0;
 };
 
+// Encode a single frame. This is not typically used during training. It is built for other applications such as
+// a labeling UI.
 static void EncodeFrame(string codec, const void* buf, int width, int height, int stride, int quality, phttp::Response& w) {
 	gfx::ImageIO   io;
 	Error          err;
@@ -69,6 +71,10 @@ static void EncodeFrame(string codec, const void* buf, int width, int height, in
 		io.FreeEncodedBuffer(itype, encbuf);
 	else
 		free(encbuf);
+}
+
+static bool IsTrue(phttp::Request& r, string q) {
+	return strings::tolower(r.QueryVal(q.c_str())) == "true" || r.QueryInt(q.c_str()) == 1;
 }
 
 static void HandleHttp(SessionStore& sessions, phttp::Response& w, phttp::Request& r) {
@@ -138,6 +144,42 @@ static void HandleHttp(SessionStore& sessions, phttp::Response& w, phttp::Reques
 		free(buf);
 		break;
 	}
+	case "labels"_crc32: {
+		auto ses = sessions.GetSession(GetSessionID(r));
+		if (!ses) {
+			w.SetStatusAndBody(phttp::Status410_Gone, "Session expired or invalid");
+			return;
+		}
+		w.SetHeader("Content-Type", "application/json");
+		w.SetStatusAndBody(200, ses->Labels.ToJson().dump(4));
+		break;
+	}
+	case "batch"_crc32: {
+		auto ses = sessions.GetSession(GetSessionID(r));
+		if (!ses) {
+			w.SetStatusAndBody(phttp::Status410_Gone, "Session expired or invalid");
+			return;
+		}
+		bool channelsFirst = IsTrue(r, "channelsFirst");
+		bool compress      = IsTrue(r, "compress");
+		auto pairsV        = strings::Split(r.QueryVal("pairs"), ',');
+		if (pairsV.size() == 0 || pairsV.size() % 2 != 0) {
+			w.SetStatusAndBody(phttp::Status400_Bad_Request, "pairs must be a comma-separated array of indices, in pairs of frame_index,label_index");
+			return;
+		}
+		vector<pair<int, int>> pairs;
+		for (size_t i = 0; i < pairsV.size(); i += 2)
+			pairs.push_back({atoi(pairsV[i].c_str()), atoi(pairsV[i + 1].c_str())});
+		string encoded;
+		auto   err = train::ExportLabeledBatch(channelsFirst, compress, pairs, ses->Video, ses->Labels, encoded);
+		if (!err.OK()) {
+			w.SetStatusAndBody(phttp::Status500_Internal_Server_Error, err.Message());
+			return;
+		}
+		w.SetHeader("Content-Type", "application/binary");
+		w.SetStatusAndBody(phttp::Status200_OK, encoded);
+		break;
+	}
 	default:
 		w.Status = 404;
 		break;
@@ -159,7 +201,7 @@ int main(int argc, char** argv) {
 	}
 
 	phttp::Initialize();
-	anno::VideoFile::Initialize();
+	video::VideoFile::Initialize();
 
 	uberlog::Logger log;
 	logging::CreateLogger("FrameServer", log);

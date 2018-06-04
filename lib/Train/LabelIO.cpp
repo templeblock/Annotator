@@ -163,11 +163,50 @@ ohash::map<std::string, int> VideoLabels::CategorizedLabelCount() const {
 	return counts;
 }
 
+std::vector<std::string> VideoLabels::Classes() const {
+	ohash::set<std::string> cset;
+	for (const auto& f : Frames) {
+		for (const auto& lab : f.Labels)
+			cset.insert(lab.Class);
+	}
+	std::vector<std::string> classes;
+	for (const auto& c : cset)
+		classes.push_back(c);
+
+	std::sort(classes.begin(), classes.end());
+	return classes;
+}
+
+ohash::map<std::string, int> VideoLabels::ClassToIndex() const {
+	auto                         classes = Classes();
+	ohash::map<std::string, int> map;
+	for (size_t i = 0; i < classes.size(); i++)
+		map.insert(classes[i], (int) i);
+	return map;
+}
+
 int64_t VideoLabels::TotalLabelCount() const {
 	int64_t c = 0;
 	for (const auto& f : Frames)
 		c += f.Labels.size();
 	return c;
+}
+
+nlohmann::json VideoLabels::ToJson() const {
+	nlohmann::json jframes;
+	for (const auto& f : Frames) {
+		nlohmann::json jframe;
+		jframe["time"] = f.Time;
+		nlohmann::json jlabels;
+		for (const auto& lab : f.Labels) {
+			nlohmann::json jlab;
+			lab.ToJson(jlab);
+			jlabels.push_back(std::move(jlab));
+		}
+		jframe["labels"] = std::move(jlabels);
+		jframes.push_back(std::move(jframe));
+	}
+	return {{"frames", jframes}};
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
