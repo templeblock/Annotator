@@ -7,6 +7,17 @@ void xoMain(xo::SysWnd* wnd) {
 	using namespace imqs::anno;
 	imqs::video::VideoFile::Initialize();
 
+	/*
+	// Bulk conversion, when changing on-disk format
+	{
+		using namespace imqs::train;
+		VideoLabels labels;
+		auto        err = LoadVideoLabels("c:\\mldata\\GOPR0080.MP4", labels);
+		err             = SaveVideoLabels("c:\\mldata\\GOPR0080.MP4", labels);
+		return;
+	}
+	*/
+
 	wnd->Doc()->ClassParse("font-medium", "font-size: 14ep");
 	wnd->Doc()->ClassParse("shortcut", "font-size: 15ep; color: #000; width: 1em");
 

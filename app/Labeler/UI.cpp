@@ -249,7 +249,7 @@ void UI::RenderTimeSlider(bool first) {
 	for (const auto& frame : Labels.Frames) {
 		double p    = 100.0 * frame.TimeSeconds() / dur;
 		auto   tick = tickContainer->ParseAppendNode("<div></div>");
-		float  age  = (float) ((now - frame.EditTime).Seconds() / 300);
+		float  age  = (float) ((now - frame.MaxEditTime()).Seconds() / 300);
 		age         = xo::Clamp(age, 0.0f, 1.0f);
 		// lerping in sRGB is just so damn ugly. But I am so damn ready to ship this!
 		xo::Vec3f fcolor = age * oldcolor + (1.0f - age) * newcolor;
@@ -542,8 +542,9 @@ void UI::OnPaintLabel(xo::Event& ev) {
 		}
 		auto label = FindOrInsertLabel(frame, gpos.X, gpos.Y);
 		if (label->Class != CurrentAssignClass.Class) {
-			label->Labeler = UserName;
-			label->Class   = CurrentAssignClass.Class;
+			label->Labeler  = UserName;
+			label->Class    = CurrentAssignClass.Class;
+			label->EditTime = time::Now();
 			frame->SetDirty();
 			DrawLabelBoxes();
 		}

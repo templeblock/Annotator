@@ -683,7 +683,7 @@ local AI = SharedLibrary {
 local Train = SharedLibrary {
 	Name = "Train",
 	Depends = {
-		winCrt, pal, tsf, Video, gfx, png, lz4
+		winCrt, pal, tsf, Video, gfx, png, lz4, libjpeg_turbo
 	},
 	PrecompiledHeader = {
 		Source = "lib/Train/pch.cpp",

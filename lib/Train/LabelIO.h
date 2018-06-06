@@ -50,7 +50,8 @@ class IMQS_TRAIN_API Label {
 public:
 	Rect        Rect;
 	std::string Class;
-	std::string Labeler; // Person who created this label
+	std::string Labeler;  // Person who created this label
+	time::Time  EditTime; // Time when this label was created
 
 	Error FromJson(const nlohmann::json& j);
 	void  ToJson(nlohmann::json& j) const;
@@ -59,14 +60,14 @@ public:
 // Set of labels for an image (image is usually a single frame from a video)
 class IMQS_TRAIN_API ImageLabels {
 public:
-	int64_t            Time = 0; // Video time in microseconds (0 = start of video)
-	std::vector<Label> Labels;
-	time::Time         EditTime;        // Time when this frame's labels were last edited
+	int64_t            Time = 0;        // Frame time in microseconds
+	std::vector<Label> Labels;          // Labels
 	bool               IsDirty = false; // Needs to be saved to disk
 
-	Error FromJson(const nlohmann::json& j);
-	void  ToJson(nlohmann::json& j) const;
-	void  SetDirty();
+	Error      FromJson(const nlohmann::json& j);
+	void       ToJson(nlohmann::json& j) const;
+	void       SetDirty();
+	time::Time MaxEditTime() const; // Max edit time of labels inside this frame
 
 	double TimeSeconds() const { return (double) Time / 1000000.0; }
 
@@ -104,6 +105,7 @@ public:
 IMQS_TRAIN_API std::string LabelFileDir(std::string videoFilename);
 IMQS_TRAIN_API std::string ImagePatchDir(std::string videoFilename);
 IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels);
+IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, const VideoLabels& labels);
 IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);
 IMQS_TRAIN_API int   MergeVideoLabels(const VideoLabels& src, VideoLabels& dst); // Returns number of new frames
 

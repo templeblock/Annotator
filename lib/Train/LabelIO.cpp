@@ -73,8 +73,9 @@ Error Label::FromJson(const nlohmann::json& j) {
 }
 
 void Label::ToJson(nlohmann::json& j) const {
-	j["class"]   = Class;
-	j["labeler"] = Labeler;
+	j["class"]    = Class;
+	j["labeler"]  = Labeler;
+	j["edittime"] = EditTime.Unix();
 	Rect.ToJson(j["rect"]);
 }
 
@@ -83,19 +84,26 @@ void Label::ToJson(nlohmann::json& j) const {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Error ImageLabels::FromJson(const nlohmann::json& j) {
-	EditTime = time::Time::FromUnix(j["edittime"], 0);
+	// Originally we stored edit time for an entire frame.
+	// Later we switched to storing edit time for individual labels.
+	auto       frameEditTime = j.find("edittime");
+	time::Time editTime;
+	if (frameEditTime != j.end())
+		editTime = time::Time::FromUnix(*frameEditTime, 0);
+
 	for (const auto& jlab : j["labels"]) {
 		Label lab;
 		auto  err = lab.FromJson(jlab);
 		if (!err.OK())
 			return err;
+		if (lab.EditTime.IsNull())
+			lab.EditTime = editTime;
 		Labels.emplace_back(std::move(lab));
 	}
 	return Error();
 }
 
 void ImageLabels::ToJson(nlohmann::json& j) const {
-	j["edittime"] = EditTime.Unix();
 	auto& jlabels = j["labels"];
 	for (const auto& lab : Labels) {
 		json jlab;
@@ -105,8 +113,19 @@ void ImageLabels::ToJson(nlohmann::json& j) const {
 }
 
 void ImageLabels::SetDirty() {
-	IsDirty  = true;
-	EditTime = time::Now();
+	IsDirty = true;
+}
+
+time::Time ImageLabels::MaxEditTime() const {
+	if (Labels.size() == 0)
+		return time::Time(2000, time::Month::January, 1, 0, 0, 0, 0);
+
+	auto maxT = Labels[0].EditTime;
+	for (const auto& lab : Labels) {
+		if (lab.EditTime > maxT)
+			maxT = lab.EditTime;
+	}
+	return maxT;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -260,6 +279,15 @@ IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& lab
 	return err;
 }
 
+IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, const VideoLabels& labels) {
+	for (const auto& f : labels.Frames) {
+		auto err = SaveFrameLabels(videoFilename, f);
+		if (!err.OK())
+			return err;
+	}
+	return Error();
+}
+
 // Save one labeled frame. By saving at image granularity instead of video granularity, we allow concurrent labeling by many people
 IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame) {
 	auto dir = LabelFileDir(videoFilename);
@@ -276,7 +304,7 @@ IMQS_TRAIN_API int MergeVideoLabels(const VideoLabels& src, VideoLabels& dst) {
 	int nnew = 0;
 	for (const auto& sframe : src.Frames) {
 		auto dframe = dst.FindOrInsertFrame(sframe.Time);
-		if (sframe.EditTime > dframe->EditTime) {
+		if (sframe.MaxEditTime() > dframe->MaxEditTime()) {
 			nnew++;
 			*dframe = sframe;
 		}
