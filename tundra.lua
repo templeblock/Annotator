@@ -29,10 +29,12 @@ local unix_common = {
 			{ "-std=c++11" },
 			{ "-fPIC" },
 			{ "-ggdb" },
+			{ "-O3"; Config = "linux-*-release-*" }
 		},
 		CCOPTS = {
 			{ "-fPIC" },
 			{ "-ggdb" },
+			{ "-O3"; Config = "linux-*-release-*" }
 		},
 	}
 }
@@ -79,7 +81,6 @@ local win_common = {
 
 Build {
 	Units = {
-		--"build/IMQS/tundra-pkg-libcurl.lua",
 		"units.lua",
 	},
 	Passes= {
@@ -94,11 +95,16 @@ Build {
 			DefaultOnHost = "macosx",
 			Tools = { "gcc" },
 		},
+		--{
+		--	Name = "linux-gcc",
+		--	Inherit = unix_common,
+		--	Tools = { "gcc" },
+		--},
 		{
-			Name = "linux-gcc",
+			Name = "linux-clang",
 			DefaultOnHost = "linux",
 			Inherit = unix_common,
-			Tools = { "gcc" },
+			Tools = { "clang" },
 		},
 		{
 			Name = "win32-msvc2015",

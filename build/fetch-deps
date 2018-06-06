@@ -1,0 +1,32 @@
+#!/bin/bash
+
+sudo apt-get install -y \
+	libcurl4-openssl-dev \
+	liblz4-dev \
+	zlib1g-dev \
+	libjpeg-turbo8-dev
+
+	# libavcodec-dev \
+	# libavformat-dev \
+	# libswscale-dev
+
+	#libpng-dev \
+
+# Last time I checked (June 4 2018), ffmpeg was not yet buildable on linux from vcpkg.
+#
+# ffmpeg must be installed from source on ubuntu 16.04, because we need at least version 3.3
+# I don't understand why, but I got linker errors when trying to build lib/Video, complaining
+# that ffmpeg needed to be built with -fPIC. So then I tried re-running ./configure --enable-pic,
+# and then building again, but that didn't help. So eventually I resorted to building the shared
+# library only, and that fixed it.
+#
+# git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
+# cd ffmpeg
+# git checkout n3.3.3
+# ./configure --enable-pic --disable-static --enable-shared
+# make
+# sudo make install
+
+# [hint - try vcpkg]
+# OpenCV must be installed from source, so that you get an up to date version, and the contrib modules
+#vcpkg install opencv[contrib,core,eigen,flann,jpeg,opengl,png,tiff]:x64-windows

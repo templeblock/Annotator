@@ -4,7 +4,7 @@ require 'tundra.syntax.files'
 local winFilter = "win*"
 local winDebugFilter = "win*-*-debug"
 local winReleaseFilter = "win*-*-release"
-local linuxFilter = "linux*"
+local linuxFilter = "linux-*"
 
 local winKernelLibs = { "kernel32.lib", "user32.lib", "gdi32.lib", "winspool.lib", "advapi32.lib", "shell32.lib", "comctl32.lib", 
 						"uuid.lib", "ole32.lib", "oleaut32.lib", "shlwapi.lib", "OLDNAMES.lib", "wldap32.lib", "wsock32.lib",
@@ -230,7 +230,7 @@ local ffmpeg = ExternalLibrary {
 	Propagate = {
 		Libs = {
 			{ "avcodec.lib", "avdevice.lib", "avfilter.lib", "avformat.lib", "avutil.lib", "swresample.lib", "swscale.lib"; Config = winFilter },
-			--{ "curl"; Config = linuxFilter }, -- Haven't checked linux yet
+			{ "avcodec", "avdevice", "avfilter", "avformat", "avutil", "swresample", "swscale"; Config = linuxFilter },
 		},
 	}
 }
@@ -388,7 +388,7 @@ local libjpeg_turbo = ExternalLibrary {
 	Propagate = {
 		Libs = {
 			{ "turbojpeg.lib"; Config = winFilter },
-			--{ "turbojpeg"; Config = linuxFilter }, -- switched to Mapnik's one
+			{ "turbojpeg"; Config = linuxFilter },
 		}
 	}
 }
@@ -560,7 +560,7 @@ local pal = SharedLibrary {
 	},
 	Libs = {
 		{ "Dbghelp.lib"; Config = winFilter },
-		{ "uuid", "curl"; Config = linuxFilter },
+		{ "uuid", "curl", "unwind"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "lib/pal/pch.cpp",
@@ -683,7 +683,7 @@ local AI = SharedLibrary {
 local Train = SharedLibrary {
 	Name = "Train",
 	Depends = {
-		winCrt, pal, tsf, Video, gfx, libjpeg_turbo, png, lz4
+		winCrt, pal, tsf, Video, gfx, png, lz4
 	},
 	PrecompiledHeader = {
 		Source = "lib/Train/pch.cpp",
@@ -746,7 +746,7 @@ local RoadProcessor = Program {
 		winCrt, xo, ffmpeg, pal, tsf, Video, AI, cntk
 	},
 	--Env = {
-	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
+	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	--},
 	Libs = { 
 		{ "m", "stdc++"; Config = "linux-*" },
@@ -771,7 +771,7 @@ local CameraCalibrator = Program {
 		winCrt, pal, opencv,
 	},
 	Env = {
-		PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
+		PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	},
 	Libs = { 
 		{ "m", "stdc++"; Config = "linux-*" },
@@ -796,11 +796,11 @@ local FrameServer = Program {
 		winCrt, Video, Train, phttp, uberlog, tsf, gfx, pal, libjpeg_turbo, png, lz4
 	},
 	Env = {
-		PROGOPTS = { "/SUBSYSTEM:CONSOLE" },
+		PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	},
 	Libs = { 
 		{ "Ws2_32.lib"; Config = winFilter },
-		{ "m", "stdc++"; Config = "linux-*" },
+		{ "m", "rt", "stdc++"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/FrameServer/pch.cpp",

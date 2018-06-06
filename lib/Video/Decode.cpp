@@ -236,7 +236,7 @@ Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
 
 	LastSeekPTS = -1;
 
-	if (SwsCtx && (SwsDstW != width) || (SwsDstH != height)) {
+	if (SwsCtx && ((SwsDstW != width) || (SwsDstH != height))) {
 		sws_freeContext(SwsCtx);
 		SwsCtx = nullptr;
 	}

@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+BUILD=linux-clang-debug-default
+tundra2 $BUILD FrameServer
+LD_LIBRARY_PATH=t2-output/$BUILD t2-output/$BUILD/FrameServer "$@"

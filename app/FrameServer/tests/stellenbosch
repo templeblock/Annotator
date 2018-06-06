@@ -7,4 +7,4 @@ curl -b cookies http://localhost:8080/info
 #curl -b cookies -o frame2.jpeg "http://localhost:8080/frame?width=1280&height=720&format=jpeg"
 #curl -b cookies -o frame3.lz4 "http://localhost:8080/frame?width=1280&height=720&format=lz4"
 #curl -b cookies -o train.json "http://localhost:8080/labels"
-curl -b cookies -o batch.bin "http://localhost:8080/batch?channelsFirst=true&compress=true&pairs=0,0,0,1"
+#curl -b cookies -o batch.bin "http://localhost:8080/batch?channelsFirst=true&compress=true&pairs=0,0,0,1"
