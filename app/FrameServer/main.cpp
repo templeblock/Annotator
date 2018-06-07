@@ -24,18 +24,27 @@ static string GetSessionID(phttp::Request& r) {
 	return r.QueryVal("frameserver_session");
 }
 
-struct ImqsLz4ImageHeader {
-	uint16_t Magic     = 0xf789;
-	uint16_t Format    = 0; // 0 = RGBA
-	uint16_t Width     = 0;
-	uint16_t Height    = 0;
-	uint32_t Reserved1 = 0;
-	uint32_t Reserved2 = 0;
+#pragma pack(push)
+#pragma pack(4)
+struct ImqsImageHeader {
+	enum Constants {
+		FormatRGBA = 1,
+		FlagLZ4    = 1,
+	};
+	uint16_t Magic    = 0xf789;
+	uint16_t Format   = 0;
+	uint16_t Width    = 0;
+	uint16_t Height   = 0;
+	uint32_t Flags    = 0;
+	uint32_t Reserved = 0; // Need this here so that Time is naturally packed on 8 byte alignment
+	uint64_t Time     = 0; // Intended for videos, to indicate the frame's time. Units that we use here are microseconds.
 };
+#pragma pack(pop)
+static_assert(sizeof(ImqsImageHeader) == 24, "ImqsImageHeader size expected to be 24");
 
 // Encode a single frame. This is not typically used during training. It is built for other applications such as
 // a labeling UI.
-static void EncodeFrame(string codec, const void* buf, int width, int height, int stride, int quality, phttp::Response& w) {
+static void EncodeFrame(string codec, const void* buf, int width, int height, int stride, int quality, int64_t frameTime, phttp::Response& w) {
 	gfx::ImageIO   io;
 	Error          err;
 	void*          encbuf  = nullptr;
@@ -44,19 +53,34 @@ static void EncodeFrame(string codec, const void* buf, int width, int height, in
 	if (codec == "png") {
 		itype = gfx::ImageType::Png;
 		w.SetHeader("Content-Type", "image/png");
-		err = io.SavePng(false, width, height, stride, buf, quality != -1 ? quality : 5, encbuf, encsize);
+		err = io.SavePng(false, width, height, stride, buf, quality != -1 ? quality : 1, encbuf, encsize);
 	} else if (codec == "jpeg") {
 		itype = gfx::ImageType::Jpeg;
 		w.SetHeader("Content-Type", "image/jpeg");
 		err = io.SaveJpeg(width, height, stride, buf, quality != -1 ? quality : 95, encbuf, encsize);
-	} else if (codec == "lz4") {
-		w.SetHeader("Content-Type", "image/x-imqs-lz4");
+	} else if (codec == "imqs") {
+		w.SetHeader("Content-Type", "image/x-imqs");
 		IMQS_ASSERT(stride == width * 4);
-		size_t enccap = LZ4F_compressBound(height * stride, nullptr);
-		encbuf        = imqs_malloc_or_die(enccap);
-		encsize       = LZ4F_compressFrame(encbuf, enccap, buf, height * stride, nullptr);
+		bool   compress = quality == 1;
+		size_t enccap   = LZ4F_compressBound(height * stride, nullptr);
+		encbuf          = imqs_malloc_or_die(sizeof(ImqsImageHeader) + enccap);
+		if (compress) {
+			encsize = LZ4F_compressFrame((char*) encbuf + sizeof(ImqsImageHeader), enccap, buf, height * stride, nullptr);
+		} else {
+			encsize = height * stride;
+			memcpy((char*) encbuf + sizeof(ImqsImageHeader), buf, height * stride);
+		}
+		ImqsImageHeader* head = (ImqsImageHeader*) encbuf;
+		*head                 = ImqsImageHeader();
+		head->Format          = ImqsImageHeader::FormatRGBA;
+		if (compress)
+			head->Flags |= ImqsImageHeader::FlagLZ4;
+		head->Width  = width;
+		head->Height = height;
+		head->Time   = frameTime;
+		encsize += sizeof(ImqsImageHeader);
 	} else {
-		w.SetStatusAndBody(400, "Invalid format. Valid formats are png, jpeg, lz4");
+		w.SetStatusAndBody(400, tsf::fmt("Invalid format '%v'. Valid formats are png, jpeg, imqs", codec));
 		return;
 	}
 
@@ -114,33 +138,52 @@ static void HandleHttp(SessionStore& sessions, phttp::Response& w, phttp::Reques
 			return;
 		}
 		nlohmann::json j;
-		j["Width"]           = ses->Video.Width();
-		j["Height"]          = ses->Video.Height();
-		j["Seconds"]         = ses->Video.GetVideoStreamInfo().DurationSeconds();
-		j["FramesPerSecond"] = ses->Video.GetVideoStreamInfo().FrameRateSeconds();
+		j["width"]           = ses->Video.Width();
+		j["height"]          = ses->Video.Height();
+		j["seconds"]         = ses->Video.GetVideoStreamInfo().DurationSeconds();
+		j["framesPerSecond"] = ses->Video.GetVideoStreamInfo().FrameRateSeconds();
 		w.SetHeader("Content-Type", "application/json");
 		w.SetStatusAndBody(200, j.dump());
 		break;
 	}
-		// frame? width=1280 height=720 frame=1234 format=png -> returns frame
-		// frame is optional. If omitted, returns the next frame
-		// quality is optional. For jpeg, quality is between 0 and 100. For png, quality is between 0 and 9 (zlib)
+		// frame? frameTimeMicros=1234567 width=1280 height=720 frame=1234 format=png -> returns frame
+		// frameTimeMicros is optional. If omitted, returns the next frame
+		// quality is optional.
+		//   For jpeg, quality is between 0 and 100.
+		//   For png, quality is between 0 and 9 (zlib)
+		//   For imqs, quality of 1 = enable lz4 compression.
+		// If the end of the video has been reached, returns 200, and a body containing the string "EOF"
+		// format is one of png, jpeg, imqs
 	case "frame"_crc32: {
 		auto ses = sessions.GetSession(GetSessionID(r));
 		if (!ses) {
 			w.SetStatusAndBody(phttp::Status410_Gone, "Session expired or invalid");
 			return;
 		}
-		auto width   = r.QueryInt("width");
-		auto height  = r.QueryInt("height");
-		auto format  = r.QueryVal("format");
-		auto quality = r.QueryInt("quality");
+		bool hasMicros = r.QueryVal("frameTimeMicros") != "";
+		auto micros    = r.QueryInt64("frameTimeMicros");
+		auto width     = r.QueryInt("width");
+		auto height    = r.QueryInt("height");
+		auto format    = r.QueryVal("format");
+		auto quality   = r.QueryInt("quality");
 		if (r.QueryVal("quality") == "")
 			quality = -1;
+		if (hasMicros) {
+			auto err = ses->Video.SeekToMicrosecond(micros);
+			if (!err.OK()) {
+				w.SetStatusAndBody(phttp::Status400_Bad_Request, tsf::fmt("Seek to %v microseconds failed: %v", micros, err.Message()));
+				return;
+			}
+		}
 		int   stride = width * 4;
 		void* buf    = imqs_malloc_or_die(height * stride);
-		ses->Video.DecodeFrameRGBA(width, height, buf, stride);
-		EncodeFrame(format, buf, width, height, stride, quality, w);
+		auto  err    = ses->Video.DecodeFrameRGBA(width, height, buf, stride);
+		if (err.OK())
+			EncodeFrame(format, buf, width, height, stride, quality, ses->Video.LastFrameTimeMicrosecond(), w);
+		else if (err == ErrEOF)
+			w.SetStatusAndBody(phttp::Status200_OK, "EOF");
+		else
+			w.SetStatusAndBody(phttp::Status500_Internal_Server_Error, err.Message());
 		free(buf);
 		break;
 	}

@@ -683,7 +683,11 @@ local AI = SharedLibrary {
 local Train = SharedLibrary {
 	Name = "Train",
 	Depends = {
-		winCrt, pal, tsf, Video, gfx, png, lz4, libjpeg_turbo
+		winCrt, pal, tsf, Video, gfx, png, lz4
+	},
+	Libs = {
+		-- This stuff is weird. Gotta do it this way to maintain linux and windows compatibility
+		{ "turbojpeg.lib"; Config = winFilter },
 	},
 	PrecompiledHeader = {
 		Source = "lib/Train/pch.cpp",
