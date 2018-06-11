@@ -5,6 +5,12 @@
 		},
 		{
 			"path": "/home/ben/dev/Annotator/lib/Video"
+		},
+		{
+			"path": "/home/ben/dev/Annotator/app/RoadProcessor"
+		},
+		{
+			"path": "/home/ben/dev/Annotator/lib/gfx"
 		}
 	]
 }

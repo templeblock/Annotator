@@ -1,19 +1,17 @@
 #define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES 1
 #define _CRT_SECURE_NO_WARNINGS 1
 
-#include <xo/xo/xo.h>
 #include <lib/pal/pal.h>
-
-#include <algorithm>
+#include <lib/Video/Video.h>
+#include <lib/gfx/gfx.h>
 
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4503)
 #endif
 #include <nlohmann-json/json.hpp>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 
-#include <lib/Video/Video.h>
-#include <lib/AI/AI.h>
+#include <opencv2/opencv.hpp>
+#include <opencv2/xfeatures2d.hpp>
+
+#include <argparse/argparse.h>

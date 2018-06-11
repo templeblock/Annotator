@@ -30,3 +30,10 @@ sudo apt-get install -y \
 # [hint - try vcpkg]
 # OpenCV must be installed from source, so that you get an up to date version, and the contrib modules
 #vcpkg install opencv[contrib,core,eigen,flann,jpeg,opengl,png,tiff]:x64-windows
+# OK.. I just compiled OpenCV from source -- instructions here: https://docs.opencv.org/trunk/d7/d9f/tutorial_linux_install.html
+# However, you also need to switch to clang.. so:
+# export CC=/usr/bin/clang
+# export CXX=/usr/bin/clang++
+# cmake -D WITH_CUDA=OFF -D OPENCV_EXTRA_MODULES_PATH=/home/ben/dev/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local -D ENABLE_CXX11=ON -D BUILD_LIST=core,features2d,xfeatures2d ..
+# make -j
+# sudo make install

@@ -22,3 +22,6 @@
 [submodule "third_party/minizip"]
 	path = third_party/minizip
 	url = https://github.com/nmoinvaz/minizip.git
+[submodule "third_party/argparse"]
+	path = third_party/argparse
+	url = https://github.com/IMQS/argparse.git

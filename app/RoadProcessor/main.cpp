@@ -1,12 +1,21 @@
 #include "pch.h"
-#include "third_party/xo/templates/xoWinMain.cpp"
 
-void xoMain(xo::SysWnd* wnd) {
-	using namespace imqs;
-	using namespace imqs::anno;
-	VideoFile::Initialize();
-	//AI::Model::Initialize();
+namespace imqs {
+namespace roadproc {
+int Speed(argparse::Args& args);
+}
+} // namespace imqs
 
-	auto root = &wnd->Doc()->Root;
-	root->ParseAppend("Hello!");
+int main(int argc, char** argv) {
+	using namespace imqs::roadproc;
+
+	imqs::video::VideoFile::Initialize();
+
+	argparse::Args args("Usage: RoadProcessor [options] <command>");
+	auto           speed = args.AddCommand("speed <video>", "Compute car speed from interframe differences", Speed);
+	speed->AddSwitch("", "csv", "Write CSV output");
+	speed->AddValue("o", "outfile", "Write output to file", "stdout");
+	if (!args.Parse(argc, (const char**) argv))
+		return 1;
+	return args.ExecCommand();
 }

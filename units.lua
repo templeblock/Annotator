@@ -432,6 +432,7 @@ local opencv = ExternalLibrary {
 		Libs = {
 			{"opencv_core341d.lib", "opencv_features2d341d.lib", "opencv_imgproc341d.lib"; Config = winDebugFilter },
 			{"opencv_core341.lib", "opencv_features2d341.lib", "opencv_imgproc341.lib"; Config = winReleaseFilter },
+			{"opencv_core", "opencv_features2d", "opencv_xfeatures2d", "opencv_imgproc"; Config = linuxFilter },
 		},
 	},
 }
@@ -728,7 +729,7 @@ local Labeler = Program {
 		winCrt, xo, ffmpeg, Train, Video, pal, tsf, png, 
 	},
 	Libs = { 
-		{ "m", "stdc++"; Config = "linux-*" },
+		{ "m", "stdc++"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/Labeler/pch.cpp",
@@ -747,13 +748,13 @@ local Labeler = Program {
 local RoadProcessor = Program {
 	Name = "RoadProcessor",
 	Depends = {
-		winCrt, xo, ffmpeg, pal, tsf, Video, AI, cntk
+		winCrt, Video, gfx, opencv, ffmpeg, pal, tsf,
 	},
 	--Env = {
 	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	--},
 	Libs = { 
-		{ "m", "stdc++"; Config = "linux-*" },
+		{ "rt", "m", "stdc++"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/RoadProcessor/pch.cpp",
@@ -778,7 +779,7 @@ local CameraCalibrator = Program {
 		PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	},
 	Libs = { 
-		{ "m", "stdc++"; Config = "linux-*" },
+		{ "m", "stdc++"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/CameraCalibrator/pch.cpp",
