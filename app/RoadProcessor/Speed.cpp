@@ -122,12 +122,7 @@ enum class SpeedOutputMode {
 	JSON,
 };
 
-static Error DoSpeed(string videoFile, SpeedOutputMode outputMode, string outputFile) {
-	video::VideoFile video;
-	auto             err = video.OpenFile(videoFile);
-	if (!err.OK())
-		return err;
-
+static Error DoSpeed(vector<string> videoFiles, SpeedOutputMode outputMode, string outputFile) {
 	FILE* outf = stdout;
 	if (outputFile != "stdout") {
 		outf = fopen(outputFile.c_str(), "w");
@@ -135,83 +130,109 @@ static Error DoSpeed(string videoFile, SpeedOutputMode outputMode, string output
 			return Error::Fmt("Failed to open output file '%v'", outputFile);
 	}
 
-	// We only monitor a cropped region of the image:
-	// +----------+
-	// |          |
-	// |   +--+   |
-	// |   |xx|   |
-	// +---+--+---+
-	// That region (indicated by xx) has the best speed-related movement inside it
+	if (outputMode == SpeedOutputMode::CSV)
+		tsf::print(outf, "time,speed\n");
 
-	gfx::Rect32 crop;
-	crop.x1 = video.Width() / 4;
-	crop.x2 = video.Width() * 3 / 4;
-	crop.y1 = video.Height() / 3;
-	crop.y2 = video.Height();
-
-	//video.SeekToMicrosecond(60 * 1000000);
-	auto         info   = video.GetVideoStreamInfo();
-	int          width  = info.Width;
-	int          height = info.Height;
-	int          stride = width * 4;
-	void*        buf    = imqs_malloc_or_die(height * stride);
-	cv::Mat      mTemp;
-	cv::Mat      mPrev;
-	cv::Mat      mNext;
-	const size_t nrecent   = 5;
-	double       recent[5] = {0};
-	size_t       iFrame    = 0;
+	// Before we start this potentially lengthy process, make sure we can open every one of the video files specified.
+	// Also, count their total time.
+	double totalVideoSeconds = 0;
+	for (const auto& v : videoFiles) {
+		video::VideoFile video;
+		auto             err = video.OpenFile(v);
+		if (!err.OK())
+			return err;
+		totalVideoSeconds += video.GetVideoStreamInfo().DurationSeconds();
+	}
 
 	// speeds for every frame except for frame 0, as [time,speed]
 	vector<pair<double, double>> speeds;
 
-	auto startTime = time::Now();
-	if (outputMode == SpeedOutputMode::CSV)
-		tsf::print(outf, "time,speed\n");
-	while (err.OK()) {
-		err = video.DecodeFrameRGBA(width, height, buf, stride);
-		if (err == ErrEOF) {
-			err = Error();
-			break;
-		} else if (!err.OK()) {
-			break;
-		}
-		gfx::Image fullFrame(ImageFormat::RGBA, Image::ConstructWindow, stride, buf, width, height);
-		gfx::Image cropImg = fullFrame.Window(crop.x1, crop.y1, crop.Width(), crop.Height());
-		RGBAToMat(cropImg.Width, cropImg.Height, cropImg.Stride, cropImg.Data, mTemp);
-		cv::cvtColor(mTemp, mNext, cv::COLOR_RGB2GRAY);
-		if (iFrame >= 1) {
-			// we need at least 2 frames
-			double speed   = SpeedBetweenFramePair(mPrev, mNext);
-			bool   tooFast = speed == TooFast;
-			if (!tooFast && speed == 0) {
-				// set speed to some small epsilon value, when no movement detected, so that we don't end up confusing
-				// "no data" with "stopped";
-				speed = 0.01;
-			}
-			if (tooFast) {
-				//speed = Median(nrecent, recent);
-				speed = 0;
-			} else {
-				memmove(recent, recent + 1, sizeof(recent[0]) * (nrecent - 1));
-				recent[nrecent - 1] = speed;
-			}
-			speeds.push_back({video.LastFrameTimeSeconds(), speed});
-			if (outputMode == SpeedOutputMode::CSV)
-				tsf::print("%.2f,%.3f\n", video.LastFrameTimeSeconds(), speed);
+	auto   startTime       = time::Now();
+	double videoTimeOffset = 0; // accumulating time counter, so that we can merge multiple videos into one timelime
 
-			if (iFrame % 10 == 0 && outputFile != "stdout") {
-				double relProcessingSpeed = video.LastFrameTimeSeconds() / (time::Now() - startTime).Seconds();
-				double remain             = (video.GetVideoStreamInfo().DurationSeconds() - video.LastFrameTimeSeconds()) / relProcessingSpeed;
-				int    min                = (int) (remain / 60);
-				int    sec                = (int) (remain - (min * 60));
-				tsf::print("\rTime remaining: %v:%02d", min, sec);
-				fflush(stdout);
+	Error err;
+
+	for (size_t ivideo = 0; ivideo < videoFiles.size(); ivideo++) {
+		video::VideoFile video;
+		err = video.OpenFile(videoFiles[ivideo]);
+		if (!err.OK())
+			return err;
+
+		// We only monitor a cropped region of the image:
+		// +----------+
+		// |          |
+		// |   +--+   |
+		// |   |xx|   |
+		// +---+--+---+
+		// That region (indicated by xx) has the best speed-related movement inside it
+
+		gfx::Rect32 crop;
+		crop.x1 = video.Width() / 4;
+		crop.x2 = video.Width() * 3 / 4;
+		crop.y1 = video.Height() / 3;
+		crop.y2 = video.Height();
+
+		//video.SeekToMicrosecond(60 * 1000000);
+		auto         info   = video.GetVideoStreamInfo();
+		int          width  = info.Width;
+		int          height = info.Height;
+		int          stride = width * 4;
+		void*        buf    = imqs_malloc_or_die(height * stride);
+		cv::Mat      mTemp;
+		cv::Mat      mPrev;
+		cv::Mat      mNext;
+		const size_t nrecent   = 5;
+		double       recent[5] = {0};
+		size_t       iFrame    = 0;
+
+		while (err.OK()) {
+			err = video.DecodeFrameRGBA(width, height, buf, stride);
+			if (err == ErrEOF) {
+				err = Error();
+				break;
+			} else if (!err.OK()) {
+				break;
 			}
+			gfx::Image fullFrame(ImageFormat::RGBA, Image::ConstructWindow, stride, buf, width, height);
+			gfx::Image cropImg = fullFrame.Window(crop.x1, crop.y1, crop.Width(), crop.Height());
+			RGBAToMat(cropImg.Width, cropImg.Height, cropImg.Stride, cropImg.Data, mTemp);
+			cv::cvtColor(mTemp, mNext, cv::COLOR_RGB2GRAY);
+			if (iFrame >= 1) {
+				// we need at least 2 frames
+				double frameTime = videoTimeOffset + video.LastFrameTimeSeconds();
+				double speed     = SpeedBetweenFramePair(mPrev, mNext);
+				bool   tooFast   = speed == TooFast;
+				if (!tooFast && speed == 0) {
+					// set speed to some small epsilon value, when no movement detected, so that we don't end up confusing
+					// "no data" with "stopped";
+					speed = 0.01;
+				}
+				if (tooFast) {
+					//speed = Median(nrecent, recent);
+					speed = 0;
+				} else {
+					memmove(recent, recent + 1, sizeof(recent[0]) * (nrecent - 1));
+					recent[nrecent - 1] = speed;
+				}
+				speeds.push_back({frameTime, speed});
+				if (outputMode == SpeedOutputMode::CSV)
+					tsf::print("%.2f,%.3f\n", frameTime, speed);
+
+				if (iFrame % 10 == 0 && outputFile != "stdout") {
+					double relProcessingSpeed = frameTime / (time::Now() - startTime).Seconds();
+					double remain             = (totalVideoSeconds - frameTime) / relProcessingSpeed;
+					int    min                = (int) (remain / 60);
+					int    sec                = (int) (remain - (min * 60));
+					tsf::print("\rTime remaining: %v:%02d", min, sec);
+					fflush(stdout);
+				}
+			}
+			std::swap(mPrev, mNext);
+			iFrame++;
 		}
-		std::swap(mPrev, mNext);
-		iFrame++;
-	}
+		videoTimeOffset = video.LastFrameTimeSeconds();
+		free(buf);
+	} // for(ivideo)
 
 	if (outputMode == SpeedOutputMode::JSON) {
 		nlohmann::json j;
@@ -225,15 +246,14 @@ static Error DoSpeed(string videoFile, SpeedOutputMode outputMode, string output
 		fwrite(js.c_str(), js.size(), 1, outf);
 	}
 
-	free(buf);
 	fclose(outf);
 
 	return err;
 }
 
 int Speed(argparse::Args& args) {
-	auto videoFile = args.Params[0];
-	auto err       = DoSpeed(videoFile, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
+	auto videoFiles = strings::Split(args.Params[0], ',');
+	auto err        = DoSpeed(videoFiles, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
 	if (!err.OK()) {
 		tsf::print("Error: %v\n", err.Message());
 		return 1;
