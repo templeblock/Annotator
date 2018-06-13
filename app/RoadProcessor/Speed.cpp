@@ -216,7 +216,7 @@ static Error DoSpeed(vector<string> videoFiles, SpeedOutputMode outputMode, stri
 				}
 				speeds.push_back({frameTime, speed});
 				if (outputMode == SpeedOutputMode::CSV)
-					tsf::print("%.2f,%.3f\n", frameTime, speed);
+					tsf::print("%.3f,%.3f\n", frameTime, speed);
 
 				if (iFrame % 10 == 0 && outputFile != "stdout") {
 					double relProcessingSpeed = frameTime / (time::Now() - startTime).Seconds();
@@ -230,6 +230,8 @@ static Error DoSpeed(vector<string> videoFiles, SpeedOutputMode outputMode, stri
 			std::swap(mPrev, mNext);
 			iFrame++;
 		}
+		// You might be tempted to add one frame worth of delay here to videoTimeOffset, but empirical measurements on our
+		// Fuji X-T2 show that this formulation here is correct.
 		videoTimeOffset += video.LastFrameTimeSeconds();
 		free(buf);
 	} // for(ivideo)

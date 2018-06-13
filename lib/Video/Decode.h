@@ -11,7 +11,7 @@ struct IMQS_VIDEO_API VideoStreamInfo {
 	int        Height = 0;
 
 	double DurationSeconds() const;
-	double FrameRateSeconds() const;
+	double FrameRateSeconds() const; // eg 29.97, or 24, etc
 };
 
 class IMQS_VIDEO_API VideoFile {
