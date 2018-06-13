@@ -12,5 +12,10 @@
 		{
 			"path": "/home/ben/dev/Annotator/lib/gfx"
 		}
-	]
+	],
+	"settings": {
+		"files.associations": {
+			"typeindex": "cpp"
+		}
+	}
 }

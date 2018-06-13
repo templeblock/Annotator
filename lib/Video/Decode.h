@@ -31,6 +31,7 @@ public:
 	Error           SeekToPreviousFrame();
 	Error           SeekToFrame(int64_t frame);
 	Error           SeekToFraction(double fraction_0_to_1);
+	Error           SeekToSecond(double second);
 	Error           SeekToMicrosecond(int64_t microsecond);
 	double          LastFrameTimeSeconds() const;
 	int64_t         LastFrameTimeMicrosecond() const;

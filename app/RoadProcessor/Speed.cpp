@@ -230,7 +230,7 @@ static Error DoSpeed(vector<string> videoFiles, SpeedOutputMode outputMode, stri
 			std::swap(mPrev, mNext);
 			iFrame++;
 		}
-		videoTimeOffset = video.LastFrameTimeSeconds();
+		videoTimeOffset += video.LastFrameTimeSeconds();
 		free(buf);
 	} // for(ivideo)
 
@@ -255,6 +255,9 @@ int Speed(argparse::Args& args) {
 	auto videoFiles = strings::Split(args.Params[0], ',');
 	auto err        = DoSpeed(videoFiles, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
 	if (!err.OK()) {
+		// When trying to use CUDA, stdout seems to be dead at this point. Don't understand it.
+		// But that's why we also output to stderr.
+		tsf::print(stderr, "Error: %v\n", err.Message());
 		tsf::print("Error: %v\n", err.Message());
 		return 1;
 	}

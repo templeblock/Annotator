@@ -135,6 +135,10 @@ Error VideoFile::SeekToFraction(double fraction_0_to_1) {
 	return SeekToMicrosecond((int64_t)(seconds * 1000000.0));
 }
 
+Error VideoFile::SeekToSecond(double second) {
+	return SeekToMicrosecond(second * 1000000.0);
+}
+
 Error VideoFile::SeekToMicrosecond(int64_t microsecond) {
 	double  ts  = av_q2d(VideoStream->time_base);
 	double  t   = ((double) microsecond / 1000000.0) / ts;
@@ -297,6 +301,16 @@ Error VideoFile::OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, in
 	dec = avcodec_find_decoder(st->codecpar->codec_id);
 	if (!dec)
 		return Error::Fmt("Failed to find %s codec", av_get_media_type_string(type));
+
+	// Dies during avcodec_send_packet with "av_bsf_receive_packet failed"
+	// I cannot find any information about this on the internet.
+
+	//if (strcmp(dec->name, "h264") == 0) {
+	//	AVCodec* decHW = avcodec_find_decoder_by_name("h264_cuvid");
+	//	if (decHW)
+	//		dec = decHW;
+	//}
+	//tsf::print("Using decoder: %v (%v)\n", dec->name, dec->long_name);
 
 	// Allocate a codec context for the decoder
 	dec_ctx = avcodec_alloc_context3(dec);

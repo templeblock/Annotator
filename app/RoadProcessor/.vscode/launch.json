@@ -11,7 +11,8 @@
             "program": "${workspaceFolder}/../../t2-output/linux-clang-debug-default/RoadProcessor",
             "args": [
                 "speed",
-                "/home/ben/win/c/mldata/StellenboschFuji/4K-F2/DSCF1008.MOV"
+                "--csv",
+                "/home/ben/mldata/DSCF3022.MOV"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
