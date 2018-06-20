@@ -136,7 +136,7 @@ Error VideoFile::SeekToFraction(double fraction_0_to_1) {
 }
 
 Error VideoFile::SeekToSecond(double second) {
-	return SeekToMicrosecond(second * 1000000.0);
+	return SeekToMicrosecond((int64_t)(second * 1000000.0));
 }
 
 Error VideoFile::SeekToMicrosecond(int64_t microsecond) {

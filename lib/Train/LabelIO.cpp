@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "LabelIO.h"
 
+using namespace std;
 using json = nlohmann::json;
 
 // This seems kinda neat, but I don't see a benefit here beyond plain old To/From methods
@@ -65,18 +66,77 @@ void Rect::ToJson(nlohmann::json& j) const {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+Error ClassSeverity::FromJson(const nlohmann::json& j) {
+	if (!j.is_array() || j.size() != 2)
+		return Error("ClassSeverity pair is not an array of two elements");
+	Class    = j[0];
+	Severity = j[1];
+	return Error();
+}
+
+void ClassSeverity::ToJson(nlohmann::json& j) const {
+	j.push_back(Class);
+	j.push_back(Severity);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 Error Label::FromJson(const nlohmann::json& j) {
-	Class   = j["class"];
-	Labeler = j["labeler"];
+	Classes.clear();
+	for (const auto& jc : j["classes"]) {
+		Classes.push_back({});
+		auto err = Classes.back().FromJson(jc);
+		if (!err.OK())
+			return err;
+	}
+	Author = j["labeler"];
 	Rect.FromJson(j["rect"]);
 	return Error();
 }
 
 void Label::ToJson(nlohmann::json& j) const {
-	j["class"]    = Class;
-	j["labeler"]  = Labeler;
+	nlohmann::json jclasses;
+	for (const auto& c : Classes) {
+		nlohmann::json jc;
+		c.ToJson(jc);
+		jclasses.push_back(std::move(jc));
+	}
+	j["classes"]  = std::move(jclasses);
+	j["labeler"]  = Author;
 	j["edittime"] = EditTime.Unix();
 	Rect.ToJson(j["rect"]);
+}
+
+bool Label::HasClass(const std::string& _class) const {
+	for (const auto& c : Classes) {
+		if (c.Class == _class)
+			return true;
+	}
+	return false;
+}
+
+int Label::Severity(const std::string& _class) const {
+	for (const auto& c : Classes) {
+		if (c.Class == _class)
+			return c.Severity;
+	}
+	return -1;
+}
+
+void Label::RemoveClass(const std::string& _class) {
+	for (size_t i = 0; i < Classes.size(); i++) {
+		if (Classes[i].Class == _class) {
+			Classes.erase(Classes.begin() + i);
+			return;
+		}
+	}
+}
+
+void Label::SetClass(const std::string& _class, int severity) {
+	RemoveClass(_class);
+	Classes.emplace_back(_class, severity);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -176,8 +236,10 @@ void VideoLabels::RemoveEmptyFrames() {
 ohash::map<std::string, int> VideoLabels::CategorizedLabelCount() const {
 	ohash::map<std::string, int> counts;
 	for (const auto& f : Frames) {
-		for (const auto& lab : f.Labels)
-			counts[lab.Class]++;
+		for (const auto& lab : f.Labels) {
+			for (const auto& c : lab.Classes)
+				counts[c.Class]++;
+		}
 	}
 	return counts;
 }
@@ -185,8 +247,10 @@ ohash::map<std::string, int> VideoLabels::CategorizedLabelCount() const {
 std::vector<std::string> VideoLabels::Classes() const {
 	ohash::set<std::string> cset;
 	for (const auto& f : Frames) {
-		for (const auto& lab : f.Labels)
-			cset.insert(lab.Class);
+		for (const auto& lab : f.Labels) {
+			for (const auto& c : lab.Classes)
+				cset.insert(c.Class);
+		}
 	}
 	std::vector<std::string> classes;
 	for (const auto& c : cset)
@@ -310,6 +374,25 @@ IMQS_TRAIN_API int MergeVideoLabels(const VideoLabels& src, VideoLabels& dst) {
 		}
 	}
 	return nnew;
+}
+
+IMQS_TRAIN_API Error ExportClassTaxonomy(std::string filename, std::vector<LabelClass> classes) {
+	json   root;
+	string lastGroup = "not a group";
+	for (auto c : classes) {
+		if (c.Group == "")
+			continue;
+		if (c.Group != lastGroup) {
+			root[c.Group] = json();
+			lastGroup     = c.Group;
+		}
+		json item = {
+		    {"name", c.Class},
+		    {"hasSeverity", c.HasSeverity},
+		};
+		root[c.Group].push_back(item);
+	}
+	return os::WriteWholeFile(filename, root.dump(4));
 }
 
 } // namespace train

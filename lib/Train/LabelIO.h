@@ -45,16 +45,33 @@ struct IMQS_TRAIN_API Rect {
 	void  ToJson(nlohmann::json& j) const;
 };
 
-// A single labeled region inside an image
-class IMQS_TRAIN_API Label {
+// A class and severity pair
+class IMQS_TRAIN_API ClassSeverity {
 public:
-	Rect        Rect;
 	std::string Class;
-	std::string Labeler;  // Person who created this label
-	time::Time  EditTime; // Time when this label was created
+	int         Severity = 0; // 1..5, for classes that have severity defined
+
+	ClassSeverity() {}
+	ClassSeverity(const std::string& c, int s) : Class(c), Severity(s) {}
 
 	Error FromJson(const nlohmann::json& j);
 	void  ToJson(nlohmann::json& j) const;
+};
+
+// A single labeled region inside an image
+class IMQS_TRAIN_API Label {
+public:
+	Rect                       Rect;
+	std::vector<ClassSeverity> Classes;
+	std::string                Author;   // Person who last edited this label
+	time::Time                 EditTime; // Time when this label was created
+
+	Error FromJson(const nlohmann::json& j);
+	void  ToJson(nlohmann::json& j) const;
+	bool  HasClass(const std::string& _class) const;
+	int   Severity(const std::string& _class) const; // Returns severity, or -1 if class does not exist
+	void  RemoveClass(const std::string& _class);
+	void  SetClass(const std::string& _class, int severity);
 };
 
 // Set of labels for an image (image is usually a single frame from a video)
@@ -94,10 +111,12 @@ public:
 class IMQS_TRAIN_API LabelClass {
 public:
 	int         Key = 0; // Shortcut key (Unicode character)
+	std::string Group;   // Only one label allowed per group
 	std::string Class;   // Class label
+	bool        HasSeverity = false;
 
 	LabelClass() {}
-	LabelClass(int key, const std::string& _class) : Key(key), Class(_class) {}
+	LabelClass(bool hasSeverity, int key, std::string group, std::string _class) : HasSeverity(hasSeverity), Key(key), Group(group), Class(_class) {}
 
 	std::string KeyStr() const;
 };
@@ -108,6 +127,7 @@ IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& lab
 IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, const VideoLabels& labels);
 IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);
 IMQS_TRAIN_API int   MergeVideoLabels(const VideoLabels& src, VideoLabels& dst); // Returns number of new frames
+IMQS_TRAIN_API Error ExportClassTaxonomy(std::string filename, std::vector<LabelClass> classes);
 
 } // namespace train
 } // namespace imqs

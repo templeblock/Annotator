@@ -82,8 +82,9 @@ Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t
 
 		for (const auto& patch : labels.Labels) {
 			IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
-			auto    patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
-			uint8_t klass    = labelToIndex.get(patch.Class);
+			auto patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
+			//uint8_t klass    = labelToIndex.get(patch.Class);
+			uint8_t klass = 0; // BROKEN by introduction of multiple classes per label!
 			WriteRawCifar10(patchTex, klass, buf);
 			auto err = f.Write(buf, bufSize);
 			if (!err.OK())
@@ -108,7 +109,8 @@ Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t
 				filetype = gfx::ImageType::Jpeg;
 				ext      = ".jpeg";
 			}
-			auto classDir = dir + "/" + strings::Replace(patch.Class, " ", "_");
+			//auto classDir = dir + "/" + strings::Replace(patch.Class, " ", "_");
+			auto classDir = dir + "/all";
 			auto filename = classDir + "/" + tsf::fmt("%09d-%04d-%04d-%04d-%04d.%v", frameTime, patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height(), ext);
 			auto err      = SaveImageFile(imgIO, patchTex, filetype, filename);
 			if (!err.OK()) {
@@ -286,7 +288,9 @@ IMQS_TRAIN_API Error ExportLabeledBatch(bool channelsFirst, bool compress, const
 		uint8_t* dstBuf = (uint8_t*) dstImage.data() + i * dstImageSize;
 		ConvertRGBAtoRGB(channelsFirst, wnd.Stride, wnd.Data, dstStride, dstBuf, wnd.Width, wnd.Height);
 
-		dstLabelsPtr[i] = classToIndex.get(label.Class);
+		// BROKEN by move to multiple classes per patch
+		IMQS_ASSERT(false);
+		//dstLabelsPtr[i] = classToIndex.get(label.Class);
 	}
 
 	// append labels to images, so it's one contiguous block of bytes

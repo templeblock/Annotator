@@ -20,9 +20,12 @@ void xoMain(xo::SysWnd* wnd) {
 
 	wnd->Doc()->ClassParse("font-medium", "font-size: 14ep");
 	wnd->Doc()->ClassParse("shortcut", "font-size: 15ep; color: #000; width: 1em");
+	wnd->Doc()->ClassParse("severity", "font-size: 20ep; color: #000; width: 1em; font-weight: bold");
+	wnd->Doc()->ClassParse("label-group", "padding: 3ep; margin: 2ep 0ep 2ep 0ep; border: 1px #ddd; border-radius: 4ep; background: #f0f0f0");
+	wnd->Doc()->ClassParse("active-label", "font-weight: bold");
 
 	svg::LoadAll(wnd->Doc());
-	wnd->SetPosition(xo::Box(0, 0, 1600, 1020), xo::SysWnd::SetPosition_Size);
+	//wnd->SetPosition(xo::Box(0, 0, 1600, 1020), xo::SysWnd::SetPosition_Size);
 
 	auto ui = new UI(&wnd->Doc()->Root);
 
@@ -31,18 +34,46 @@ void xoMain(xo::SysWnd* wnd) {
 	ui->ModelLoadErr = err.Message();
 #endif
 
-	ui->Classes.push_back({'U', "unlabeled"}); // first class must be unlabeled - as embodied by UI::UnlabeledClass
-	ui->Classes.push_back({'R', "normal road"});
-	ui->Classes.push_back({'C', "crocodile cracks"});
-	ui->Classes.push_back({'B', "bricks"});
-	ui->Classes.push_back({'P', "pothole"});
-	ui->Classes.push_back({'S', "straight crack"});
-	ui->Classes.push_back({'M', "manhole cover"});
-	ui->Classes.push_back({'X', "pockmarks"});
-	ui->Classes.push_back({'E', "road edge"});
+	// first class must be unlabeled - as embodied by UI::UnlabeledClass
+	ui->Classes.push_back({false, 'U', "", "unlabeled"});
 
-	ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
-	//ui->VideoFilename = "C:\\mldata\\StellenboschFuji\\4K-F2\\DSCF1008.MOV";
+	// type of surface
+	ui->Classes.push_back({false, 'A', "type", "tar"});
+	ui->Classes.push_back({false, 'D', "type", "dirt"});
+	ui->Classes.push_back({false, 'Z', "type", "curb"});
+	ui->Classes.push_back({false, 'E', "type", "edge"});
+	ui->Classes.push_back({false, 'W', "type", "grass"});
+	ui->Classes.push_back({false, 'V', "type", "vehicle"});
+	ui->Classes.push_back({false, 'M', "type", "manhole"});
+
+	// surface artifacts
+	ui->Classes.push_back({false, 'N', "defect", "nothing"});
+	ui->Classes.push_back({true, 'F', "defect", "surf. failure"}); // degree only really starts at 3. 1 is probably too small to see.
+	ui->Classes.push_back({true, 'S', "defect", "surf. crack"});   // "random" other cracks. 1 is probably too small to see.
+	ui->Classes.push_back({true, 'L', "defect", "long. crack"});   // crack direction is same as road direction
+	ui->Classes.push_back({true, 'T', "defect", "trans. crack"});  // crack direction is across road
+	ui->Classes.push_back({true, 'B', "defect", "block crack"});   // blocks (bigger than crocodile, rectangular)
+	ui->Classes.push_back({true, 'C', "defect", "croc. crack"});   // crocodile
+	ui->Classes.push_back({true, 'G', "defect", "patching"});      // patching
+	ui->Classes.push_back({true, 'H', "defect", "pothole"});       // pothole
+	ui->Classes.push_back({false, 'Y', "defect", "cut"});          // man-made cutting
+
+	// aggregate loss
+	ui->Classes.push_back({true, 'I', "agg. loss", "agg. loss"});
+
+	// binder
+	ui->Classes.push_back({true, 'J', "binder", "binder"});
+
+	// bleeding
+	ui->Classes.push_back({true, 'K', "bleeding", "bleeding"});
+
+	// pumping
+	ui->Classes.push_back({true, 'P', "pumping", "pumping"});
+
+	imqs::train::ExportClassTaxonomy("c:\\mldata\\taxonomy.json", ui->Classes);
+
+	//ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
+	ui->VideoFilename = "C:\\mldata\\DSCF3022.MOV";
 	if (!ui->OpenVideo())
 		ui->Render();
 }

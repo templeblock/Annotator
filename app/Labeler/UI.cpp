@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "UI.h"
 
+using namespace std;
 using namespace imqs::train;
 
 namespace imqs {
@@ -80,19 +81,33 @@ void UI::Render() {
 	auto ui = this;
 	Root->Clear();
 
-	auto   videoArea = Root->ParseAppendNode("<div style='break:after; box-sizing: margin; width: 100%; margin: 10ep'></div>");
+	auto   videoArea = Root->ParseAppendNode("<div style='break:after; box-sizing: margin; width: 100%; margin: 2ep'></div>");
 	double aspect    = 1920.0 / 1080.0;
 	//double videoWidth = 1540;
-	VideoCanvasWidth  = 1540;
+	VideoCanvasWidth  = 1550;
 	VideoCanvasHeight = (int) (VideoCanvasWidth / aspect);
 
 	VideoCanvas = videoArea->AddCanvas();
 	VideoCanvas->StyleParse("hcenter: hcenter; border: 1px #888; border-radius: 1.5ep;");
 	VideoCanvas->StyleParsef("width: %dpx; height: %dpx", VideoCanvasWidth, VideoCanvasHeight);
-	VideoCanvas->OnMouseMove([ui](xo::Event& ev) { ui->OnPaintLabel(ev); });
-	VideoCanvas->OnMouseDown([ui](xo::Event& ev) { ui->OnPaintLabel(ev); });
+	VideoCanvas->OnMouseMove([ui](xo::Event& ev) {
+		if (ev.PointsRel[0].distance(ui->MouseDown) > 20) {
+			// only start drag after cursor has moved some distance, to prevent false twitchy positives
+			ui->IsMouseDragging = true;
+		}
+		if (ui->IsMouseDragging)
+			ui->OnPaintLabel(ev);
+	});
+	VideoCanvas->OnMouseDown([ui](xo::Event& ev) {
+		ui->MouseDown       = ev.PointsRel[0];
+		ui->IsMouseDragging = false;
+		ui->OnPaintLabel(ev);
+	});
+	VideoCanvas->OnMouseUp([ui](xo::Event& ev) {
+		ui->IsMouseDragging = false;
+	});
 
-	auto fileArea = videoArea->ParseAppendNode("<div style='break:after; margin: 4ep'></div>");
+	auto fileArea = videoArea->ParseAppendNode("<div style='break:after; margin: 4ep; margin-bottom: 0ep'></div>");
 	fileArea->StyleParsef("hcenter: hcenter; width: %vpx", VideoCanvasWidth);
 	auto fileName  = fileArea->ParseAppendNode("<div class='font-medium' style='cursor: hand'></div>");
 	auto exportBtn = xo::controls::Button::NewText(fileArea, "Export");
@@ -180,19 +195,8 @@ void UI::Render() {
 		ui->Render();
 	});
 
-	auto        labelGroup      = bottomControlBoxes->ParseAppendNode("<div style='padding-left: 20ep; color: #333'></div>");
-	std::string shortcutsTop    = "";
-	std::string shortcutsBottom = "";
-	auto        addShortcut     = [](std::string& shortcuts, const char* key, const char* title) {
-        shortcuts += tsf::fmt("<div style='width: 10em'><span class='shortcut'>%v</span>%v</div>", key, title);
-	};
-	size_t half = Classes.size() / 2;
-	for (size_t i = 0; i < half; i++)
-		addShortcut(shortcutsTop, Classes[i].KeyStr().c_str(), Classes[i].Class.c_str());
-	for (size_t i = half; i < Classes.size(); i++)
-		addShortcut(shortcutsBottom, Classes[i].KeyStr().c_str(), Classes[i].Class.c_str());
-	labelGroup->ParseAppend("<div style='break:after'>" + shortcutsTop + "</div>");
-	labelGroup->ParseAppend("<div style='break:after'>" + shortcutsBottom + "</div>");
+	LabelBox = bottomControlBoxes->ParseAppendNode("<div style='padding-left: 20ep; color: #333'></div>");
+	RenderLabelUI();
 
 	// Setup once-off things
 	if (OnDestroyEv == 0) {
@@ -205,6 +209,33 @@ void UI::Render() {
 	}
 
 	DrawCurrentFrame();
+}
+
+void UI::RenderLabelUI() {
+	if (!LabelBox)
+		return;
+	LabelBox->Clear();
+	int labelRows = 3;
+
+	for (auto group : ClassGroups()) {
+		// compute number of columns necessary for this group, and then size the width
+		// of the container so that the children will wrap around appropriately
+		int  labelCols = (int) ceil(group.size() / (double) labelRows);
+		auto makeLabel = [](string key, string title, bool isActive) -> string {
+			// the label with (7.5) must be slightly less than the column multiplier, down below (8)
+			const char* active = isActive ? "class='active-label'" : "";
+			return tsf::fmt("<div style='width: 7.2em' %v><span class='shortcut'>%v</span>%v</div>", active, key, title);
+		};
+		string labelSrc = tsf::fmt("<div style='width: %vem' class='label-group'>", labelCols * 7.4);
+		for (size_t i = 0; i < group.size(); i++) {
+			bool active = CurrentAssignClass.Class == group[i].Class;
+			labelSrc += makeLabel(group[i].KeyStr(), group[i].Class, active);
+		}
+		labelSrc += "</div>";
+		LabelBox->ParseAppend(labelSrc);
+	}
+	string severity = tsf::fmt("<div style='margin-left: 10ep'>Severity <span class='severity'>%v</span></div>", CurrentAssignSeverity);
+	LabelBox->ParseAppend(severity);
 }
 
 void UI::RenderTimeSlider(bool first) {
@@ -418,31 +449,41 @@ void UI::DrawLabelBoxes() {
 			float centx = 0.5f * (rscaled.Left + rscaled.Right);
 			float centy = 0.5f * (rscaled.Top + rscaled.Bottom);
 			cx->StrokeRect(rscaled, xo::Color::RGBA(200, 0, 0, 150), 1);
-			size_t      k         = FindClass(label.Class);
 			float       fontSize  = 24;
 			auto        color     = xo::Color(180, 0, 0, 180);
 			const char* font      = "Segoe UI Bold";
 			bool        isLabeled = true;
-			if (k == -1) {
-				isLabeled        = false;
-				k                = UnlabeledClass;
-				fontSize         = 14;
-				color            = xo::Color(200, 0, 0, 100);
-				const char* font = "Segoe UI";
-			}
-			char labelStr[2];
-			labelStr[0] = (char) Classes[k].Key;
-			labelStr[1] = 0;
-			float tx    = (float) (centx - fontSize / 2);
-			float ty    = (float) (centy + fontSize / 2);
-			if (isLabeled) {
-				for (float dx = -1; dx <= 1; dx++) {
-					for (float dy = -1; dy <= 1; dy++) {
-						cx->Text(tx + dx, ty + dy, 0, fontSize, xo::Color(255, 255, 255, 150), font, labelStr);
+			string      labelStr;
+			if (label.Classes.size() == 0) {
+				labelStr  = "u";
+				isLabeled = false;
+				fontSize  = 14;
+				color     = xo::Color(200, 0, 0, 150);
+			} else {
+				for (const auto& c : label.Classes) {
+					auto k = FindClass(c.Class);
+					if (!k) {
+						labelStr += "unknown class: " + c.Class;
+					} else {
+						if (k->HasSeverity)
+							labelStr += tsf::fmt("%s%c ", ShortcutKeyForClass(c.Class), '0' + c.Severity);
+						else
+							labelStr += tsf::fmt("%s ", ShortcutKeyForClass(c.Class));
 					}
 				}
 			}
-			cx->Text(tx, ty, 0, fontSize, color, font, labelStr);
+			if (strings::EndsWith(labelStr, " "))
+				labelStr = labelStr.substr(0, labelStr.size() - 1);
+			float tx = (float) (centx - (float) labelStr.size() * (float) fontSize / 3.5f);
+			float ty = (float) (centy + fontSize / 2);
+			if (isLabeled) {
+				for (float dx = -1; dx <= 1; dx++) {
+					for (float dy = -1; dy <= 1; dy++) {
+						cx->Text(tx + dx, ty + dy, 0, fontSize, xo::Color(255, 255, 255, 150), font, labelStr.c_str());
+					}
+				}
+			}
+			cx->Text(tx, ty, 0, fontSize, color, font, labelStr.c_str());
 		}
 	}
 
@@ -460,10 +501,18 @@ void UI::OnKeyChar(xo::Event& ev) {
 	case '.':
 		NextFrame();
 		break;
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+		CurrentAssignSeverity = ev.KeyChar - '0';
+		RenderLabelUI();
+		break;
 	}
 	for (auto c : Classes) {
 		if (toupper(c.Key) == toupper(ev.KeyChar)) {
-			AssignLabel(c);
+			SetCurrentLabel(c);
 			break;
 		}
 	}
@@ -522,33 +571,54 @@ void UI::OnLoadSaveTimer() {
 	//StatusLabel->SetText(tsf::fmt("%v labels", Labels.TotalLabelCount()));
 }
 
-void UI::AssignLabel(LabelClass c) {
+void UI::SetCurrentLabel(LabelClass c) {
 	ActionState        = ActionStates::AssignLabel;
 	CurrentAssignClass = c;
+	RenderLabelUI();
 }
 
 void UI::OnPaintLabel(xo::Event& ev) {
 	if (!IsModeLabel)
 		return;
 	if (ActionState == ActionStates::AssignLabel && (ev.Type == xo::EventMouseDown || ev.IsPressed(xo::Button::MouseLeft))) {
-		auto vpos  = CanvasToVideoPos((int) ev.PointsRel[0].x, (int) ev.PointsRel[0].y);
-		auto gpos  = VideoPosToGrid(vpos.X, vpos.Y);
-		auto time  = Video.LastFrameTimeMicrosecond();
-		auto frame = Labels.FindOrInsertFrame(time);
-		if (CurrentAssignClass.Class == Classes[UnlabeledClass].Class) {
-			if (RemoveLabel(frame, gpos.X, gpos.Y))
-				DrawLabelBoxes();
+		auto vpos   = CanvasToVideoPos((int) ev.PointsRel[0].x, (int) ev.PointsRel[0].y);
+		auto gpos   = VideoPosToGrid(vpos.X, vpos.Y);
+		auto time   = Video.LastFrameTimeMicrosecond();
+		auto frame  = Labels.FindOrInsertFrame(time);
+		auto label  = FindOrInsertLabel(frame, gpos.X, gpos.Y);
+		auto _class = CurrentAssignClass.Class;
+		if (label->Severity(_class) == CurrentAssignSeverity && ev.Type == xo::EventMouseDown) {
+			// for a single click of the same class, with same severity, remove the class
+			label->RemoveClass(_class);
+			SetLabelDirty(frame, label);
 			return;
 		}
-		auto label = FindOrInsertLabel(frame, gpos.X, gpos.Y);
-		if (label->Class != CurrentAssignClass.Class) {
-			label->Labeler  = UserName;
-			label->Class    = CurrentAssignClass.Class;
-			label->EditTime = time::Now();
-			frame->SetDirty();
-			DrawLabelBoxes();
+		if (CurrentAssignClass.Class == Classes[UnlabeledClass].Class) {
+			// remove all classes
+			label->Classes.clear();
+			SetLabelDirty(frame, label);
+			return;
+		}
+		// remove all other classes from the same group
+		for (const auto& c : ClassesInGroup(CurrentAssignClass.Group))
+			label->RemoveClass(c);
+		label->SetClass(CurrentAssignClass.Class, CurrentAssignSeverity);
+		SetLabelDirty(frame, label);
+	}
+}
+
+void UI::SetLabelDirty(train::ImageLabels* frame, train::Label* label, bool redrawOnCanvas) {
+	label->Author   = UserName;
+	label->EditTime = time::Now();
+	// remove all patches that have no labels
+	for (size_t i = frame->Labels.size() - 1; i != -1; i--) {
+		if (frame->Labels[i].Classes.size() == 0) {
+			frame->Labels.erase(frame->Labels.begin() + i);
 		}
 	}
+	frame->SetDirty();
+	if (redrawOnCanvas)
+		DrawLabelBoxes();
 }
 
 void UI::GridDimensions(int& width, int& height) {
@@ -595,11 +665,25 @@ xo::Point UI::CanvasToVideoPos(int x, int y) {
 	return xo::Point((int) (x * scale.x), (int) (y * scale.y));
 }
 
+xo::Point UI::GridPosOffset() {
+	int vwidth, vheight;
+	Video.Dimensions(vwidth, vheight);
+	// horizontally: center the grid
+	// vertically: we want to align it to the bottom of the screen
+	xo::Point offset;
+	offset.X = (vwidth % LabelGridSize) / 2;
+	offset.Y = 0;
+	return offset;
+}
+
 xo::Point UI::VideoPosToGrid(int x, int y) {
 	int vwidth, vheight;
 	Video.Dimensions(vwidth, vheight);
+	auto offset = GridPosOffset();
 	if (!GridTopDown)
 		y = vheight - y;
+	x -= offset.X;
+	y -= offset.Y;
 	return xo::Point((int) (x / LabelGridSize), (int) (y / LabelGridSize));
 }
 
@@ -608,6 +692,9 @@ xo::Point UI::GridPosToVideo(int x, int y) {
 	Video.Dimensions(vwidth, vheight);
 	x *= LabelGridSize;
 	y *= LabelGridSize;
+	auto offset = GridPosOffset();
+	x += offset.X;
+	y += offset.Y;
 	if (!GridTopDown)
 		y = vheight - y;
 	return xo::Point(x, y);
@@ -662,12 +749,33 @@ bool UI::OpenVideo() {
 	return true;
 }
 
-size_t UI::FindClass(const std::string& klass) {
+size_t UI::FindClassIndex(const std::string& klass) {
 	for (size_t i = 0; i < Classes.size(); i++) {
 		if (Classes[i].Class == klass)
 			return i;
 	}
 	return -1;
+}
+
+const train::LabelClass* UI::FindClass(const std::string& klass) {
+	size_t i = FindClassIndex(klass);
+	return i == -1 ? nullptr : &Classes[i];
+}
+
+std::string UI::ShortcutKeyForClass(const std::string& klass) {
+	size_t i = FindClassIndex(klass);
+	if (i == -1)
+		return "";
+	return tsf::fmt("%c", (char) Classes[i].Key);
+}
+
+std::vector<std::string> UI::ClassesInGroup(std::string group) {
+	std::vector<std::string> cg;
+	for (const auto& c : Classes) {
+		if (c.Group == group)
+			cg.push_back(c.Class);
+	}
+	return cg;
 }
 
 void UI::LoadLabels() {
@@ -683,6 +791,19 @@ void UI::LoadLabels() {
 	//	//f.SetDirty();
 	//}
 	//Labels.RemoveEmptyFrames();
+}
+
+std::vector<std::vector<train::LabelClass>> UI::ClassGroups() {
+	std::vector<std::vector<train::LabelClass>> groups;
+	string                                      last = "not a group";
+	for (size_t i = 0; i < Classes.size(); i++) {
+		if (Classes[i].Group != last) {
+			groups.push_back({});
+		}
+		groups.back().push_back(Classes[i]);
+		last = Classes[i].Group;
+	}
+	return groups;
 }
 
 } // namespace anno
