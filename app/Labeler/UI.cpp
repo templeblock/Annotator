@@ -684,7 +684,13 @@ xo::Point UI::VideoPosToGrid(int x, int y) {
 		y = vheight - y;
 	x -= offset.X;
 	y -= offset.Y;
-	return xo::Point((int) (x / LabelGridSize), (int) (y / LabelGridSize));
+	int gx = (int) (x / LabelGridSize);
+	int gy = (int) (y / LabelGridSize);
+	int gwidth, gheight;
+	GridDimensions(gwidth, gheight);
+	gx = xo::Clamp(gx, 0, gwidth - 1);
+	gy = xo::Clamp(gy, 0, gheight - 1);
+	return xo::Point(gx, gy);
 }
 
 xo::Point UI::GridPosToVideo(int x, int y) {

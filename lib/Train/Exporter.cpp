@@ -109,8 +109,9 @@ Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t
 				filetype = gfx::ImageType::Jpeg;
 				ext      = ".jpeg";
 			}
+			// Now that we have multiple classes per label, we can't use directories to bucket them anymore
 			//auto classDir = dir + "/" + strings::Replace(patch.Class, " ", "_");
-			auto classDir = dir + "/all";
+			auto classDir = dir;
 			auto filename = classDir + "/" + tsf::fmt("%09d-%04d-%04d-%04d-%04d.%v", frameTime, patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height(), ext);
 			auto err      = SaveImageFile(imgIO, patchTex, filetype, filename);
 			if (!err.OK()) {
