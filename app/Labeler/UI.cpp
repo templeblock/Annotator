@@ -501,6 +501,7 @@ void UI::OnKeyChar(xo::Event& ev) {
 	case '.':
 		NextFrame();
 		break;
+	case '0':
 	case '1':
 	case '2':
 	case '3':
@@ -559,7 +560,8 @@ void UI::OnLoadSaveTimer() {
 		SaveQueue = package;
 	}
 
-	auto        counts = Labels.CategorizedLabelCount();
+	auto        classToGroup = ClassToGroupMap(Classes);
+	auto        counts       = Labels.CategorizedLabelCount(&classToGroup);
 	std::string status;
 	int         total = 0;
 	for (auto& p : counts) {

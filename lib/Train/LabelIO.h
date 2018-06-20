@@ -100,7 +100,7 @@ public:
 	ImageLabels*                 FindOrInsertFrame(int64_t time);
 	ImageLabels*                 InsertFrame(int64_t time);
 	void                         RemoveEmptyFrames();
-	ohash::map<std::string, int> CategorizedLabelCount() const;
+	ohash::map<std::string, int> CategorizedLabelCount(ohash::map<std::string, std::string>* groups = nullptr) const;
 	std::vector<std::string>     Classes() const; // Classes are sorted alphabetically
 	ohash::map<std::string, int> ClassToIndex() const;
 	int64_t                      TotalLabelCount() const;
@@ -128,6 +128,7 @@ IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, const VideoLabel
 IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);
 IMQS_TRAIN_API int   MergeVideoLabels(const VideoLabels& src, VideoLabels& dst); // Returns number of new frames
 IMQS_TRAIN_API Error ExportClassTaxonomy(std::string filename, std::vector<LabelClass> classes);
+IMQS_TRAIN_API ohash::map<std::string, std::string> ClassToGroupMap(std::vector<LabelClass> classes);
 
 } // namespace train
 } // namespace imqs

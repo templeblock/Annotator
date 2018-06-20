@@ -113,7 +113,11 @@ Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t
 			//auto classDir = dir + "/" + strings::Replace(patch.Class, " ", "_");
 			auto classDir = dir;
 			auto filename = classDir + "/" + tsf::fmt("%09d-%04d-%04d-%04d-%04d.%v", frameTime, patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height(), ext);
-			auto err      = SaveImageFile(imgIO, patchTex, filetype, filename);
+			if (os::IsFile(filename)) {
+				// since our images are just extracts of the video, and labels are stored separately, we never have to re-export an image patch
+				continue;
+			}
+			auto err = SaveImageFile(imgIO, patchTex, filetype, filename);
 			if (!err.OK()) {
 #pragma omp critical(firstError)
 				firstErr = err;

@@ -233,12 +233,21 @@ void VideoLabels::RemoveEmptyFrames() {
 	}
 }
 
-ohash::map<std::string, int> VideoLabels::CategorizedLabelCount() const {
+ohash::map<std::string, int> VideoLabels::CategorizedLabelCount(ohash::map<std::string, std::string>* groups) const {
 	ohash::map<std::string, int> counts;
 	for (const auto& f : Frames) {
 		for (const auto& lab : f.Labels) {
-			for (const auto& c : lab.Classes)
-				counts[c.Class]++;
+			for (const auto& c : lab.Classes) {
+				if (groups) {
+					auto group = groups->get(c.Class);
+					if (group == "")
+						counts["UNGROUPED:" + c.Class]++;
+					else
+						counts[group]++;
+				} else {
+					counts[c.Class]++;
+				}
+			}
 		}
 	}
 	return counts;
@@ -393,6 +402,13 @@ IMQS_TRAIN_API Error ExportClassTaxonomy(std::string filename, std::vector<Label
 		root[c.Group].push_back(item);
 	}
 	return os::WriteWholeFile(filename, root.dump(4));
+}
+
+IMQS_TRAIN_API ohash::map<std::string, std::string> ClassToGroupMap(std::vector<LabelClass> classes) {
+	ohash::map<std::string, std::string> map;
+	for (auto c : classes)
+		map.insert(c.Class, c.Group);
+	return map;
 }
 
 } // namespace train
