@@ -791,6 +791,15 @@ void UI::LoadLabels() {
 	// Perform any once-off fixups here
 
 	//for (auto& f : Labels.Frames) {
+	//	for (auto& lab : f.Labels) {
+	//		if (lab.HasClass("edge")) {
+	//			lab.RemoveClass("edge");
+	//			f.SetDirty();
+	//		}
+	//	}
+	//}
+
+	//for (auto& f : Labels.Frames) {
 	//	for (size_t i = f.Labels.size() - 1; i != -1; i--) {
 	//		if (f.Labels[i].Class == "normal road") {
 	//			f.Labels.erase(f.Labels.begin() + i);

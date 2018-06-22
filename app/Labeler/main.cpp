@@ -18,6 +18,7 @@ void xoMain(xo::SysWnd* wnd) {
 	}
 	*/
 
+	wnd->SetTitle("IMQS Video Labeler");
 	wnd->Doc()->ClassParse("font-medium", "font-size: 14ep");
 	wnd->Doc()->ClassParse("shortcut", "font-size: 15ep; color: #000; width: 1em");
 	wnd->Doc()->ClassParse("severity", "font-size: 20ep; color: #000; width: 1em; font-weight: bold");
@@ -34,6 +35,10 @@ void xoMain(xo::SysWnd* wnd) {
 	ui->ModelLoadErr = err.Message();
 #endif
 
+	// !!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!
+	// If you make changes that need once-off fixups, then the best place to
+	// write the fix-up code is inside UI::LoadLabels()
+
 	// first class must be unlabeled - as embodied by UI::UnlabeledClass
 	ui->Classes.push_back({false, 'U', "", "unlabeled"});
 
@@ -41,7 +46,7 @@ void xoMain(xo::SysWnd* wnd) {
 	ui->Classes.push_back({false, 'A', "type", "tar"});
 	ui->Classes.push_back({false, 'D', "type", "dirt"});
 	ui->Classes.push_back({false, 'Z', "type", "curb"});
-	ui->Classes.push_back({false, 'E', "type", "edge"});
+	ui->Classes.push_back({true, 'E', "type", "edge"});
 	ui->Classes.push_back({false, 'W', "type", "grass"});
 	ui->Classes.push_back({false, 'V', "type", "vehicle"});
 	ui->Classes.push_back({false, 'M', "type", "manhole"});
@@ -73,7 +78,8 @@ void xoMain(xo::SysWnd* wnd) {
 	imqs::train::ExportClassTaxonomy("c:\\mldata\\taxonomy.json", ui->Classes);
 
 	//ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
-	ui->VideoFilename = "C:\\mldata\\DSCF3022.MOV";
+	//ui->VideoFilename = "C:\\mldata\\DSCF3022.MOV";
+	ui->VideoFilename = "LOAD FILE";
 	if (!ui->OpenVideo())
 		ui->Render();
 }
