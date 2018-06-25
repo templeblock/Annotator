@@ -773,10 +773,10 @@ local RoadProcessor = Program {
 local CameraCalibrator = Program {
 	Name = "CameraCalibrator",
 	Depends = {
-		winCrt, pal, opencv,
+		winCrt, gfx, pal, opencv, xo, libjpeg_turbo, png, tsf
 	},
 	Env = {
-		PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
+		-- PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	},
 	Libs = { 
 		{ "m", "stdc++"; Config = linuxFilter },

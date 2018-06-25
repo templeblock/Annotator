@@ -2,6 +2,7 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 
 #include <lib/pal/pal.h>
+#include <lib/gfx/gfx.h>
 #include <algorithm>
 
 #pragma push_macro("free")
@@ -13,3 +14,5 @@
 #pragma warning(disable : 4503)
 #endif
 #include <nlohmann-json/json.hpp>
+
+#include <xo/xo/xo.h>
