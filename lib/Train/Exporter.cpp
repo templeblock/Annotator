@@ -104,10 +104,10 @@ Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t
 			string         ext;
 			if (type == ExportTypes::Png) {
 				filetype = gfx::ImageType::Png;
-				ext      = ".png";
+				ext      = "png";
 			} else {
 				filetype = gfx::ImageType::Jpeg;
-				ext      = ".jpeg";
+				ext      = "jpeg";
 			}
 			// Now that we have multiple classes per label, we can't use directories to bucket them anymore
 			//auto classDir = dir + "/" + strings::Replace(patch.Class, " ", "_");
