@@ -526,6 +526,24 @@ local tinyxml2 = StaticLibrary {
 	IdeGenerationHints = ideHintThirdParty,
 }
 
+local agg = StaticLibrary {
+	Name = "agg",
+	Depends = { winCrt, },
+	Includes = {
+		"third_party/agg/include",
+	},
+	Sources = {
+		FGlob {
+			--Dir = "third_party/agg",
+			Dir = "third_party/agg/src",
+			Extensions = { ".cpp" },
+			Filters = {},
+			Recursive = true,
+		}
+	},
+	IdeGenerationHints = ideHintThirdParty,
+}
+
 local minizip = StaticLibrary {
 	Name = "minizip",
 	Depends = { winCrt, },
@@ -684,7 +702,7 @@ local AI = SharedLibrary {
 local Train = SharedLibrary {
 	Name = "Train",
 	Depends = {
-		winCrt, pal, tsf, Video, gfx, png, lz4
+		winCrt, pal, tsf, Video, gfx, png, lz4, agg
 	},
 	Libs = {
 		-- This stuff is weird. Gotta do it this way to maintain linux and windows compatibility

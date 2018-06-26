@@ -87,28 +87,70 @@ void UI::Render() {
 	VideoCanvasWidth  = 1550;
 	VideoCanvasHeight = (int) (VideoCanvasWidth / aspect);
 
+	ToolsBox = videoArea->ParseAppendNode("<div>Tools...</div>");
+	ToolsBox->StyleParse("width: 200ep");
+	RenderToolsUI();
+
 	VideoCanvas = videoArea->AddCanvas();
-	VideoCanvas->StyleParse("hcenter: hcenter; border: 1px #888; border-radius: 1.5ep;");
+	VideoCanvas->StyleParse("border: 1px #888; border-radius: 1.5ep; break:after;");
 	VideoCanvas->StyleParsef("width: %dpx; height: %dpx", VideoCanvasWidth, VideoCanvasHeight);
 	VideoCanvas->OnMouseMove([ui](xo::Event& ev) {
-		if (ev.PointsRel[0].distance(ui->MouseDown) > 20) {
+		if (ev.IsPressed(xo::Button::KeyAlt))
+			return;
+		int  dragThreshold = ui->LabelMode == UI::LabelModes::FixedBoxes ? 15 : 0;
+		auto vpos          = ui->CanvasToVideoPos((int) ev.PointsRel[0].x, (int) ev.PointsRel[0].y);
+		if (ui->IsCreatingPolygon && ui->CurrentPolygon->Vertices.size() != 0) {
+			ui->CurrentPolygon->Vertices.back() = train::Point(vpos.X, vpos.Y);
+			ui->DrawLabels();
+		} else if (ev.IsPressed(xo::Button::MouseLeft) && (ev.PointsRel[0].distance(ui->MouseDown) > dragThreshold || ui->IsMouseDragging)) {
 			// only start drag after cursor has moved some distance, to prevent false twitchy positives
+			auto vposMouseDown  = ui->CanvasToVideoPos((int) ui->MouseDown.x, (int) ui->MouseDown.y);
 			ui->IsMouseDragging = true;
+			if (ui->IsMouseDragging && ui->LabelMode == UI::LabelModes::FixedBoxes)
+				ui->OnPaintLabel(ev);
+			else if (ui->IsMouseDragging && ui->LabelMode == UI::LabelModes::Segmentation)
+				ui->Segmentation_MouseDrag(ev, vposMouseDown, vpos);
 		}
-		if (ui->IsMouseDragging)
-			ui->OnPaintLabel(ev);
 	});
 	VideoCanvas->OnMouseDown([ui](xo::Event& ev) {
-		ui->MouseDown       = ev.PointsRel[0];
-		ui->IsMouseDragging = false;
-		ui->OnPaintLabel(ev);
+		auto vpos = ui->CanvasToVideoPos((int) ev.PointsRel[0].x, (int) ev.PointsRel[0].y);
+
+		if (ev.Button == xo::Button::MouseLeft && ev.IsPressed(xo::Button::KeyAlt)) {
+			ui->Segmentation_DeleteLabel(vpos);
+			ui->DrawLabels();
+		} else if (ev.Button == xo::Button::MouseLeft) {
+			ui->MouseDown = ev.PointsRel[0];
+			if (ui->IsCreatingPolygon) {
+				ui->CurrentPolygon->Vertices.push_back(train::Point(vpos.X, vpos.Y));
+				if (ui->CurrentPolygon->Vertices.size() == 1)
+					ui->CurrentPolygon->Vertices.push_back(train::Point(vpos.X, vpos.Y));
+				ui->DrawLabels();
+			} else {
+				ui->IsMouseDragging = false;
+				ui->OnPaintLabel(ev);
+			}
+		}
 	});
 	VideoCanvas->OnMouseUp([ui](xo::Event& ev) {
-		ui->IsMouseDragging = false;
+		if (ui->CurrentLabel && ui->IsDraggingVertex) {
+			ui->SetLabelDirty(ui->LabelsForCurrentFrame(false), ui->CurrentLabel, false);
+		}
+		ui->IsMouseDragging  = false;
+		ui->IsDraggingVertex = false;
+		//ui->CurrentLabel          = nullptr;
+		ui->CurrentDraggingVertex = -1;
+		if (ev.Button == xo::Button::MouseRight && ui->IsCreatingPolygon) {
+			ui->CurrentPolygon->Vertices.pop_back();
+			ui->SetLabelDirty(ui->LabelsForCurrentFrame(false), ui->CurrentLabel, false);
+			ui->IsCreatingPolygon = false;
+			ui->CurrentPolygon    = nullptr;
+			ui->CurrentLabel      = nullptr;
+			ui->DrawLabels();
+		}
 	});
 
 	auto fileArea = videoArea->ParseAppendNode("<div style='break:after; margin: 4ep; margin-bottom: 0ep'></div>");
-	fileArea->StyleParsef("hcenter: hcenter; width: %vpx", VideoCanvasWidth);
+	fileArea->StyleParsef("width: %vpx", VideoCanvasWidth); // hcenter:hcenter
 	auto fileName  = fileArea->ParseAppendNode("<div class='font-medium' style='cursor: hand'></div>");
 	auto exportBtn = xo::controls::Button::NewText(fileArea, "Export");
 	StatusLabel    = fileArea->ParseAppendNode("<div class='font-medium' style='margin-left: 2em'></div>");
@@ -150,10 +192,12 @@ void UI::Render() {
 		ExportMsgBox->OnClose = ExportDlgClosed;
 
 		// super lazy thread use
+		auto taxonomyCopy = Taxonomy;
 		auto labelsCopy   = Labels;
 		auto filenameCopy = VideoFilename;
-		ExportThread      = std::thread([this, labelsCopy, filenameCopy] {
-            auto err = ExportLabeledImagePatches_Video(ExportTypes::Jpeg, filenameCopy, labelsCopy, ExportCallback);
+		ExportThread      = std::thread([this, taxonomyCopy, labelsCopy, filenameCopy] {
+            auto exportType = LabelMode == UI::LabelModes::FixedBoxes ? ExportTypes::Jpeg : ExportTypes::Segmentation;
+            auto err        = ExportLabeledImagePatches_Video(exportType, filenameCopy, taxonomyCopy, labelsCopy, ExportCallback);
             if (ExportMsgBox) {
                 if (err.OK())
                     ExportMsgBox->SetText("Done");
@@ -211,13 +255,33 @@ void UI::Render() {
 	DrawCurrentFrame();
 }
 
+void UI::RenderToolsUI() {
+	if (!ToolsBox)
+		return;
+
+	ToolsBox->Clear();
+	/*
+	auto newLabelBtn = xo::controls::Button::NewText(ToolsBox, "Polygon");
+	newLabelBtn->StyleParse("break:after");
+
+	newLabelBtn->OnClick([this] {
+		CreateNewPolygonLabel("lane");
+	});
+	*/
+}
+
 void UI::RenderLabelUI() {
 	if (!LabelBox)
 		return;
 	LabelBox->Clear();
 	int labelRows = 3;
 
-	for (auto group : ClassGroups()) {
+	for (auto group : Taxonomy.ClassGroups()) {
+		if (!group[0].IsPolygon && LabelMode != LabelModes::FixedBoxes)
+			continue;
+		if (group[0].IsPolygon && LabelMode != LabelModes::Segmentation)
+			continue;
+
 		// compute number of columns necessary for this group, and then size the width
 		// of the container so that the children will wrap around appropriately
 		int  labelCols = (int) ceil(group.size() / (double) labelRows);
@@ -278,6 +342,10 @@ void UI::RenderTimeSlider(bool first) {
 	auto now = time::Now();
 	tickContainer->Clear();
 	for (const auto& frame : Labels.Frames) {
+		if (LabelMode == LabelModes::FixedBoxes && !frame.HasRects())
+			continue;
+		if (LabelMode == LabelModes::Segmentation && !frame.HasPolygons())
+			continue;
 		double p    = 100.0 * frame.TimeSeconds() / dur;
 		auto   tick = tickContainer->ParseAppendNode("<div></div>");
 		float  age  = (float) ((now - frame.MaxEditTime()).Seconds() / 300);
@@ -331,6 +399,109 @@ void UI::Stop() {
 	PlayState = PlayStates::Stop;
 	VideoCanvas->RemoveHandler(PlayTimer);
 	PlayTimer = 0;
+}
+
+train::ImageLabels* UI::LabelsForCurrentFrame(bool create) {
+	if (create)
+		return Labels.FindOrInsertFrame(Video.LastFrameTimeMicrosecond());
+	else
+		return Labels.FindFrame(Video.LastFrameTimeMicrosecond());
+}
+
+void UI::Segmentation_MouseDrag(xo::Event& ev, xo::Point vposMouseDown, xo::Point vpos) {
+	if (!IsDraggingVertex) {
+		Label* lab                = nullptr;
+		size_t ivertex            = -1;
+		bool   canCreateNewVertex = !IsDraggingVertex && VideoPosToCanvas(vposMouseDown.X, vposMouseDown.Y).distance(VideoPosToCanvas(vpos.X, vpos.Y)) > 10;
+		Segmentation_FindCloseVertex(vposMouseDown, lab, ivertex, canCreateNewVertex);
+		if (lab == nullptr)
+			return;
+		IsDraggingVertex      = true;
+		CurrentLabel          = lab;
+		CurrentDraggingVertex = ivertex;
+	}
+
+	if (IsDraggingVertex) {
+		CurrentLabel->Polygon.Vertices[CurrentDraggingVertex] = train::Point(vpos.X, vpos.Y);
+		DrawLabels();
+	}
+}
+
+void UI::Segmentation_FindCloseVertex(xo::Point vpos, train::Label*& lab, size_t& ivertex, bool createVertexIfNone) {
+	lab        = nullptr;
+	ivertex    = -1;
+	auto frame = LabelsForCurrentFrame(false);
+	if (!frame)
+		return;
+
+	float bestDistVx   = 30;
+	float bestDistLine = 30;
+
+	train::Label* closestLabByLine    = nullptr;
+	size_t        closestVertexByLine = -1;
+	gfx::Vec2f    closestPosByLine;
+
+	gfx::Vec2f vposf((float) vpos.X, (float) vpos.Y);
+
+	for (auto& ilab : frame->Labels) {
+		if (ilab.IsPolygon()) {
+			for (size_t i = 0; i < ilab.Polygon.Vertices.size(); i++) {
+				size_t j    = (i + 1) % ilab.Polygon.Vertices.size();
+				float  dist = ilab.Polygon.Vertices[i].Distance(vpos.X, vpos.Y);
+				if (dist < bestDistVx) {
+					lab        = &ilab;
+					ivertex    = i;
+					bestDistVx = dist;
+				}
+				auto closestPt = geom::ClosestPtOnLineT(vposf, (gfx::Vec2f) ilab.Polygon.Vertices[i], (gfx::Vec2f) ilab.Polygon.Vertices[j], true);
+				dist           = closestPt.distance(vposf);
+				if (dist < bestDistLine) {
+					bestDistLine        = dist;
+					closestLabByLine    = &ilab;
+					closestVertexByLine = i;
+					closestPosByLine    = closestPt;
+				}
+			}
+		}
+	}
+
+	if (lab)
+		return;
+
+	if (createVertexIfNone && closestLabByLine) {
+		lab = closestLabByLine;
+		lab->Polygon.Vertices.insert(lab->Polygon.Vertices.begin() + closestVertexByLine + 1, train::Point((int) closestPosByLine.x, (int) closestPosByLine.y));
+		ivertex = closestVertexByLine + 1;
+	}
+}
+
+train::Label* UI::Segmentation_FindCloseLabel(xo::Point vpos) {
+	auto frame = LabelsForCurrentFrame(false);
+	if (!frame)
+		return nullptr;
+
+	for (auto& lab : frame->Labels) {
+		if (lab.IsPolygon()) {
+			if (geom2d::PtInsidePoly(vpos.X, vpos.Y, lab.Polygon.Vertices.size(), &lab.Polygon.Vertices[0].X, sizeof(train::Point) / sizeof(int)))
+				return &lab;
+		}
+	}
+
+	return nullptr;
+}
+
+void UI::Segmentation_DeleteLabel(xo::Point vpos) {
+	auto lab = Segmentation_FindCloseLabel(vpos);
+	if (lab) {
+		auto frame = LabelsForCurrentFrame(false);
+		for (size_t i = 0; i < frame->Labels.size(); i++) {
+			if (&frame->Labels[i] == lab) {
+				SetLabelDirty(frame, lab, false);
+				frame->Labels.erase(frame->Labels.begin() + i);
+				break;
+			}
+		}
+	}
 }
 
 // The labels in our label store use raw video pixel coordinate rectangles.
@@ -425,6 +596,14 @@ void UI::DrawEvalOverlay() {
 #endif
 }
 
+void UI::DrawLabels() {
+	switch (LabelMode) {
+	case LabelModes::FixedBoxes: DrawLabelBoxes(); break;
+	case LabelModes::Segmentation: DrawSegmentationLabels(); break;
+	default: IMQS_DIE();
+	}
+}
+
 void UI::DrawLabelBoxes() {
 	auto cx = VideoCanvas->GetCanvas2D();
 	cx->GetImage()->CopyFrom(&LastFrameImg);
@@ -461,7 +640,7 @@ void UI::DrawLabelBoxes() {
 				color     = xo::Color(200, 0, 0, 150);
 			} else {
 				for (const auto& c : label.Classes) {
-					auto k = FindClass(c.Class);
+					auto k = Taxonomy.FindClass(c.Class);
 					if (!k) {
 						labelStr += "unknown class: " + c.Class;
 					} else {
@@ -490,6 +669,41 @@ void UI::DrawLabelBoxes() {
 	VideoCanvas->ReleaseAndInvalidate(cx);
 }
 
+void UI::DrawSegmentationLabels() {
+	auto frame = Labels.FindFrame(Video.LastFrameTimeMicrosecond());
+	if (!frame)
+		return;
+	auto cx = VideoCanvas->GetCanvas2D();
+	cx->GetImage()->CopyFrom(&LastFrameImg);
+	vector<float> vx;
+	for (const auto& lab : frame->Labels) {
+		if (lab.IsPolygon())
+			DrawPolygon(cx, lab.Polygon, &vx);
+	}
+	VideoCanvas->ReleaseAndInvalidate(cx);
+}
+
+void UI::DrawPolygon(xo::Canvas2D* cx, const train::Polygon& poly, std::vector<float>* tmpVx) {
+	if (poly.Vertices.size() < 2)
+		return;
+
+	vector<float> tmp;
+	if (!tmpVx)
+		tmpVx = &tmp;
+
+	size_t nv = poly.Vertices.size();
+	if (nv * 2 > tmpVx->size())
+		tmpVx->resize(max(tmpVx->size() * 2, nv * 2));
+	for (size_t i = 0; i < nv; i++) {
+		//auto p              = VideoPosToCanvas(poly.Vertices[i].X, poly.Vertices[i].Y);
+		auto p              = xo::Vec2f((float) poly.Vertices[i].X, (float) poly.Vertices[i].Y);
+		(*tmpVx)[i * 2]     = p.x;
+		(*tmpVx)[i * 2 + 1] = p.y;
+	}
+	cx->StrokeLine(true, (int) nv, &tmpVx->at(0), sizeof(float) * 2, xo::Color(200, 50, 50, 210), 1.2f);
+	cx->FillPoly((int) nv, &tmpVx->at(0), sizeof(float) * 2, xo::Color(150, 0, 0, 50));
+}
+
 void UI::OnKeyChar(xo::Event& ev) {
 	switch (ev.KeyChar) {
 	case ' ':
@@ -511,9 +725,12 @@ void UI::OnKeyChar(xo::Event& ev) {
 		RenderLabelUI();
 		break;
 	}
-	for (auto c : Classes) {
+	for (auto c : Taxonomy.Classes) {
 		if (toupper(c.Key) == toupper(ev.KeyChar)) {
-			SetCurrentLabel(c);
+			if (LabelMode == LabelModes::FixedBoxes)
+				SetCurrentLabel(c);
+			else
+				CreateNewPolygonLabel(c.Class, CurrentAssignSeverity);
 			break;
 		}
 	}
@@ -560,7 +777,7 @@ void UI::OnLoadSaveTimer() {
 		SaveQueue = package;
 	}
 
-	auto        classToGroup = ClassToGroupMap(Classes);
+	auto        classToGroup = ClassToGroupMap(Taxonomy.Classes);
 	auto        counts       = Labels.CategorizedLabelCount(&classToGroup);
 	std::string status;
 	int         total = 0;
@@ -568,9 +785,15 @@ void UI::OnLoadSaveTimer() {
 		status += tsf::fmt("%v:%d ", p.first, p.second);
 		total += p.second;
 	}
-	status += tsf::fmt("TOTAL:%d ", total);
-	StatusLabel->SetText(status);
-	//StatusLabel->SetText(tsf::fmt("%v labels", Labels.TotalLabelCount()));
+
+	if (LabelMode == LabelModes::FixedBoxes) {
+		status += tsf::fmt("TOTAL:%d ", total);
+		StatusLabel->SetText(status);
+		//StatusLabel->SetText(tsf::fmt("%v labels", Labels.TotalLabelCount()));
+	} else if (LabelMode == LabelModes::Segmentation) {
+		status = tsf::fmt("Frames:%d ", Labels.TotalPolygonFrameCount());
+		StatusLabel->SetText(status);
+	}
 }
 
 void UI::SetCurrentLabel(LabelClass c) {
@@ -595,18 +818,27 @@ void UI::OnPaintLabel(xo::Event& ev) {
 			SetLabelDirty(frame, label);
 			return;
 		}
-		if (CurrentAssignClass.Class == Classes[UnlabeledClass].Class) {
+		if (CurrentAssignClass.Class == Taxonomy.Classes[UnlabeledClass].Class) {
 			// remove all classes
 			label->Classes.clear();
 			SetLabelDirty(frame, label);
 			return;
 		}
 		// remove all other classes from the same group
-		for (const auto& c : ClassesInGroup(CurrentAssignClass.Group))
+		for (const auto& c : Taxonomy.ClassesInGroup(CurrentAssignClass.Group))
 			label->RemoveClass(c);
 		label->SetClass(CurrentAssignClass.Class, CurrentAssignSeverity);
 		SetLabelDirty(frame, label);
 	}
+}
+
+void UI::CreateNewPolygonLabel(std::string klass, int severity) {
+	IsCreatingPolygon = true;
+	auto frame        = LabelsForCurrentFrame(true);
+	frame->Labels.push_back(Label());
+	frame->Labels.back().Classes.push_back(ClassSeverity(klass, severity));
+	CurrentPolygon = &frame->Labels.back().Polygon;
+	CurrentLabel   = &frame->Labels.back();
 }
 
 void UI::SetLabelDirty(train::ImageLabels* frame, train::Label* label, bool redrawOnCanvas) {
@@ -620,7 +852,7 @@ void UI::SetLabelDirty(train::ImageLabels* frame, train::Label* label, bool redr
 	}
 	frame->SetDirty();
 	if (redrawOnCanvas)
-		DrawLabelBoxes();
+		DrawLabels();
 }
 
 void UI::GridDimensions(int& width, int& height) {
@@ -634,6 +866,8 @@ void UI::GridDimensions(int& width, int& height) {
 xo::Vec2f UI::VideoScaleOnCanvas() {
 	int vwidth, vheight;
 	Video.Dimensions(vwidth, vheight);
+	if (vwidth == 0)
+		return xo::Vec2f(0, 0);
 	int cwidth  = VideoCanvasWidth;
 	int cheight = VideoCanvasHeight;
 	/*
@@ -665,6 +899,11 @@ xo::Vec2f UI::VideoScaleOnCanvas() {
 xo::Point UI::CanvasToVideoPos(int x, int y) {
 	auto scale = VideoScaleOnCanvas();
 	return xo::Point((int) (x * scale.x), (int) (y * scale.y));
+}
+
+xo::Vec2f UI::VideoPosToCanvas(int x, int y) {
+	auto scale = VideoScaleOnCanvas();
+	return xo::Vec2f((float) x / scale.x, (float) y / scale.y);
 }
 
 xo::Point UI::GridPosOffset() {
@@ -735,7 +974,7 @@ void UI::DrawCurrentFrame() {
 	cx->GetImage()->CopyFrom(&LastFrameImg);
 	VideoCanvas->ReleaseAndInvalidate(cx);
 	if (IsModeLabel)
-		DrawLabelBoxes();
+		DrawLabels();
 	else
 		DrawEvalOverlay();
 	RenderTimeSlider();
@@ -757,33 +996,11 @@ bool UI::OpenVideo() {
 	return true;
 }
 
-size_t UI::FindClassIndex(const std::string& klass) {
-	for (size_t i = 0; i < Classes.size(); i++) {
-		if (Classes[i].Class == klass)
-			return i;
-	}
-	return -1;
-}
-
-const train::LabelClass* UI::FindClass(const std::string& klass) {
-	size_t i = FindClassIndex(klass);
-	return i == -1 ? nullptr : &Classes[i];
-}
-
 std::string UI::ShortcutKeyForClass(const std::string& klass) {
-	size_t i = FindClassIndex(klass);
-	if (i == -1)
+	auto c = Taxonomy.FindClass(klass);
+	if (!c)
 		return "";
-	return tsf::fmt("%c", (char) Classes[i].Key);
-}
-
-std::vector<std::string> UI::ClassesInGroup(std::string group) {
-	std::vector<std::string> cg;
-	for (const auto& c : Classes) {
-		if (c.Group == group)
-			cg.push_back(c.Class);
-	}
-	return cg;
+	return tsf::fmt("%c", (char) c->Key);
 }
 
 void UI::LoadLabels() {
@@ -808,19 +1025,6 @@ void UI::LoadLabels() {
 	//	//f.SetDirty();
 	//}
 	//Labels.RemoveEmptyFrames();
-}
-
-std::vector<std::vector<train::LabelClass>> UI::ClassGroups() {
-	std::vector<std::vector<train::LabelClass>> groups;
-	string                                      last = "not a group";
-	for (size_t i = 0; i < Classes.size(); i++) {
-		if (Classes[i].Group != last) {
-			groups.push_back({});
-		}
-		groups.back().push_back(Classes[i]);
-		last = Classes[i].Group;
-	}
-	return groups;
 }
 
 } // namespace anno

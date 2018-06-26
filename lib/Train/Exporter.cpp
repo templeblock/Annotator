@@ -6,47 +6,6 @@ using namespace std;
 namespace imqs {
 namespace train {
 
-static void WriteRawCifar10(const gfx::Image& img, uint8_t label, uint8_t* buf) {
-	// 1st byte is label
-	buf[0] = label;
-	buf++;
-
-	// after label follows RGB, either planar, or packed
-
-	bool planar = true;
-	if (planar) {
-		// RRR GGG BBB
-		for (int chan = 0; chan < 3; chan++) {
-			for (uint32_t y = 0; y < (uint32_t) img.Height; y++) {
-				auto src = (uint8_t*) img.Line(y);
-				src += chan;
-				auto dst    = buf + y * img.Width;
-				int  srcBPP = (int) img.BytesPerPixel();
-				for (uint32_t x = 0; x < (uint32_t) img.Width; x++) {
-					*dst = *src;
-					dst++;
-					src += srcBPP;
-				}
-			}
-			buf += img.Width * img.Height;
-		}
-	} else {
-		// RGB RGB RGB
-		for (uint32_t y = 0; y < (uint32_t) img.Height; y++) {
-			auto src    = (uint8_t*) img.Line(y);
-			auto dst    = buf + y * img.Width * 3;
-			int  srcBPP = (int) img.BytesPerPixel();
-			for (uint32_t x = 0; x < (uint32_t) img.Width; x++) {
-				dst[0] = src[0];
-				dst[1] = src[1];
-				dst[2] = src[2];
-				dst += 3;
-				src += srcBPP;
-			}
-		}
-	}
-}
-
 Error SaveImageFile(gfx::ImageIO& imgIO, const gfx::Image& img, gfx::ImageType filetype, std::string filename) {
 	void*  encbuf  = nullptr;
 	size_t encsize = 0;
@@ -63,73 +22,80 @@ static Error MakeClassDir(string baseDir, string className) {
 	return os::MkDirAll(classDir);
 }
 
-Error ExportLabeledImagePatches_Frame(ExportTypes type, std::string dir, int64_t frameTime, const ImageLabels& labels, const ohash::map<std::string, int>& labelToIndex, const gfx::Image& frameImg) {
+Error ExportLabeledImagePatches_Frame_Rect(ExportTypes type, std::string dir, int64_t frameTime, const ImageLabels& labels, const gfx::Image& frameImg) {
 	if (labels.Labels.size() == 0)
 		return Error();
 
-	os::File f;
-	if (type == ExportTypes::Cifar10) {
-		auto err = f.Create(tsf::fmt("%v/%v.bin", dir, frameTime));
+	int dim = labels.Labels[0].Rect.Width(); // assume all rectangles are the same size, and that width == height
+
+	Error firstErr;
+#pragma omp parallel for
+	for (int i = 0; i < (int) labels.Labels.size(); i++) {
+		const auto& patch = labels.Labels[i];
+		IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
+		auto           patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
+		gfx::ImageIO   imgIO;
+		gfx::ImageType filetype;
+		string         ext;
+		if (type == ExportTypes::Png) {
+			filetype = gfx::ImageType::Png;
+			ext      = "png";
+		} else {
+			filetype = gfx::ImageType::Jpeg;
+			ext      = "jpeg";
+		}
+		auto filename = dir + "/" + tsf::fmt("%09d-%04d-%04d-%04d-%04d.%v", frameTime, patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height(), ext);
+		if (os::IsFile(filename)) {
+			// since our images are just extracts of the video, and labels are stored separately, we never have to re-export an image patch
+			continue;
+		}
+		auto err = SaveImageFile(imgIO, patchTex, filetype, filename);
+		if (!err.OK()) {
+#pragma omp critical(firstError)
+			firstErr = err;
+			break;
+		}
+	}
+	return firstErr;
+}
+
+Error ExportLabeledImagePatches_Frame_Polygons(std::string dir, int64_t frameTime, const ImageLabels& labels, const gfx::Image& frameImg) {
+	IMQS_ASSERT(labels.HasPolygons());
+
+	gfx::ImageIO imgIO;
+
+	auto srcFilename = dir + "/" + tsf::fmt("%09d-whole.jpeg", frameTime);
+	auto segFilename = dir + "/" + tsf::fmt("%09d-class.png", frameTime);
+	if (!os::IsFile(srcFilename)) {
+		// since our images are just video frames, we never need to re-export a frame
+		auto err = SaveImageFile(imgIO, frameImg, gfx::ImageType::Jpeg, srcFilename);
 		if (!err.OK())
 			return err;
 	}
 
-	int dim = labels.Labels[0].Rect.Width(); // assume all rectangles are the same size, and that width == height
-
-	if (type == ExportTypes::Cifar10) {
-		size_t   bufSize = 1 + dim * dim * 3;
-		uint8_t* buf     = (uint8_t*) imqs_malloc_or_die(bufSize);
-
-		for (const auto& patch : labels.Labels) {
-			IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
-			auto patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
-			//uint8_t klass    = labelToIndex.get(patch.Class);
-			uint8_t klass = 0; // BROKEN by introduction of multiple classes per label!
-			WriteRawCifar10(patchTex, klass, buf);
-			auto err = f.Write(buf, bufSize);
-			if (!err.OK())
-				return err;
+	gfx::Canvas   canvas(frameImg.Width, frameImg.Height, gfx::Color8(0, 0, 0, 255));
+	vector<float> vx;
+	for (auto& lab : labels.Labels) {
+		if (!lab.IsPolygon())
+			continue;
+		vx.clear();
+		for (auto& v : lab.Polygon.Vertices) {
+			vx.push_back((float) v.X);
+			vx.push_back((float) v.Y);
 		}
-
-		free(buf);
-	} else {
-		Error firstErr;
-#pragma omp parallel for
-		for (int i = 0; i < (int) labels.Labels.size(); i++) {
-			const auto& patch = labels.Labels[i];
-			IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
-			auto           patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
-			gfx::ImageIO   imgIO;
-			gfx::ImageType filetype;
-			string         ext;
-			if (type == ExportTypes::Png) {
-				filetype = gfx::ImageType::Png;
-				ext      = "png";
-			} else {
-				filetype = gfx::ImageType::Jpeg;
-				ext      = "jpeg";
-			}
-			// Now that we have multiple classes per label, we can't use directories to bucket them anymore
-			//auto classDir = dir + "/" + strings::Replace(patch.Class, " ", "_");
-			auto classDir = dir;
-			auto filename = classDir + "/" + tsf::fmt("%09d-%04d-%04d-%04d-%04d.%v", frameTime, patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height(), ext);
-			if (os::IsFile(filename)) {
-				// since our images are just extracts of the video, and labels are stored separately, we never have to re-export an image patch
-				continue;
-			}
-			auto err = SaveImageFile(imgIO, patchTex, filetype, filename);
-			if (!err.OK()) {
-#pragma omp critical(firstError)
-				firstErr = err;
-				break;
-			}
-		}
-		return firstErr;
+		// Note we use antialiased rendering, intended for MSE loss.
+		// We'll need to binaries the output if we're going to be doing BCE loss, or multiple categories.
+		canvas.FillPoly((int) lab.Polygon.Vertices.size(), &vx[0], 2 * sizeof(float), gfx::Color8(255, 255, 255, 255));
 	}
+
+	auto err = SaveImageFile(imgIO, *canvas.GetImage(), gfx::ImageType::Png, segFilename);
+	if (!err.OK())
+		return err;
+
 	return Error();
 }
 
-Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilename, const VideoLabels& labels, ProgressCallback prog) {
+Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilename, const LabelTaxonomy& taxonomy, const VideoLabels& labels, ProgressCallback prog) {
 	auto dir = ImagePatchDir(videoFilename);
 	auto err = os::MkDirAll(dir);
 	if (!err.OK())
@@ -142,22 +108,17 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 
 	gfx::Image img(gfx::ImageFormat::RGBA, video.Width(), video.Height());
 
-	// Establish a mapping from label (a string) to an integer class.
-	// The ML libraries just want an integer for the class, not a string.
-	ohash::map<std::string, int> labelToIndex = labels.ClassToIndex();
-
-	for (auto klass : labels.Classes()) {
-		err = MakeClassDir(dir, klass);
-		if (!err.OK())
-			return err;
-	}
-
 	int64_t lastFrameTime = 0;
 	int64_t micro         = 1000000;
 	bool    abort         = false;
 
 	for (size_t i = 0; i < labels.Frames.size() && !abort; i++) {
 		const auto& frame = labels.Frames[i];
+		if (type == ExportTypes::Segmentation && !frame.HasPolygons())
+			continue;
+		if (type != ExportTypes::Segmentation && !frame.HasRects())
+			continue;
+
 		// Only seek if frame is more than 20 seconds into the future. Haven't measured optimal metric to use here.
 		if (frame.Time - lastFrameTime > 20 * micro) {
 			int64_t buffer = 5 * micro; // seek 5 seconds behind frame target
@@ -174,7 +135,13 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 			lastFrameTime = pts;
 			if (pts == frame.Time) {
 				// found our frame
-				ExportLabeledImagePatches_Frame(type, dir, frame.Time, frame, labelToIndex, img);
+				if (type == ExportTypes::Segmentation)
+					err = ExportLabeledImagePatches_Frame_Polygons(dir, frame.Time, frame, img);
+				else
+					err = ExportLabeledImagePatches_Frame_Rect(type, dir, frame.Time, frame, img);
+				if (!err.OK())
+					return err;
+
 				if (prog != nullptr) {
 					if (!prog(i, labels.Frames.size())) {
 						abort = true;

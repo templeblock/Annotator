@@ -66,6 +66,28 @@ void Rect::ToJson(nlohmann::json& j) const {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+Error Polygon::FromJson(const nlohmann::json& j) {
+	if (!j.is_array() || j.size() < 6 || j.size() % 2 != 0)
+		return Error("Polygon must be an array of X,Y pairs, and have at least 3 vertices");
+	for (size_t i = 0; i < j.size(); i += 2) {
+		int x = j[i].get<int>();
+		int y = j[i + 1].get<int>();
+		Vertices.push_back(Point(x, y));
+	}
+	return Error();
+}
+
+void Polygon::ToJson(nlohmann::json& j) const {
+	for (const auto& v : Vertices) {
+		j.push_back((int) v.X);
+		j.push_back((int) v.Y);
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 Error ClassSeverity::FromJson(const nlohmann::json& j) {
 	if (!j.is_array() || j.size() != 2)
 		return Error("ClassSeverity pair is not an array of two elements");
@@ -92,7 +114,10 @@ Error Label::FromJson(const nlohmann::json& j) {
 			return err;
 	}
 	Author = j["labeler"];
-	Rect.FromJson(j["rect"]);
+	if (j.find("rect") != j.end())
+		Rect.FromJson(j["rect"]);
+	if (j.find("poly") != j.end())
+		Polygon.FromJson(j["poly"]);
 	return Error();
 }
 
@@ -106,7 +131,10 @@ void Label::ToJson(nlohmann::json& j) const {
 	j["classes"]  = std::move(jclasses);
 	j["labeler"]  = Author;
 	j["edittime"] = EditTime.Unix();
-	Rect.ToJson(j["rect"]);
+	if (Rect.Width() != 0)
+		Rect.ToJson(j["rect"]);
+	if (Polygon.Vertices.size() >= 3)
+		Polygon.ToJson(j["poly"]);
 }
 
 bool Label::HasClass(const std::string& _class) const {
@@ -186,6 +214,22 @@ time::Time ImageLabels::MaxEditTime() const {
 			maxT = lab.EditTime;
 	}
 	return maxT;
+}
+
+bool ImageLabels::HasRects() const {
+	for (const auto& lab : Labels) {
+		if (lab.IsRect())
+			return true;
+	}
+	return false;
+}
+
+bool ImageLabels::HasPolygons() const {
+	for (const auto& lab : Labels) {
+		if (lab.IsPolygon())
+			return true;
+	}
+	return false;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -284,6 +328,13 @@ int64_t VideoLabels::TotalLabelCount() const {
 	return c;
 }
 
+int64_t VideoLabels::TotalPolygonFrameCount() const {
+	int64_t c = 0;
+	for (const auto& f : Frames)
+		c += f.HasPolygons() ? 1 : 0;
+	return c;
+}
+
 nlohmann::json VideoLabels::ToJson() const {
 	nlohmann::json jframes;
 	for (const auto& f : Frames) {
@@ -308,6 +359,67 @@ nlohmann::json VideoLabels::ToJson() const {
 std::string LabelClass::KeyStr() const {
 	char buf[2] = {(char) Key, 0};
 	return buf;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+ohash::map<std::string, int> LabelTaxonomy::PatchClassToIndex() const {
+	ohash::map<std::string, int> map;
+	int                          ilab = 0;
+	for (const auto& c : Classes) {
+		if (!c.IsPolygon)
+			map.insert(c.Class, ilab++);
+	}
+	return map;
+}
+
+ohash::map<std::string, int> LabelTaxonomy::SegmentationClassToIndex() const {
+	// for segmentation, we always need a 'null' label, which is label 0
+	ohash::map<std::string, int> map;
+	map.insert("unlabeled", 0);
+	int ilab = 1;
+	for (const auto& c : Classes) {
+		if (c.IsPolygon)
+			map.insert(c.Class, ilab++);
+	}
+	return map;
+}
+
+size_t LabelTaxonomy::FindClassIndex(const std::string& klass) const {
+	for (size_t i = 0; i < Classes.size(); i++) {
+		if (Classes[i].Class == klass)
+			return i;
+	}
+	return -1;
+}
+
+const LabelClass* LabelTaxonomy::FindClass(const std::string& klass) const {
+	size_t i = FindClassIndex(klass);
+	return i == -1 ? nullptr : &Classes[i];
+}
+
+std::vector<std::string> LabelTaxonomy::ClassesInGroup(std::string group) const {
+	std::vector<std::string> cg;
+	for (const auto& c : Classes) {
+		if (c.Group == group)
+			cg.push_back(c.Class);
+	}
+	return cg;
+}
+
+std::vector<std::vector<train::LabelClass>> LabelTaxonomy::ClassGroups() const {
+	std::vector<std::vector<train::LabelClass>> groups;
+	string                                      last = "not a group";
+	for (size_t i = 0; i < Classes.size(); i++) {
+		if (Classes[i].Group != last) {
+			groups.push_back({});
+		}
+		groups.back().push_back(Classes[i]);
+		last = Classes[i].Group;
+	}
+	return groups;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

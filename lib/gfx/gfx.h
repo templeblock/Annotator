@@ -5,6 +5,7 @@
 #include <cmath>
 #include <lib/pal/pal.h>
 #include "Buffer.h"
+#include "Canvas.h"
 #include "Color8.h"
 #include "ColorHSV.h"
 #include "ImageIO.h"

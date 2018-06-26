@@ -28,58 +28,67 @@ void xoMain(xo::SysWnd* wnd) {
 	svg::LoadAll(wnd->Doc());
 	//wnd->SetPosition(xo::Box(0, 0, 1600, 1020), xo::SysWnd::SetPosition_Size);
 
-	auto ui = new UI(&wnd->Doc()->Root);
+	auto ui       = new UI(&wnd->Doc()->Root);
+	ui->LabelMode = UI::LabelModes::Segmentation;
 
 #ifdef IMQS_AI_API
 	auto err         = ui->Model.Load("c:\\mldata\\cp\\model.cntk");
 	ui->ModelLoadErr = err.Message();
 #endif
 
-	// !!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!
-	// If you make changes that need once-off fixups, then the best place to
-	// write the fix-up code is inside UI::LoadLabels()
+	if (ui->LabelMode == UI::LabelModes::Segmentation) {
+		ui->Taxonomy.Classes.push_back({false, false, 'U', "", "unlabeled"});
+		ui->Taxonomy.Classes.push_back({true, false, 'L', "mark", "lane"});
+	} else if (ui->LabelMode == UI::LabelModes::FixedBoxes) {
+		// !!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!
+		// If you make changes that need once-off fixups, then the best place to
+		// write the fix-up code is inside UI::LoadLabels()
 
-	// first class must be unlabeled - as embodied by UI::UnlabeledClass
-	ui->Classes.push_back({false, 'U', "", "unlabeled"});
+		// first class must be unlabeled - as embodied by UI::UnlabeledClass
+		ui->Taxonomy.Classes.push_back({false, false, 'U', "", "unlabeled"});
 
-	// type of surface
-	ui->Classes.push_back({false, 'A', "type", "tar"});
-	ui->Classes.push_back({false, 'D', "type", "dirt"});
-	ui->Classes.push_back({false, 'Z', "type", "curb"});
-	ui->Classes.push_back({true, 'E', "type", "edge"});
-	ui->Classes.push_back({false, 'W', "type", "grass"});
-	ui->Classes.push_back({false, 'V', "type", "vehicle"});
-	ui->Classes.push_back({false, 'M', "type", "manhole"});
+		// type of surface
+		ui->Taxonomy.Classes.push_back({false, false, 'A', "type", "tar"});
+		ui->Taxonomy.Classes.push_back({false, false, 'D', "type", "dirt"});
+		ui->Taxonomy.Classes.push_back({false, false, 'Z', "type", "curb"});
+		ui->Taxonomy.Classes.push_back({false, true, 'E', "type", "edge"});
+		ui->Taxonomy.Classes.push_back({false, false, 'W', "type", "grass"});
+		ui->Taxonomy.Classes.push_back({false, false, 'V', "type", "vehicle"});
+		ui->Taxonomy.Classes.push_back({false, false, 'M', "type", "manhole"});
 
-	// surface artifacts
-	ui->Classes.push_back({false, 'N', "defect", "nothing"});
-	ui->Classes.push_back({true, 'F', "defect", "surf. failure"}); // degree only really starts at 3. 1 is probably too small to see.
-	ui->Classes.push_back({true, 'S', "defect", "surf. crack"});   // "random" other cracks. 1 is probably too small to see.
-	ui->Classes.push_back({true, 'L', "defect", "long. crack"});   // crack direction is same as road direction
-	ui->Classes.push_back({true, 'T', "defect", "trans. crack"});  // crack direction is across road
-	ui->Classes.push_back({true, 'B', "defect", "block crack"});   // blocks (bigger than crocodile, rectangular)
-	ui->Classes.push_back({true, 'C', "defect", "croc. crack"});   // crocodile
-	ui->Classes.push_back({true, 'G', "defect", "patching"});      // patching
-	ui->Classes.push_back({true, 'H', "defect", "pothole"});       // pothole
-	ui->Classes.push_back({false, 'Y', "defect", "cut"});          // man-made cutting
+		// surface artifacts
+		ui->Taxonomy.Classes.push_back({false, false, 'N', "defect", "nothing"});
+		ui->Taxonomy.Classes.push_back({false, true, 'F', "defect", "surf. failure"}); // degree only really starts at 3. 1 is probably too small to see.
+		ui->Taxonomy.Classes.push_back({false, true, 'S', "defect", "surf. crack"});   // "random" other cracks. 1 is probably too small to see.
+		ui->Taxonomy.Classes.push_back({false, true, 'L', "defect", "long. crack"});   // crack direction is same as road direction
+		ui->Taxonomy.Classes.push_back({false, true, 'T', "defect", "trans. crack"});  // crack direction is across road
+		ui->Taxonomy.Classes.push_back({false, true, 'B', "defect", "block crack"});   // blocks (bigger than crocodile, rectangular)
+		ui->Taxonomy.Classes.push_back({false, true, 'C', "defect", "croc. crack"});   // crocodile
+		ui->Taxonomy.Classes.push_back({false, true, 'G', "defect", "patching"});      // patching
+		ui->Taxonomy.Classes.push_back({false, true, 'H', "defect", "pothole"});       // pothole
+		ui->Taxonomy.Classes.push_back({false, false, 'Y', "defect", "cut"});          // man-made cutting
 
-	// aggregate loss
-	ui->Classes.push_back({true, 'I', "agg. loss", "agg. loss"});
+		// aggregate loss
+		ui->Taxonomy.Classes.push_back({false, true, 'I', "agg. loss", "agg. loss"});
 
-	// binder
-	ui->Classes.push_back({true, 'J', "binder", "binder"});
+		// binder
+		ui->Taxonomy.Classes.push_back({false, true, 'J', "binder", "binder"});
 
-	// bleeding
-	ui->Classes.push_back({true, 'K', "bleeding", "bleeding"});
+		// bleeding
+		ui->Taxonomy.Classes.push_back({false, true, 'K', "bleeding", "bleeding"});
 
-	// pumping
-	ui->Classes.push_back({true, 'P', "pumping", "pumping"});
+		// pumping
+		ui->Taxonomy.Classes.push_back({false, true, 'P', "pumping", "pumping"});
 
-	imqs::train::ExportClassTaxonomy("c:\\mldata\\taxonomy.json", ui->Classes);
+		imqs::train::ExportClassTaxonomy("c:\\mldata\\taxonomy.json", ui->Taxonomy.Classes);
+	} else {
+		IMQS_DIE();
+	}
 
 	//ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
 	//ui->VideoFilename = "C:\\mldata\\DSCF3022.MOV";
-	ui->VideoFilename = "LOAD FILE";
+	ui->VideoFilename = "T:\\IMQS8_Data\\ML\\DSCF3022.MOV";
+	//ui->VideoFilename = "LOAD FILE";
 	if (!ui->OpenVideo())
 		ui->Render();
 }

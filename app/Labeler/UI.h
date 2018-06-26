@@ -11,6 +11,11 @@ public:
 		train::VideoLabels Labels;
 	};
 
+	enum class LabelModes {
+		FixedBoxes,
+		Segmentation,
+	} LabelMode = LabelModes::FixedBoxes;
+
 	enum class PlayStates {
 		Stop,
 		Play
@@ -28,6 +33,7 @@ public:
 	xo::DomNode*      StatusLabel   = nullptr;
 	xo::DomNode*      ErrorLabel    = nullptr;
 	xo::DomNode*      LabelBox      = nullptr;
+	xo::DomNode*      ToolsBox      = nullptr;
 	int64_t           PlayTimer     = 0;
 	int64_t           OnDestroyEv   = 0;
 	std::string       VideoFilename;
@@ -42,14 +48,14 @@ public:
 	train::ProgressCallback ExportCallback;
 	std::function<void()>   ExportDlgClosed;
 
-	std::string                    UserName;
-	size_t                         UnlabeledClass = 0; // First class must be unlabeled
-	std::vector<train::LabelClass> Classes;
-	train::VideoLabels             Labels;
-	train::LabelClass              CurrentAssignClass;
-	int                            CurrentAssignSeverity = 1;
-	int                            LabelGridSize         = 256;
-	bool                           GridTopDown           = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
+	std::string          UserName;
+	size_t               UnlabeledClass = 0; // First class must be unlabeled
+	train::LabelTaxonomy Taxonomy;
+	train::VideoLabels   Labels;
+	train::LabelClass    CurrentAssignClass;
+	int                  CurrentAssignSeverity = 1;
+	int                  LabelGridSize         = 256;
+	bool                 GridTopDown           = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
 
 #ifdef IMQS_AI_API
 	// Inference
@@ -72,17 +78,25 @@ public:
 	void Render();
 
 private:
-	int       VideoCanvasWidth  = 0;
-	int       VideoCanvasHeight = 0;
-	xo::Vec2f MouseDown;
-	bool      IsMouseDragging = false;
+	int             VideoCanvasWidth  = 0;
+	int             VideoCanvasHeight = 0;
+	xo::Vec2f       MouseDown;
+	bool            IsMouseDragging       = false;
+	bool            IsCreatingPolygon     = false;
+	bool            IsDraggingVertex      = false;
+	train::Polygon* CurrentPolygon        = nullptr;
+	train::Label*   CurrentLabel          = nullptr;
+	size_t          CurrentDraggingVertex = -1;
 
 	void RenderTimeSlider(bool first = false);
 	void FlipPlayState();
 	void SeekFromUI(xo::Event& ev);
 	void Play();
 	void Stop();
+	void DrawLabels();
 	void DrawLabelBoxes();
+	void DrawSegmentationLabels();
+	void DrawPolygon(xo::Canvas2D* cx, const train::Polygon& poly, std::vector<float>* tmpVx = nullptr);
 	void DrawEvalOverlay();
 	void SetCurrentLabel(train::LabelClass c);
 	void GridDimensions(int& width, int& height);
@@ -90,18 +104,23 @@ private:
 	void NextFrame();
 	void DrawCurrentFrame();
 	void LoadLabels();
+	void RenderToolsUI();
 	void RenderLabelUI();
 	void SetLabelDirty(train::ImageLabels* frame, train::Label* label, bool redrawOnCanvas = true);
+	void CreateNewPolygonLabel(std::string klass, int severity);
 
-	size_t                   FindClassIndex(const std::string& klass);
-	const train::LabelClass* FindClass(const std::string& klass);
-	std::string              ShortcutKeyForClass(const std::string& klass);
-	std::vector<std::string> ClassesInGroup(std::string group);
+	train::ImageLabels* LabelsForCurrentFrame(bool create);
 
-	std::vector<std::vector<train::LabelClass>> ClassGroups();
+	void          Segmentation_MouseDrag(xo::Event& ev, xo::Point vposMouseDown, xo::Point vpos);
+	void          Segmentation_FindCloseVertex(xo::Point vpos, train::Label*& lab, size_t& ivertex, bool createVertexIfNone);
+	train::Label* Segmentation_FindCloseLabel(xo::Point vpos);
+	void          Segmentation_DeleteLabel(xo::Point vpos);
+
+	std::string ShortcutKeyForClass(const std::string& klass);
 
 	xo::Vec2f VideoScaleOnCanvas();
 	xo::Point CanvasToVideoPos(int x, int y);
+	xo::Vec2f VideoPosToCanvas(int x, int y);
 	xo::Point VideoPosToGrid(int x, int y);
 	xo::Point GridPosToVideo(int x, int y);
 	xo::Point GridPosOffset();

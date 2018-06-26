@@ -9,6 +9,12 @@ struct IMQS_TRAIN_API Point {
 
 	Point() {}
 	Point(int x, int y) : X(x), Y(y) {}
+
+	float Distance(int x, int y) const { return sqrt((float) (x - X) * (x - X) + (float) (y - Y) * (y - Y)); }
+
+	operator gfx::Vec2f() const {
+		return gfx::Vec2f((float) X, (float) Y);
+	}
 };
 
 struct IMQS_TRAIN_API Rect {
@@ -45,6 +51,15 @@ struct IMQS_TRAIN_API Rect {
 	void  ToJson(nlohmann::json& j) const;
 };
 
+// A polygon has 3 or more vertices, and is implicitly closed. The final vertex is not repeated.
+class IMQS_TRAIN_API Polygon {
+public:
+	std::vector<Point> Vertices;
+
+	Error FromJson(const nlohmann::json& j);
+	void  ToJson(nlohmann::json& j) const;
+};
+
 // A class and severity pair
 class IMQS_TRAIN_API ClassSeverity {
 public:
@@ -61,7 +76,9 @@ public:
 // A single labeled region inside an image
 class IMQS_TRAIN_API Label {
 public:
+	// Either Rect or Polygon is populated
 	Rect                       Rect;
+	Polygon                    Polygon;
 	std::vector<ClassSeverity> Classes;
 	std::string                Author;   // Person who last edited this label
 	time::Time                 EditTime; // Time when this label was created
@@ -72,6 +89,8 @@ public:
 	int   Severity(const std::string& _class) const; // Returns severity, or -1 if class does not exist
 	void  RemoveClass(const std::string& _class);
 	void  SetClass(const std::string& _class, int severity);
+	bool  IsRect() const { return Rect.Width() != 0; }
+	bool  IsPolygon() const { return Polygon.Vertices.size() != 0; }
 };
 
 // Set of labels for an image (image is usually a single frame from a video)
@@ -85,6 +104,8 @@ public:
 	void       ToJson(nlohmann::json& j) const;
 	void       SetDirty();
 	time::Time MaxEditTime() const; // Max edit time of labels inside this frame
+	bool       HasRects() const;
+	bool       HasPolygons() const;
 
 	double TimeSeconds() const { return (double) Time / 1000000.0; }
 
@@ -104,6 +125,7 @@ public:
 	std::vector<std::string>     Classes() const; // Classes are sorted alphabetically
 	ohash::map<std::string, int> ClassToIndex() const;
 	int64_t                      TotalLabelCount() const;
+	int64_t                      TotalPolygonFrameCount() const;
 	nlohmann::json               ToJson() const;
 };
 
@@ -114,11 +136,24 @@ public:
 	std::string Group;   // Only one label allowed per group
 	std::string Class;   // Class label
 	bool        HasSeverity = false;
+	bool        IsPolygon   = false;
 
 	LabelClass() {}
-	LabelClass(bool hasSeverity, int key, std::string group, std::string _class) : HasSeverity(hasSeverity), Key(key), Group(group), Class(_class) {}
+	LabelClass(bool isPolygon, bool hasSeverity, int key, std::string group, std::string _class) : IsPolygon(isPolygon), HasSeverity(hasSeverity), Key(key), Group(group), Class(_class) {}
 
 	std::string KeyStr() const;
+};
+
+class IMQS_TRAIN_API LabelTaxonomy {
+public:
+	std::vector<LabelClass> Classes;
+
+	ohash::map<std::string, int>                PatchClassToIndex() const;
+	ohash::map<std::string, int>                SegmentationClassToIndex() const;
+	size_t                                      FindClassIndex(const std::string& klass) const;
+	const LabelClass*                           FindClass(const std::string& klass) const;
+	std::vector<std::string>                    ClassesInGroup(std::string group) const;
+	std::vector<std::vector<train::LabelClass>> ClassGroups() const;
 };
 
 IMQS_TRAIN_API std::string LabelFileDir(std::string videoFilename);

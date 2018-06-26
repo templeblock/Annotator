@@ -109,5 +109,10 @@ bool PtInsidePoly(double x, double y, size_t n, const double* v, size_t stride_i
 bool PtInsidePoly(float x, float y, size_t n, const float* v, size_t stride_in_floats) {
 	return TPtInsidePoly(x, y, n, v, stride_in_floats);
 }
+
+bool PtInsidePoly(int x, int y, size_t n, const int* v, size_t stride_in_ints) {
+	return TPtInsidePoly(x, y, n, v, stride_in_ints);
 }
-}
+
+} // namespace geom2d
+} // namespace imqs

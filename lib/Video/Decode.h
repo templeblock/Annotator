@@ -62,8 +62,13 @@ private:
 };
 
 inline void VideoFile::Dimensions(int& width, int& height) const {
-	width  = VideoDecCtx->width;
-	height = VideoDecCtx->height;
+	if (VideoDecCtx) {
+		width  = VideoDecCtx->width;
+		height = VideoDecCtx->height;
+	} else {
+		width  = 0;
+		height = 0;
+	}
 }
 
 } // namespace video
