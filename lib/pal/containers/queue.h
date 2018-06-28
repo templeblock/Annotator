@@ -30,8 +30,8 @@ class IMQS_PAL_API Queue {
 public:
 	typedef bool (*ScanCallback)(void* context, void* item);
 
-	std::mutex Lock;      // Lock on the queue data structures
-	Semaphore  Semaphore; // Can be used to wait for detection of a non-empty queue. Only valid if semaphore was enabled during call to Initialize(). Read CAVEAT.
+	std::mutex  Lock;      // Lock on the queue data structures
+	::Semaphore Semaphore; // Can be used to wait for detection of a non-empty queue. Only valid if semaphore was enabled during call to Initialize(). Read CAVEAT.
 
 	Queue();
 	~Queue();
@@ -91,4 +91,4 @@ public:
 private:
 	Queue Q;
 };
-}
+} // namespace imqs

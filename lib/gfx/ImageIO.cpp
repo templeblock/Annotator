@@ -138,6 +138,17 @@ Error ImageIO::SavePng(bool withAlpha, int width, int height, int stride, const 
 	return Error();
 }
 
+Error ImageIO::SavePngFile(const std::string& filename, bool withAlpha, int width, int height, int stride, const void* buf, int zlibLevel) {
+	void*  encBuf  = nullptr;
+	size_t encSize = 0;
+	auto   err     = SavePng(withAlpha, width, height, stride, buf, zlibLevel, encBuf, encSize);
+	if (!err.OK())
+		return err;
+	err = os::WriteWholeFile(filename, encBuf, encSize);
+	FreeEncodedBuffer(ImageType::Png, encBuf);
+	return err;
+}
+
 // The lack of const in the pointers we send libjpeg-turbo is for the older version that ships on Ubuntu 16.04
 
 static int BytesPerSample(TJPF format) {

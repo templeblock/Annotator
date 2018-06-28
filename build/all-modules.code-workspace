@@ -11,6 +11,12 @@
 		},
 		{
 			"path": "/home/ben/dev/Annotator/lib/gfx"
+		},
+		{
+			"path": "/home/ben/dev/Annotator/app/CameraCalibrator"
+		},
+		{
+			"path": "/home/ben/dev/Annotator/lib/pal"
 		}
 	],
 	"settings": {

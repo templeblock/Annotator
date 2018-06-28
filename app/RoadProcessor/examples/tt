@@ -1,0 +1,4 @@
+
+build/run-roadprocessor -r speed -o test.json /home/ben/mldata/
+build/run-roadprocessor -r speed -o test.json /home/ben/mldata/DSCF3022.MOV,/home/ben/mldata/DSCF3023.MOV,/home/ben/mldata/DSCF3024.MOV 2>/dev/null
+build/run-roadprocessor -r speed --csv /home/ben/mldata/DSCF3022.MOV,/home/ben/mldata/DSCF3023.MOV,/home/ben/mldata/DSCF3024.MOV

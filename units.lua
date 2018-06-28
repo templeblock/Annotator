@@ -437,23 +437,6 @@ local opencv = ExternalLibrary {
 	},
 }
 
-local xo = ExternalLibrary {
-	Name = "xo",
-	Depends = {
-		deploy_xo_debug,
-		deploy_xo_release,
-	},
-	Propagate = {
-		Env = {
-			LIBPATH = {
-				{ "third_party/xo/t2-output/win64-msvc2015-debug-default", Config = winDebugFilter },
-				{ "third_party/xo/t2-output/win64-msvc2015-release-default", Config = winReleaseFilter },
-			},
-		},
-		Libs = { "xo.lib" },
-	},
-}
-
 local tsf = StaticLibrary {
 	Name = "tsf",
 	Depends = { winCrt, },
@@ -472,6 +455,136 @@ local utfz = StaticLibrary {
 		"third_party/utfz/utfz.h",
 	},
 	IdeGenerationHints = ideHintThirdParty,
+}
+
+--[[
+local xo = ExternalLibrary {
+	Name = "xo",
+	Depends = {
+		deploy_xo_debug,
+		deploy_xo_release,
+	},
+	Propagate = {
+		Env = {
+			LIBPATH = {
+				{ "third_party/xo/t2-output/win64-msvc2015-debug-default", Config = winDebugFilter },
+				{ "third_party/xo/t2-output/win64-msvc2015-release-default", Config = winReleaseFilter },
+			},
+		},
+		Libs = { "xo.lib" },
+	},
+}
+--]]
+
+local freetype = StaticLibrary {
+	Name = "freetype",
+	Defines = {
+		"FT2_BUILD_LIBRARY",
+	},
+	Depends = { winCrt, },
+	SourceDir = "third_party/xo/dependencies/freetype",
+	Includes = "third_party/xo/dependencies/freetype/include",
+	Sources = {
+		"src/autofit/autofit.c",
+		"src/base/ftbase.c",
+		"src/base/ftbitmap.c",
+		"src/bdf/bdf.c",
+		"src/cff/cff.c",
+		"src/cache/ftcache.c",
+		"src/base/ftgasp.c",
+		"src/base/ftglyph.c",
+		"src/gzip/ftgzip.c",
+		"src/base/ftinit.c",
+		"src/base/ftlcdfil.c",
+		"src/lzw/ftlzw.c",
+		"src/base/ftstroke.c",
+		"src/base/ftsystem.c",
+		"src/smooth/smooth.c",
+		"src/base/ftbbox.c",
+		"src/base/ftmm.c",
+		"src/base/ftpfr.c",
+		"src/base/ftsynth.c",
+		"src/base/fttype1.c",
+		"src/base/ftwinfnt.c",
+		"src/pcf/pcf.c",
+		"src/pfr/pfr.c",
+		"src/psaux/psaux.c",
+		"src/pshinter/pshinter.c",
+		"src/psnames/psmodule.c",
+		"src/raster/raster.c",
+		"src/sfnt/sfnt.c",
+		"src/truetype/truetype.c",
+		"src/type1/type1.c",
+		"src/cid/type1cid.c",
+		"src/type42/type42.c",
+		"src/winfonts/winfnt.c",
+	}
+}
+
+local directx = ExternalLibrary {
+	Name = "directx",
+	Propagate = {
+		Libs = {
+			{ "D3D11.lib", "d3dcompiler.lib"; Config = "win*" },
+		},
+	},
+}
+
+-- collection of stb libraries
+local stb = StaticLibrary {
+	Name = "stb",
+	Sources = {
+		"third_party/stb/stb.cpp"
+	}
+}
+
+-- This is not used on Linux Desktop
+local expat = StaticLibrary {
+	Name = "expat",
+	Depends = { winCrt, },
+	Defines = {
+		"XML_STATIC",
+		{ "WIN32"; Config = winFilter },
+	},
+	Sources = {
+		makeGlob("third_party/xo/dependencies/expat", {})
+	}
+}
+
+local xo = SharedLibrary {
+	Name = "xo",
+	Libs = {
+		{ "opengl32.lib", "user32.lib", "gdi32.lib", "winmm.lib" ; Config = winFilter },
+		{ "X11", "GL", "GLU", "stdc++", "expat", "pthread"; Config = linuxFilter },
+	},
+	Defines = {
+		"XML_STATIC", -- for expat
+		"XO_NO_STB_IMAGE",
+		"XO_NO_STB_IMAGE_WRITE",
+		"XO_NO_TSF",
+	},
+	Includes = {
+		"third_party/xo/xo",
+		"third_party/xo/dependencies/freetype/include",
+		"third_party/xo/dependencies/agg/include",
+		"third_party/xo/dependencies/expat",
+	},
+	Depends = {
+		winCrt, freetype, directx, utfz, stb,
+		{ expat; Config = winFilter },
+	},
+	PrecompiledHeader = {
+		Source = "third_party/xo/xo/pch.cpp",
+		Header = "pch.h",
+		Pass = "PchGen",
+	},
+	Sources = {
+		makeGlob("third_party/xo/xo", {}),
+		makeGlob("third_party/xo/dependencies/agg", {}),
+		makeGlob("third_party/xo/dependencies/ConvertUTF", {}),
+		makeGlob("third_party/xo/dependencies/GL", {}),
+		makeGlob("third_party/xo/dependencies/hash", {}),
+	},
 }
 
 local uberlogger = Program {
@@ -594,7 +707,7 @@ local pal = SharedLibrary {
 
 local gfx = StaticLibrary {
 	Name = "gfx",
-	Depends = { winCrt, pal, libjpeg_turbo, png },
+	Depends = { winCrt, pal, libjpeg_turbo, png, stb },
 	PrecompiledHeader = {
 		Source = "lib/gfx/pch.cpp",
 		Header = "pch.h",
@@ -766,13 +879,13 @@ local Labeler = Program {
 local RoadProcessor = Program {
 	Name = "RoadProcessor",
 	Depends = {
-		winCrt, Video, gfx, opencv, ffmpeg, pal, tsf,
+		winCrt, Video, gfx, opencv, ffmpeg, pal, libjpeg_turbo, png, stb, tsf,
 	},
 	--Env = {
 	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	--},
 	Libs = { 
-		{ "rt", "m", "stdc++"; Config = linuxFilter },
+		{ "rt", "m", "stdc++", "omp"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/RoadProcessor/pch.cpp",
@@ -791,13 +904,13 @@ local RoadProcessor = Program {
 local CameraCalibrator = Program {
 	Name = "CameraCalibrator",
 	Depends = {
-		winCrt, gfx, pal, opencv, xo, libjpeg_turbo, png, tsf
+		winCrt, gfx, pal, opencv, xo, libjpeg_turbo, png, tsf, stb
 	},
 	Env = {
 		-- PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	},
 	Libs = { 
-		{ "m", "stdc++"; Config = linuxFilter },
+		{ "m", "stdc++", "omp"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/CameraCalibrator/pch.cpp",

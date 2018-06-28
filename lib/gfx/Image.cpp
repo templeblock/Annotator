@@ -67,13 +67,17 @@ Image& Image::operator=(const Image& b) {
 	Data    = (uint8_t*) imqs_malloc_or_die(Height * Stride);
 	Format  = b.Format;
 	OwnData = true;
+	for (int y = 0; y < Height; y++)
+		memcpy(Line(y), b.Line(y), BytesPerLine());
 	return *this;
 }
 
 Image& Image::operator=(Image&& b) {
-	Reset();
-	memcpy(this, &b, sizeof(b));
-	memset(&b, 0, sizeof(b));
+	if (this != &b) {
+		Reset();
+		memcpy(this, &b, sizeof(b));
+		memset(&b, 0, sizeof(b));
+	}
 	return *this;
 }
 

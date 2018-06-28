@@ -34,6 +34,9 @@ public:
 	// Encode png
 	Error SavePng(bool withAlpha, int width, int height, int stride, const void* buf, int zlibLevel, void*& encBuf, size_t& encSize);
 
+	// Save png to file
+	Error SavePngFile(const std::string& filename, bool withAlpha, int width, int height, int stride, const void* buf, int zlibLevel);
+
 	// Decodes a jpeg image into a memory buffer of the desired type. Stride is natural, rounded up to the nearest 4 bytes.
 	Error LoadJpeg(const void* jpegBuf, size_t jpegLen, int& width, int& height, void*& buf, TJPF format = TJPF_RGBA);
 

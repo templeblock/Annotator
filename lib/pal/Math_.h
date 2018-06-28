@@ -97,5 +97,27 @@ T RoundUpInt(T v, T denom) {
 
 inline bool IsFinite(float v) { return std::isfinite(v); }
 inline bool IsFinite(double v) { return std::isfinite(v); }
+
+template <typename T, typename Result>
+std::pair<Result, Result> MeanAndVariance(size_t n, const T* x) {
+	Result mean = 0;
+	for (size_t i = 0; i < n; i++) {
+		mean += x[i];
+	}
+	mean /= (Result) n;
+
+	Result var = 0;
+	for (size_t i = 0; i < n; i++) {
+		var += (x[i] - mean) * (x[i] - mean);
+	}
+	var /= Result(n - 1);
+	return std::pair<Result, Result>(mean, var);
+}
+
+template <typename T, typename Result>
+std::pair<Result, Result> MeanAndVariance(const std::vector<T>& x) {
+	return MeanAndVariance<T, Result>(x.size(), &x[0]);
+}
+
 } // namespace math
 } // namespace imqs

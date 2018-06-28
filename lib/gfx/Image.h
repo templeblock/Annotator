@@ -65,6 +65,7 @@ public:
 	uint8_t*       Line(int y) { return Data + (y * Stride); }
 	const uint8_t* Line(int y) const { return Data + (y * Stride); }
 	int            BytesPerPixel() const { return gfx::BytesPerPixel(Format); }
+	size_t         BytesPerLine() const { return gfx::BytesPerPixel(Format) * Width; }
 };
 
 } // namespace gfx

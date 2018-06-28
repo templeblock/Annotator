@@ -35,7 +35,10 @@ typedef SSIZE_T ssize_t;
 
 #ifdef _MSC_VER
 #define IMQS_NORETURN __declspec(noreturn)
+#elif defined(__GNUC__)
+#define IMQS_NORETURN __attribute__((noreturn))
 #else
+// clang
 #define IMQS_NORETURN __attribute__((noreturn)) __attribute__((analyzer_noreturn))
 #endif
 

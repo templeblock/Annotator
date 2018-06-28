@@ -14,7 +14,7 @@ typedef uint64_t uint64;
 
 static bool  Manipulate = true;
 static float ZFactor1   = 1.00f;
-static float ZFactor2   = 0.001f;
+static float ZFactor2   = -0.0007f;
 
 uint32 Bilinear_x64(uint32 a, uint32 b, uint32 c, uint32 d, uint32 ix, uint32 iy) {
 	// By Nils Pipenbrinck.
@@ -56,7 +56,7 @@ void UnprojectPos(int32 x, int32 y, int32& u, int32& v) {
 	float cy = 1080 / 2;
 	float fx = (float) x - cx;
 	float fy = (float) y - cy;
-	float z  = ZFactor1 + ZFactor2 * y;
+	float z  = ZFactor1 + ZFactor2 * fy;
 	fx /= z;
 	fy /= z;
 	fx += cx;
@@ -71,6 +71,7 @@ void UnprojectImage(void* dst, int dstWidth, int dstHeight, int dstStride, const
 	int32   srcClampU = (srcWidth - 1) * 256 - 1;
 	int32   srcClampV = (srcHeight - 1) * 256 - 1;
 	uint32* dst32     = (uint32*) dst;
+#pragma omp parallel for
 	for (int dstY = 0; dstY < dstHeight; dstY++) {
 		for (int dstX = 0; dstX < dstWidth; dstX++) {
 			int32 u, v;
@@ -87,6 +88,7 @@ void xoMain(xo::SysWnd* wnd) {
 	auto doc      = wnd->Doc();
 	auto root     = &doc->Root;
 	auto zfactor1 = root->AddText("zfactor1");
+	root->AddText(" -- ");
 	auto zfactor2 = root->AddText("zfactor2");
 	root->ParseAppendNode("<div style='break:after'/>");
 
@@ -96,7 +98,9 @@ void xoMain(xo::SysWnd* wnd) {
 	canvas->SetImageSizeOnly(canvWidth, canvHeight);
 	canvas->StyleParsef("width: 1440px; height: 810px");
 
-	string       src = "C:\\Users\\benh\\Pictures\\perspective-1.png";
+	//string       src = "C:\\Users\\benh\\Pictures\\perspective-1.png";
+	//string       src = "/home/ben/Pictures/vlcsnap-2018-06-22-14h33m23s250.png";
+	string       src = "/home/ben/Pictures/snappy.png";
 	string       srcRaw;
 	gfx::ImageIO imgIO;
 	os::ReadWholeFile(src, srcRaw);
@@ -123,8 +127,8 @@ void xoMain(xo::SysWnd* wnd) {
 	root->OnMouseMove([=](xo::Event& ev) -> void {
 		if (!Manipulate)
 			return;
-		ZFactor1 = 1.0 + (ev.PointsRel[0].x - 400) * 0.001f;
-		ZFactor2 = (ev.PointsRel[0].y - 400) * 0.000005f;
+		ZFactor1 = 1.0 + (ev.PointsRel[0].x - 500) * 0.001f;
+		ZFactor2 = (ev.PointsRel[0].y - 500) * 0.000002f;
 		zfactor1->SetText(tsf::fmt("%8.6f", ZFactor1).c_str());
 		zfactor2->SetText(tsf::fmt("%8.6f", ZFactor2).c_str());
 		auto c2d = canvas->GetCanvas2D();

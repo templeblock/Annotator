@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "FeatureTracking.h"
 
 // The "Speed" system analyzes inter-frame movement of keypoints, to determine our speed
 // at which the vehicle is moving. We make no attempt to be physically accurate, because
@@ -23,82 +24,28 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
-// Convert an RGBA image to an OpenCV RGB matrix (discard alpha)
-static void RGBAToMat(int width, int height, int stride, const void* buf, cv::Mat& m) {
-	if (m.rows != height || m.cols != width || m.type() != CV_8UC3)
-		m.create(height, width, CV_8UC3);
-	for (int y = 0; y < height; y++) {
-		const char* src = (const char*) buf + y * stride;
-		char*       dst = (char*) m.ptr(y);
-		size_t      ww  = (size_t) width;
-		for (size_t x = 0; x < ww; x++) {
-			// RGB -> BGR (OpenCV is BGR)
-			dst[0] = src[2];
-			dst[1] = src[1];
-			dst[2] = src[0];
-			src += 4;
-			dst += 3;
-		}
-	}
-}
-
-static cv::Mat RGBAToMat(int width, int height, int stride, const void* buf) {
-	cv::Mat m;
-	RGBAToMat(width, height, stride, buf, m);
-	return m;
-}
-
-struct KeyPointSet {
-	std::vector<cv::KeyPoint> Points;
-	cv::Mat                   Descriptors;
-
-	// Set points, detected via some function such as goodFeaturesToTrack
-	void SetPoints(const std::vector<cv::Point2f>& points) {
-		Points.resize(points.size());
-		for (size_t i = 0; i < points.size(); i++)
-			Points[i].pt = points[i];
-	}
-};
-
-static void ComputeKeyPoints(cv::Mat img, KeyPointSet& kp) {
-	bool orientNormalized = false;
-	bool scaleNormalized  = true;
-	auto featAlgo         = cv::xfeatures2d::FREAK::create(orientNormalized, scaleNormalized);
-
-	vector<cv::Point2f> corners;
-	cv::goodFeaturesToTrack(img, corners, 1000, 0.1, 5);
-	kp.SetPoints(corners);
-	//tsf::print("n: %v\n", corners.size());
-
-	featAlgo->compute(img, kp.Points, kp.Descriptors);
-}
-
 static const double TooFast = 9999;
 
 static double SpeedBetweenFramePair(cv::Mat img1, cv::Mat img2) {
+	int         maxKeyPoints = 1000;
+	double      quality      = 0.1;
+	double      minDistance  = 5;
 	KeyPointSet kp1, kp2;
-	ComputeKeyPoints(img1, kp1);
-	ComputeKeyPoints(img2, kp2);
+	ComputeKeyPoints(img1, maxKeyPoints, quality, minDistance, false, false, kp1);
+	ComputeKeyPoints(img2, maxKeyPoints, quality, minDistance, false, false, kp2);
 
-	// Compute keypoint matches, based only on feature matches (no position)
-	vector<cv::DMatch>             initialMatches;
-	cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create("BruteForce-Hamming");
-	matcher->match(kp1.Descriptors, kp2.Descriptors, initialMatches);
-
-	// Compute final matches with GMS, which takes position into account
-	vector<cv::DMatch> matchesGMS;
-	cv::xfeatures2d::matchGMS(img1.size(), img2.size(), kp1.Points, kp2.Points, initialMatches, matchesGMS, false, false);
-
-	//tsf::print("matchesGMS: %v\n", matchesGMS.size());
+	vector<cv::DMatch> matches;
+	ComputeMatch(img1.size(), img2.size(), kp1, kp2, false, false, matches);
+	//tsf::print("matches: %v\n", matches.size());
 
 	double n        = 0;
 	double sumDelta = 0;
-	for (size_t i = 0; i < matchesGMS.size(); i++) {
-		auto&  p1    = kp1.Points[matchesGMS[i].queryIdx];
-		auto&  p2    = kp2.Points[matchesGMS[i].trainIdx];
+	for (size_t i = 0; i < matches.size(); i++) {
+		auto&  p1    = kp1.Points[matches[i].queryIdx];
+		auto&  p2    = kp2.Points[matches[i].trainIdx];
 		double delta = p2.pt.y - p1.pt.y;
 		if (delta > 1000)
-			tsf::print("(%v -> %v), %v,%v -> %v,%v\n", matchesGMS[i].trainIdx, matchesGMS[i].queryIdx, p1.pt.x, p1.pt.y, p2.pt.x, p2.pt.y);
+			tsf::print("(%v -> %v), %v,%v -> %v,%v\n", matches[i].trainIdx, matches[i].queryIdx, p1.pt.x, p1.pt.y, p2.pt.x, p2.pt.y);
 		sumDelta += delta;
 		n++;
 	}

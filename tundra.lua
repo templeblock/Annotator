@@ -29,12 +29,15 @@ local unix_common = {
 			{ "-std=c++11" },
 			{ "-fPIC" },
 			{ "-ggdb" },
-			{ "-O3"; Config = "linux-*-release-*" }
+			{ "-O3"; Config = "linux-*-release-*" },
+			--{ "-mavx2"; Config = "linux-*-release-*" },
+			{ "-fopenmp=libomp" },
 		},
 		CCOPTS = {
 			{ "-fPIC" },
 			{ "-ggdb" },
-			{ "-O3"; Config = "linux-*-release-*" }
+			{ "-O3"; Config = "linux-*-release-*" },
+			{ "-fopenmp=libomp" },
 		},
 	}
 }
@@ -95,11 +98,12 @@ Build {
 			DefaultOnHost = "macosx",
 			Tools = { "gcc" },
 		},
-		--{
-		--	Name = "linux-gcc",
-		--	Inherit = unix_common,
-		--	Tools = { "gcc" },
-		--},
+		{
+			Name = "linux-gcc",
+			SupportedHosts = { "linux" },
+			Inherit = unix_common,
+			Tools = { "gcc" },
+		},
 		{
 			Name = "linux-clang",
 			DefaultOnHost = "linux",

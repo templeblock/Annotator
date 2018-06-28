@@ -19,11 +19,23 @@ sudo apt-get install -y \
 # that ffmpeg needed to be built with -fPIC. So then I tried re-running ./configure --enable-pic,
 # and then building again, but that didn't help. So eventually I resorted to building the shared
 # library only, and that fixed it.
+# 
+# Install Nvidia npp (comes from the CUDA apt repository)
+# sudo apt-get install -y libnppi7.5
+#
+# Also, since version 4... (see https://superuser.com/questions/1299064/error-cuvid-requested-but-not-all-dependencies-are-satisfied-cuda-ffnvcodec)
+# git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git
+# cd nv-codec-headers
+# make
+# sudo make install
 #
 # git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
 # cd ffmpeg
 # git checkout n3.3.3
 # ./configure --enable-pic --disable-static --enable-shared
+# ./configure --enable-pic --disable-static --enable-shared --disable-stripping
+# ./configure --enable-pic --disable-static --enable-shared --disable-stripping --enable-cuda --enable-cuvid --enable-nvenc --enable-nonfree --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64
+# ./configure --enable-pic --disable-static --enable-shared --disable-stripping --enable-cuda --enable-cuvid --enable-nvenc --enable-nonfree --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64
 # make
 # sudo make install
 

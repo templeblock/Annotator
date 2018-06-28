@@ -106,9 +106,9 @@ public:
 	int64_t Position() const { return Pos; }
 
 private:
-	bool    OwnReader = false;
-	Reader* Reader    = nullptr;
-	int64_t Pos       = 0;
+	bool        OwnReader = false;
+	io::Reader* Reader    = nullptr;
+	int64_t     Pos       = 0;
 };
 
 inline void Buffer::WriteUint16BE(uint16_t v) {
