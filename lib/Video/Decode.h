@@ -3,6 +3,18 @@
 namespace imqs {
 namespace video {
 
+enum Seek {
+	None = 0,               // seek to nearest keyframe
+	Any  = AVSEEK_FLAG_ANY, // seek to any frame, even non-keyframes
+
+	// Note: ffmpeg has these:
+	// AVSEEK_FLAG_BACKWARD 1 ///< seek backward
+	// AVSEEK_FLAG_BYTE     2 ///< seeking based on position in bytes
+	// AVSEEK_FLAG_ANY      4 ///< seek to any frame, even non-keyframes
+	// AVSEEK_FLAG_FRAME    8 ///< seeking based on frame number
+	// We can add support for them if/when we figure out their exact behaviour
+};
+
 struct IMQS_VIDEO_API VideoStreamInfo {
 	int64_t    Duration  = 0; // AVFormatContext.duration
 	int64_t    NumFrames = 0; // AvStream.nb_frames
@@ -29,10 +41,10 @@ public:
 	std::string     GetFilename() const { return Filename; }
 	VideoStreamInfo GetVideoStreamInfo();
 	Error           SeekToPreviousFrame();
-	Error           SeekToFrame(int64_t frame);
-	Error           SeekToFraction(double fraction_0_to_1);
-	Error           SeekToSecond(double second);
-	Error           SeekToMicrosecond(int64_t microsecond);
+	Error           SeekToFrame(int64_t frame, unsigned flags = Seek::None);
+	Error           SeekToFraction(double fraction_0_to_1, unsigned flags = Seek::None);
+	Error           SeekToSecond(double second, unsigned flags = Seek::None);
+	Error           SeekToMicrosecond(int64_t microsecond, unsigned flags = Seek::None);
 	double          LastFrameTimeSeconds() const;
 	int64_t         LastFrameTimeMicrosecond() const;
 	Error           DecodeFrameRGBA(int width, int height, void* buf, int stride);
@@ -59,6 +71,7 @@ private:
 	static Error OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, int& stream_idx, AVCodecContext*& dec_ctx);
 	Error        RecvFrame();
 	void         FlushCachedFrames();
+	double       PtsToSeconds(int64_t pts) const;
 };
 
 inline void VideoFile::Dimensions(int& width, int& height) const {

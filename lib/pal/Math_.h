@@ -119,5 +119,24 @@ std::pair<Result, Result> MeanAndVariance(const std::vector<T>& x) {
 	return MeanAndVariance<T, Result>(x.size(), &x[0]);
 }
 
+template <typename T, typename Result>
+std::pair<Result, Result> MinMax(size_t n, const T* x) {
+	Result vmin = 0, vmax = 0;
+	if (n != 0) {
+		vmin = x[0];
+		vmax = x[0];
+		for (size_t i = 0; i < n; i++) {
+			vmin = vmin < x[i] ? vmin : x[i];
+			vmax = vmax > x[i] ? vmax : x[i];
+		}
+	}
+	return std::pair<Result, Result>(vmin, vmax);
+}
+
+template <typename T, typename Result>
+std::pair<Result, Result> MinMax(const std::vector<T>& x) {
+	return MinMax<T, Result>(x.size(), &x[0]);
+}
+
 } // namespace math
 } // namespace imqs

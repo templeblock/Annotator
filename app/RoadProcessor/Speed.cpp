@@ -31,8 +31,8 @@ static double SpeedBetweenFramePair(cv::Mat img1, cv::Mat img2) {
 	double      quality      = 0.1;
 	double      minDistance  = 5;
 	KeyPointSet kp1, kp2;
-	ComputeKeyPoints(img1, maxKeyPoints, quality, minDistance, false, false, kp1);
-	ComputeKeyPoints(img2, maxKeyPoints, quality, minDistance, false, false, kp2);
+	ComputeKeyPoints("ShiTomasi", img1, maxKeyPoints, quality, minDistance, false, false, kp1);
+	ComputeKeyPoints("ShiTomasi", img2, maxKeyPoints, quality, minDistance, false, false, kp2);
 
 	vector<cv::DMatch> matches;
 	ComputeMatch(img1.size(), img2.size(), kp1, kp2, false, false, matches);

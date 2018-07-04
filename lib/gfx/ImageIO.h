@@ -35,13 +35,16 @@ public:
 	Error SavePng(bool withAlpha, int width, int height, int stride, const void* buf, int zlibLevel, void*& encBuf, size_t& encSize);
 
 	// Save png to file
-	Error SavePngFile(const std::string& filename, bool withAlpha, int width, int height, int stride, const void* buf, int zlibLevel);
+	static Error SavePngFile(const std::string& filename, bool withAlpha, int width, int height, int stride, const void* buf, int zlibLevel);
 
 	// Decodes a jpeg image into a memory buffer of the desired type. Stride is natural, rounded up to the nearest 4 bytes.
 	Error LoadJpeg(const void* jpegBuf, size_t jpegLen, int& width, int& height, void*& buf, TJPF format = TJPF_RGBA);
 
 	// Encode an RGBA buffer to jpeg
 	Error SaveJpeg(int width, int height, int stride, const void* buf, int quality_0_to_100, void*& jpegBuf, size_t& jpegSize);
+
+	// Save jpeg to file
+	static Error SaveJpegFile(const std::string& filename, int width, int height, int stride, const void* buf, int quality_0_to_100 = 90);
 };
 
 } // namespace gfx

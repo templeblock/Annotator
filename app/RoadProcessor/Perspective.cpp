@@ -1,5 +1,8 @@
 #include "pch.h"
 #include "FeatureTracking.h"
+#include "LensCorrection.h"
+#include "Globals.h"
+#include "Perspective.h"
 
 /*
 The functions in here compute the perspective factor Z2, from a video.
@@ -34,19 +37,9 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
-// A frustum that is oriented like an upside-down triangle. The top edge of the frustum
-// touches the top-left and top-right corners of the image. The bottom edge of the frustum
-// touches the bottom edge of the image, and it's X coordinates are X1 and X2.
-struct Frustum {
-	int   Width;
-	int   Height;
-	float X1;
-	float X2;
-
-	void DebugPrintParams(float z1, float z2, int frameWidth, int frameHeight) const {
-		tsf::print("%.4f %10f => %v x %v   %6.1f .. %6.1f (bottom scale %v, top scale %v)\n", z1, z2, Width, Height, X1, X2, (X2 - X1) / frameWidth, (float) Width / frameWidth);
-	}
-};
+void Frustum::DebugPrintParams(float z1, float z2, int frameWidth, int frameHeight) const {
+	tsf::print("%.4f %10f => %v x %v   %6.1f .. %6.1f (bottom scale %v, top scale %v)\n", z1, z2, Width, Height, X1, X2, (X2 - X1) / frameWidth, (float) Width / frameWidth);
+}
 
 // This runs newton's method, until it produces a y value that is
 // within stopAtPrecision distance from desiredY, or until stopAtIteration iterations.
@@ -65,6 +58,7 @@ float NewtonSearch(float x, float dx, float desiredY, float stopAtPrecision, int
 	return x;
 }
 
+/*
 // Total bastard version of 2D newton search.
 std::pair<float, float> NewtonSearch2D(float x1, float x2, float dx, float desiredY, float stopAtPrecision, int stopAtIteration, function<float(float x1, float x2)> func) {
 	for (int i = 0; i < stopAtIteration; i++) {
@@ -125,6 +119,7 @@ std::vector<float> NewtonSearchND(size_t n, const float* initialX, float dx, flo
 		dxv[i] = dx;
 	return NewtonSearchND(n, initialX, &dxv[0], desiredY, stopAtPrecision, stopAtIteration, func);
 }
+*/
 
 void FitQuadratic(const std::vector<std::pair<double, double>>& xy, double& a, double& b, double& c) {
 	// http://mathforum.org/library/drmath/view/72047.html
@@ -175,11 +170,29 @@ void FitQuadratic(const std::vector<std::pair<double, double>>& xy, double& a, d
 	c /= denom;
 }
 
+/*
+Vec2f BilinearXYFloat(float x, float y, const float* xyImg, int width, int height) {
+	int x1 = (int) x;
+	int y1 = (int) y;
+	if (x1 >= width - 2)
+		x1 = width - 2;
+	if (y1 >= height - 2)
+		y1 = height - 2;
+	const float* line1 = &xyImg[y1 * width * 2];
+	const float* line2 = line1 + width * 2;
+	float        a     = line1[x1];
+	float        b     = line1[x1 + 1];
+	float        c     = line2[x1];
+	float        d     = line2[x1 + 1];
+	
+}
+*/
+
 // When we speak of normalized coordinates, we mean coordinates that are centered around the origin of the image
 
-static Vec2f FlatToCamera(Vec2f flat, float z1, float z2) {
-	float z = z1 + z2 * flat.y;
-	return Vec2f(flat.x / z, flat.y / z);
+Vec2f FlatToCamera(float x, float y, float z1, float z2) {
+	float z = z1 + z2 * y;
+	return Vec2f(x / z, y / z);
 }
 
 // ux and uy are base-256
@@ -193,20 +206,20 @@ void FlatToCameraInt256(float z1, float z2, float x, float y, int32_t& u, int32_
 	v = (int32_t) fy;
 }
 
-static Vec2f FlatToCamera(int frameWidth, int frameHeight, Vec2f flat, float z1, float z2) {
-	auto cam = FlatToCamera(flat, z1, z2);
+Vec2f FlatToCamera(int frameWidth, int frameHeight, float x, float y, float z1, float z2) {
+	auto cam = FlatToCamera(x, y, z1, z2);
 	cam.x += float(frameWidth / 2);
 	cam.y += float(frameHeight / 2);
 	return cam;
 }
 
-static Vec2f CameraToFlat(Vec2f cam, float z1, float z2) {
+Vec2f CameraToFlat(Vec2f cam, float z1, float z2) {
 	float yf = (cam.y * z1) / (1 - cam.y * z2);
 	float xf = cam.x * (z1 + z2 * yf);
 	return Vec2f(xf, yf);
 }
 
-static Vec2f CameraToFlat(int frameWidth, int frameHeight, Vec2f cam, float z1, float z2) {
+Vec2f CameraToFlat(int frameWidth, int frameHeight, Vec2f cam, float z1, float z2) {
 	cam.x    = cam.x - float(frameWidth / 2);
 	cam.y    = cam.y - float(frameHeight / 2);
 	float yf = (cam.y * z1) / (1 - cam.y * z2);
@@ -216,7 +229,7 @@ static Vec2f CameraToFlat(int frameWidth, int frameHeight, Vec2f cam, float z1, 
 
 // Given a camera frame width and height, compute a frustum such that the bottom edge of the frustum
 // has the exact same resolution as the bottom edge of the camera frame.
-static Frustum ComputeFrustum(int frameWidth, int frameHeight, float z1, float z2) {
+Frustum ComputeFrustum(int frameWidth, int frameHeight, float z1, float z2) {
 	auto    topLeft  = CameraToFlat(frameWidth, frameHeight, Vec2f(0, 0), z1, z2);
 	auto    topRight = CameraToFlat(frameWidth, frameHeight, Vec2f(frameWidth, 0), z1, z2);
 	auto    botLeft  = CameraToFlat(frameWidth, frameHeight, Vec2f(0, frameHeight), z1, z2);
@@ -231,7 +244,7 @@ static Frustum ComputeFrustum(int frameWidth, int frameHeight, float z1, float z
 
 // Use an iterative solution to find a value for Z1 (ie scale), which produces a 1:1 scale at
 // the bottom of our flattened space.
-static float FindZ1ForIdentityScaleAtBottom(int frameWidth, int frameHeight, float z2) {
+float FindZ1ForIdentityScaleAtBottom(int frameWidth, int frameHeight, float z2) {
 	auto scale = [=](float x) -> float {
 		auto f = ComputeFrustum(frameWidth, frameHeight, x, z2);
 		return (f.X2 - f.X1) / frameWidth;
@@ -266,7 +279,57 @@ static void Test(float z1, float z2) {
 	tsf::print("\n");
 }
 
+// Get ready to build up an image that has identical dimensions to 'camera', but with distortion correction
+// applied. The output of this phase, is a 2D matrix, 1:1 with the original camera pixels, where every
+// entry of the matrix is an XY pair, that points to the coordinates of the original, raw camera frame.
+//float* fixedToRaw = (float*) imqs_malloc_or_die(camera.Width * camera.Height * 2);
+// NOTE: We're using 16-bit coordinates here, and we allocate 12 bits for the pixel, and 4 bits for
+// the sub-pixel. If this becomes too small (because camera res has increased), then rather use CUDA
+// for this job, or switch to 32-bit coordinates. There is a bilinear lookup function for 32 bits,
+// very similar to what's going on here for 16 bits.
+// 4K res is 3840 x 2160. 12 bits of integer precision is enough for 4096, so we're OK here for 4K,
+// but we'll see if 4 bits of sub-pixel precision is good enough.
+
+// 12 + 4 = 16
+const int DistortSubPixelBits = 4;
+uint16_t* ComputeLensDistortionMatrix(int width, int height) {
+	uint16_t* fixedToRaw = (uint16_t*) imqs_malloc_or_die(width * height * 2 * sizeof(uint16_t));
+
+	for (int y = 0; y < height; y++) {
+		global::Lens->ComputeDistortionForLine(y);
+		const float* src = global::Lens->InterpPos;
+		uint16_t*    dst = fixedToRaw + y * width * 2;
+		float        fw  = (float) width;
+		float        fh  = (float) height;
+		for (int x = 0; x < width; x++) {
+			// (01 Red) (23 Green) (45 Blue). Each pair is an XY coordinate, pointing into the raw image frame
+			// We only use green, because we're not interested in chromatic abberations. The Lensfun docs say that
+			// chromatic abberation fixing on lossy-compressed images (vs RAW) is just worse than nothing at all.
+			float u = math::Clamp<float>(src[2], 0, fw);
+			float v = math::Clamp<float>(src[3], 0, fw);
+			dst[0]  = (uint16_t)(u * (1 << DistortSubPixelBits));
+			dst[1]  = (uint16_t)(v * (1 << DistortSubPixelBits));
+			dst += 2;
+			src += 6;
+		}
+	}
+	return fixedToRaw;
+}
+
 void RemovePerspective(const Image& camera, Image& flat, float z1, float z2, float originX, float originY) {
+	uint16_t* fixedToRaw = ComputeLensDistortionMatrix(camera.Width, camera.Height);
+
+	// Because our end product here is a frustum, we can compute straight lines down the edges, and
+	// avoid sampling into those lines, which wins us a little bit of performance, because it's
+	// less filtering that we need to do.
+	auto  f     = ComputeFrustum(camera.Width, camera.Height, z1, z2);
+	float x1Inc = (f.X1 + f.Width / 2) / (float) flat.Height;
+	float x2Inc = (f.X2 + f.Width / 2 - flat.Width) / (float) flat.Height;
+	// start the lines one pixel in. If we make this buffer large enough, then we don't need to
+	// clamp inside our bilinear filter, which is a tiny speedup.
+	float x1Edge = 1;
+	float x2Edge = flat.Width - 1;
+
 	// the -1 on the width is there because we're doing bilinear filtering, and we reach into sample+1
 	// I'm not sure this is 100% correct.. and in fact we should probably add a bias of 1/2 a pixel
 	int32_t srcClampU = (camera.Width - 1) * 256 - 1;
@@ -276,22 +339,34 @@ void RemovePerspective(const Image& camera, Image& flat, float z1, float z2, flo
 	for (int y = 0; y < flat.Height; y++) {
 		uint32_t* dst32 = (uint32_t*) flat.Data;
 		dst32 += y * flat.Width;
-		size_t  width    = flat.Width;
 		int     srcWidth = camera.Width;
 		void*   src      = camera.Data;
 		int32_t camHalfX = 256 * camera.Width / 2;
 		int32_t camHalfY = 256 * camera.Height / 2;
+		size_t  xStart   = (size_t) ceil(x1Edge + (float) y * x1Inc);
+		size_t  xEnd     = (size_t) floor(x2Edge + (float) y * x2Inc);
 		float   yM       = (float) y + originY;
-		float   xM       = originX;
-		for (size_t x = 0; x < width; x++, xM++) {
+		float   xM       = originX + xStart;
+		for (size_t x = xStart; x < xEnd; x++, xM++) {
 			int32_t u, v;
+			// Flat to undistorted camera
 			FlatToCameraInt256(z1, z2, xM, yM, u, v);
 			u += camHalfX;
 			v += camHalfY;
-			uint32_t color = raster::ImageBilinear(src, srcWidth, srcClampU, srcClampV, u, v);
+			// undistorted camera to raw camera
+			uint64_t fixed = raster::ImageBilinear_RG_U16(fixedToRaw, srcWidth, srcClampU, srcClampV, u, v);
+			u              = fixed & 0xffff;
+			v              = fixed >> 16;
+			// bring the distortion parameters up to the required 8 bits of sub-pixel precision
+			u = u << (8 - DistortSubPixelBits);
+			v = v << (8 - DistortSubPixelBits);
+			// read from raw camera
+			uint32_t color = raster::ImageBilinearRGBA(src, srcWidth, srcClampU, srcClampV, u, v);
 			dst32[x]       = color;
 		}
 	}
+
+	free(fixedToRaw);
 }
 
 struct ImageDiffResult {
@@ -303,7 +378,7 @@ struct ImageDiffResult {
 };
 
 // Returns the difference between the two images, after they've been unprojected, and aligned
-ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float z2) {
+static ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float z2) {
 	bool debug = false;
 
 	float z1         = FindZ1ForIdentityScaleAtBottom(img1.Width, img1.Height, z2);
@@ -334,7 +409,7 @@ ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float z2) {
 
 	KeyPointSet        kp1, kp2;
 	vector<cv::DMatch> matches;
-	ComputeKeyPointsAndMatch(m1, m2, 5000, 0.1, 10, true, false, kp1, kp2, matches);
+	ComputeKeyPointsAndMatch("FREAK", m1, m2, 5000, 0.1, 10, true, false, kp1, kp2, matches);
 
 	if (debug) {
 		ImageIO imgIO;
@@ -506,6 +581,9 @@ static Error DoPerspective(vector<string> videoFiles) {
 	auto  err = EstimateZ2(videoFiles, z2);
 	if (!err.OK())
 		return err;
+
+	// 3023.mov -> 0.00283583 -0.115201 160.89 -> -0.000879688
+	// z2 = -0.000879688;
 	return Error();
 }
 

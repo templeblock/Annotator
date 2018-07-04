@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Image.h"
+#include "ImageIO.h"
 
 using namespace std;
 
@@ -60,15 +61,17 @@ Image::~Image() {
 }
 
 Image& Image::operator=(const Image& b) {
-	Reset();
-	Width   = b.Width;
-	Height  = b.Height;
-	Stride  = b.Stride;
-	Data    = (uint8_t*) imqs_malloc_or_die(Height * Stride);
-	Format  = b.Format;
-	OwnData = true;
-	for (int y = 0; y < Height; y++)
-		memcpy(Line(y), b.Line(y), BytesPerLine());
+	if (this != &b) {
+		Reset();
+		Width   = b.Width;
+		Height  = b.Height;
+		Stride  = b.Stride;
+		Data    = (uint8_t*) imqs_malloc_or_die(Height * Stride);
+		Format  = b.Format;
+		OwnData = true;
+		for (int y = 0; y < Height; y++)
+			memcpy(Line(y), b.Line(y), BytesPerLine());
+	}
 	return *this;
 }
 
@@ -93,8 +96,10 @@ void Image::Reset() {
 }
 
 void Image::Alloc(ImageFormat format, int width, int height, int stride) {
-	if (stride == 0)
+	if (stride == 0) {
 		stride = gfx::BytesPerPixel(format) * width;
+		stride = 4 * ((stride + 3) / 4); // round up to multiple of 4
+	}
 
 	IMQS_ASSERT(stride >= gfx::BytesPerPixel(format) * width);
 
@@ -121,6 +126,191 @@ Image Image::Window(int x, int y, int width, int height) const {
 	IMQS_ASSERT(x + width <= Width);
 	IMQS_ASSERT(y + height <= Height);
 	return Image(Format, ConstructWindow, Stride, const_cast<uint8_t*>(At(x, y)), width, height);
+}
+
+void Image::Fill(uint32_t color) {
+	Fill(Rect32(0, 0, Width, Height), color);
+}
+
+void Image::Fill(Rect32 rect, uint32_t color) {
+	rect.x1 = math::Clamp(rect.x1, 0, Width);
+	rect.y1 = math::Clamp(rect.y1, 0, Height);
+	rect.x2 = math::Clamp(rect.x2, 0, Width);
+	rect.y2 = math::Clamp(rect.y2, 0, Height);
+	for (int y = rect.y1; y < rect.y2; y++) {
+		uint32_t* dst = At32(rect.x1, y);
+		size_t    x2  = rect.x2;
+		for (size_t x = rect.x1; x < x2; x++)
+			dst[x] = color;
+	}
+}
+
+#define MAKE_IMAGE_FORMAT_PAIR(a, b) (((uint32_t) a << 16) | (uint32_t) b)
+
+Image Image::AsType(ImageFormat fmt) const {
+	Image r;
+	r.Alloc(fmt, Width, Height);
+	uint32_t combo = MAKE_IMAGE_FORMAT_PAIR(Format, fmt);
+	switch (combo) {
+	case MAKE_IMAGE_FORMAT_PAIR(ImageFormat::RGBA, ImageFormat::Gray):
+		for (int y = 0; y < Height; y++) {
+			size_t         w   = Width;
+			const uint8_t* src = Line(y);
+			uint8_t*       dst = r.Line(y);
+			for (size_t x = 0; x < w; x++) {
+				dst[0] = Color8(src[0], src[1], src[2], src[3]).Lum();
+				dst += 1;
+				src += 4;
+			}
+		}
+		break;
+	case MAKE_IMAGE_FORMAT_PAIR(ImageFormat::Gray, ImageFormat::RGBA):
+		for (int y = 0; y < Height; y++) {
+			size_t         w   = Width;
+			const uint8_t* src = Line(y);
+			uint8_t*       dst = r.Line(y);
+			for (size_t x = 0; x < w; x++) {
+				dst[0] = src[0];
+				dst[1] = src[0];
+				dst[2] = src[0];
+				dst[3] = 255;
+				dst += 4;
+				src += 1;
+			}
+		}
+		break;
+	default:
+		IMQS_DIE();
+	}
+	return r;
+}
+
+Image Image::HalfSizeCheap() const {
+	Image half;
+	half.Alloc(Format, Width / 2, Height / 2);
+	for (int y = 0; y < half.Height; y++) {
+		auto   srcA = Line(y * 2);     // top line
+		auto   srcB = Line(y * 2 + 1); // bottom line
+		auto   dstP = half.Line(y);
+		size_t dstW = half.Width;
+		if (Format == ImageFormat::RGBA) {
+			for (size_t x = 0; x < dstW; x++) {
+				uint32_t r = ((uint32_t) srcA[0] + (uint32_t) srcA[4] + (uint32_t) srcB[0] + (uint32_t) srcB[4]) >> 2;
+				uint32_t g = ((uint32_t) srcA[1] + (uint32_t) srcA[5] + (uint32_t) srcB[1] + (uint32_t) srcB[5]) >> 2;
+				uint32_t b = ((uint32_t) srcA[2] + (uint32_t) srcA[6] + (uint32_t) srcB[2] + (uint32_t) srcB[6]) >> 2;
+				uint32_t a = ((uint32_t) srcA[3] + (uint32_t) srcA[7] + (uint32_t) srcB[3] + (uint32_t) srcB[7]) >> 2;
+				dstP[0]    = r;
+				dstP[1]    = g;
+				dstP[2]    = b;
+				dstP[3]    = a;
+				srcA += 8;
+				srcB += 8;
+				dstP += 4;
+			}
+		} else if (Format == ImageFormat::Gray) {
+			for (size_t x = 0; x < dstW; x++) {
+				dstP[0] = ((uint32_t) srcA[0] + (uint32_t) srcA[1] + (uint32_t) srcB[0] + (uint32_t) srcB[1]) >> 2;
+				srcA += 2;
+				srcB += 2;
+				dstP += 1;
+			}
+		} else {
+			IMQS_DIE();
+		}
+	}
+	return half;
+}
+
+static void BoxBlurGray(uint8_t* src, uint8_t* dst, int width, int blurSize, int iterations) {
+	for (int iter = 0; iter < iterations; iter++) {
+		unsigned sum = 0;
+		if (blurSize == 1) {
+			dst[0] = ((unsigned) src[0] + (unsigned) src[1]) >> 1;
+			dst[1] = ((unsigned) src[0] + (unsigned) src[1] + (unsigned) src[2]) / 3;
+			sum    = (unsigned) src[0] + (unsigned) src[1] + (unsigned) src[2];
+		}
+		size_t x = blurSize + 1;
+		size_t w = width - blurSize;
+		for (; x < w; x++) {
+			sum    = sum - src[x - 2] + src[x + 1];
+			dst[x] = sum / 3;
+		}
+		if (blurSize == 1) {
+			sum    = sum - src[x - 2] + src[w - 1];
+			dst[x] = sum / 3;
+		}
+		std::swap(src, dst);
+	}
+}
+
+void Image::BoxBlur(int size, int iterations) {
+	IMQS_ASSERT(Format == ImageFormat::Gray);
+	IMQS_ASSERT(Width >= size * 2 + 1);
+	IMQS_ASSERT(Height >= size * 2 + 1);
+	IMQS_ASSERT(size == 1); // just haven't bothered to code up other sizes
+
+	uint8_t* buf1            = (uint8_t*) imqs_malloc_or_die(max(Width, Height) + 1);
+	uint8_t* buf2            = (uint8_t*) imqs_malloc_or_die(Height + 1);
+	buf1[max(Width, Height)] = 255;
+	buf2[Height]             = 255;
+
+	bool evenIterations = (unsigned) iterations % 2 == 0;
+
+	for (int y = 0; y < Height; y++) {
+		uint8_t* src = Line(y);
+		BoxBlurGray(src, buf1, Width, size, iterations);
+		if (!evenIterations)
+			memcpy(src, buf1, Width);
+	}
+
+	for (int x = 0; x < Width; x++) {
+		// For the verticals, first copy each line into a buffer, so that we can run multiple iterations fast
+		uint8_t* src    = At(x, 0);
+		size_t   h      = Height;
+		int      stride = Stride;
+		for (size_t y = 0; y < h; y++, src += Stride)
+			buf1[y] = *src;
+
+		BoxBlurGray(buf1, buf2, Height, size, iterations);
+
+		// copy back out
+		src            = At(x, 0);
+		uint8_t* final = evenIterations ? buf1 : buf2;
+		for (size_t y = 0; y < h; y++, src += Stride)
+			*src = final[y];
+	}
+
+	IMQS_ASSERT(buf1[max(Width, Height)] == 255);
+	IMQS_ASSERT(buf2[Height] == 255);
+
+	free(buf1);
+	free(buf2);
+}
+
+Error Image::SavePng(const std::string& filename, bool withAlpha, int zlibLevel) const {
+	if (Format == ImageFormat::Gray) {
+		auto copy = AsType(ImageFormat::RGBA);
+		return copy.SavePng(filename, false, zlibLevel);
+	}
+	return ImageIO::SavePngFile(filename, withAlpha, Width, Height, Stride, Data, zlibLevel);
+}
+
+Error Image::SaveJpeg(const std::string& filename, int quality) const {
+	if (Format == ImageFormat::Gray) {
+		auto copy = AsType(ImageFormat::RGBA);
+		return copy.SaveJpeg(filename, quality);
+	}
+	return ImageIO::SaveJpegFile(filename, Width, Height, Stride, Data, quality);
+}
+
+Error Image::SaveFile(const std::string& filename) const {
+	auto ext = strings::tolower(path::Extension(filename));
+	if (ext == ".png")
+		return SavePng(filename, true, 1);
+	else if (ext == ".jpeg" || ext == ".jpg")
+		return SaveJpeg(filename);
+	else
+		return Error::Fmt("Unknown image file format '%v'", ext);
 }
 
 } // namespace gfx

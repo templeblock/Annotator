@@ -12,6 +12,11 @@
 #include <nlohmann-json/json.hpp>
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/features2d.hpp>
 #include <opencv2/xfeatures2d.hpp>
 
 #include <argparse/argparse.h>
+
+#include <lensfun/lensfun.h>
+
+#include <pdqsort/pdqsort.h>

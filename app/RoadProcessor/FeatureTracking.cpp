@@ -37,8 +37,12 @@ cv::Mat RGBAToMat(int width, int height, int stride, const void* buf) {
 	return m;
 }
 
-cv::Mat ImageToMat(const gfx::Image& img) {
-	return RGBAToMat(img.Width, img.Height, img.Stride, img.Data);
+cv::Mat ImageToMat(const gfx::Image& img, gfx::Rect32 crop) {
+	if (crop.IsInverted()) {
+		return RGBAToMat(img.Width, img.Height, img.Stride, img.Data);
+	} else {
+		return RGBAToMat(crop.Width(), crop.Height(), img.Stride, img.At(crop.x1, crop.y1));
+	}
 }
 
 gfx::Image MatToImage(cv::Mat mat) {
@@ -74,14 +78,27 @@ gfx::Image MatToImage(cv::Mat mat) {
 	return img;
 }
 
-void ComputeKeyPoints(cv::Mat img, int maxPoints, double quality, double minDistance, bool orientNormalized, bool scaleNormalized, KeyPointSet& kp) {
+void ComputeKeyPoints(std::string detector, cv::Mat img, int maxPoints, double quality, double minDistance, bool orientNormalized, bool scaleNormalized, KeyPointSet& kp) {
 	auto featAlgo = cv::xfeatures2d::FREAK::create(orientNormalized, scaleNormalized);
+	//cv::features2d
 
-	vector<cv::Point2f> corners;
-	//cv::goodFeaturesToTrack(img, corners, maxPoints, quality, minDistance, cv::noArray(), 3, true);
-	cv::goodFeaturesToTrack(img, corners, maxPoints, quality, minDistance, cv::noArray(), 8);
-	kp.SetPoints(corners);
-	//tsf::print("n: %v\n", corners.size());
+	//auto featAlgo = cv::BRISK::create(30, 3, 1.0f);
+	//auto featAlgo = cv::xfeatures2d::SURF::create(100, 4, 3, true, false);
+	//auto featAlgo =
+
+	//if (true) {
+	//	auto detector = cv::xfeatures2d::StarDetector::create();
+	//	detector->detect(img, kp.Points);
+	//} else if (detector == "ShiTomasi") {
+	if (true) {
+		vector<cv::Point2f> corners;
+		//cv::goodFeaturesToTrack(img, corners, maxPoints, quality, minDistance, cv::noArray(), 3, true);
+		cv::goodFeaturesToTrack(img, corners, maxPoints, quality, minDistance, cv::noArray(), 8);
+		kp.SetPoints(corners);
+	} else {
+		IMQS_DIE_MSG(tsf::fmt("Unknown detector '%v'", detector).c_str());
+	}
+	//tsf::print("n features: %v\n", kp.Points.size());
 
 	featAlgo->compute(img, kp.Points, kp.Descriptors);
 }
@@ -96,9 +113,9 @@ void ComputeMatch(cv::Size img1Size, cv::Size img2Size, const KeyPointSet& kp1, 
 	cv::xfeatures2d::matchGMS(img1Size, img2Size, kp1.Points, kp2.Points, initialMatches, matches, withRotation, withScale);
 }
 
-void ComputeKeyPointsAndMatch(cv::Mat img1, cv::Mat img2, int maxPoints, double quality, double minDistance, bool withRotation, bool withScale, KeyPointSet& kp1, KeyPointSet& kp2, std::vector<cv::DMatch>& matches) {
-	ComputeKeyPoints(img1, maxPoints, quality, minDistance, withRotation, withScale, kp1);
-	ComputeKeyPoints(img2, maxPoints, quality, minDistance, withRotation, withScale, kp2);
+void ComputeKeyPointsAndMatch(std::string detector, cv::Mat img1, cv::Mat img2, int maxPoints, double quality, double minDistance, bool withRotation, bool withScale, KeyPointSet& kp1, KeyPointSet& kp2, std::vector<cv::DMatch>& matches) {
+	ComputeKeyPoints(detector, img1, maxPoints, quality, minDistance, withRotation, withScale, kp1);
+	ComputeKeyPoints(detector, img2, maxPoints, quality, minDistance, withRotation, withScale, kp2);
 	ComputeMatch(img1.size(), img2.size(), kp1, kp2, withRotation, withScale, matches);
 }
 

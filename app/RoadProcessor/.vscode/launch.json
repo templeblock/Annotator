@@ -10,8 +10,15 @@
             "request": "launch",
             "program": "${workspaceFolder}/../../t2-output/linux-clang-debug-default/RoadProcessor",
             "args": [
-                "perspective",
-                "/home/ben/win/c/mldata/DSCF3023.MOV"
+                "--lens",
+                "Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS",
+                "stitch",
+                "-s",
+                "160",
+                "-n",
+                "100",
+                "/home/ben/win/c/mldata/DSCF3023.MOV",
+                "-0.000879688",
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -23,13 +30,13 @@
             ],
             "externalConsole": true,
             "MIMode": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ]
+            //"setupCommands": [
+            //    {
+            //        "description": "Enable pretty-printing for gdb",
+            //        "text": "-enable-pretty-printing",
+            //        "ignoreFailures": true
+            //    }
+            //]
         },
     ]
 }

@@ -21,7 +21,10 @@
 	],
 	"settings": {
 		"files.associations": {
-			"typeindex": "cpp"
+			"typeindex": "cpp",
+			"chrono": "cpp",
+			"string_view": "cpp",
+			"initializer_list": "cpp"
 		}
 	}
 }

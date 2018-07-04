@@ -29,6 +29,13 @@ public:
 	T Width() const { return x2 - x1; }
 	T Height() const { return y2 - y1; }
 
+	void Expand(int x, int y) {
+		x1 -= x;
+		x2 += x;
+		y1 -= y;
+		y2 += y;
+	}
+
 	void ExpandToFit(int x, int y) {
 		x1 = std::min(x1, x);
 		y1 = std::min(y1, y);

@@ -885,7 +885,7 @@ local RoadProcessor = Program {
 	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	--},
 	Libs = { 
-		{ "rt", "m", "stdc++", "omp"; Config = linuxFilter },
+		{ "rt", "m", "stdc++", "omp", "lensfun"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/RoadProcessor/pch.cpp",

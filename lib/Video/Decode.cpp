@@ -113,7 +113,7 @@ Error VideoFile::SeekToPreviousFrame() {
 	return Error();
 }
 
-Error VideoFile::SeekToFrame(int64_t frame) {
+Error VideoFile::SeekToFrame(int64_t frame, unsigned flags) {
 	// frame rate = number of frames per second. So to get seconds/frame, we divide by frame rate.
 	auto t = av_div_q({(int) frame, 1}, VideoStream->avg_frame_rate);
 
@@ -124,40 +124,41 @@ Error VideoFile::SeekToFrame(int64_t frame) {
 	// *should* be exact.
 	int64_t pts = tb.num / tb.den;
 
-	int r = av_seek_frame(FmtCtx, VideoStreamIdx, pts, 0);
+	int r = av_seek_frame(FmtCtx, VideoStreamIdx, pts, flags);
 	if (r >= 0)
 		LastSeekPTS = pts;
 	return Error();
 }
 
-Error VideoFile::SeekToFraction(double fraction_0_to_1) {
+Error VideoFile::SeekToFraction(double fraction_0_to_1, unsigned flags) {
 	double seconds = fraction_0_to_1 * GetVideoStreamInfo().DurationSeconds();
-	return SeekToMicrosecond((int64_t)(seconds * 1000000.0));
+	return SeekToMicrosecond((int64_t)(seconds * 1000000.0), flags);
 }
 
-Error VideoFile::SeekToSecond(double second) {
-	return SeekToMicrosecond((int64_t)(second * 1000000.0));
+Error VideoFile::SeekToSecond(double second, unsigned flags) {
+	return SeekToMicrosecond((int64_t)(second * 1000000.0), flags);
 }
 
-Error VideoFile::SeekToMicrosecond(int64_t microsecond) {
+Error VideoFile::SeekToMicrosecond(int64_t microsecond, unsigned flags) {
 	double  ts  = av_q2d(VideoStream->time_base);
 	double  t   = ((double) microsecond / 1000000.0) / ts;
 	int64_t pts = (int64_t) t;
-	int     r   = av_seek_frame(FmtCtx, VideoStreamIdx, pts, 0);
-	// Don't set LastSeekPTS here, because this is not an accurate point. Also, accurate seeking is NOT what
-	// you want, when scrolling through a video. In that case, you want keyframe seeking, which is what
-	// we do here, because we exclude the AVSEEK_FLAG_ANY flag.
-	//if (r >= 0)
-	//	LastSeekPTS = pts;
+	int     r   = av_seek_frame(FmtCtx, VideoStreamIdx, pts, flags);
+	if (r >= 0 && !!(flags & Seek::Any))
+		LastSeekPTS = pts;
 	return Error();
 }
 
 double VideoFile::LastFrameTimeSeconds() const {
-	return av_q2d(av_mul_q({(int) LastFramePTS, 1}, VideoStream->time_base));
+	return PtsToSeconds(LastFramePTS);
 }
 
 int64_t VideoFile::LastFrameTimeMicrosecond() const {
 	return (int64_t)(LastFrameTimeSeconds() * 1000000.0);
+}
+
+double VideoFile::PtsToSeconds(int64_t pts) const {
+	return av_q2d(av_mul_q({(int) pts, 1}, VideoStream->time_base));
 }
 
 /* This turns out to be useless, because the FFMPeg rationals are stored as
@@ -215,6 +216,12 @@ Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
 		}
 		IMQS_ASSERT(haveFrame);
 
+		double secondsDelta = PtsToSeconds(Frame->pts - LastFramePTS);
+
+		// This is supposed to determine whether this is old data that the codec is flushing, before
+		// it performs a seek that we requested.
+		bool isLikelyOldBufferedFrame = attempt == 0 && LastSeekPTS != -1 && secondsDelta > 0 && secondsDelta < 1.0;
+
 		LastFramePTS = Frame->pts;
 
 		//auto msg     = tsf::fmt("LastFramePTS: %d\n", (int) LastFramePTS);
@@ -226,6 +233,10 @@ Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
 
 		// If there was a seek operation, then allow multiple attempts until we get to the frame we want
 		if (LastFramePTS == LastSeekPTS)
+			break;
+
+		// If the seek operation ended up putting us AHEAD of our desired seek position, then accept it
+		if (LastFramePTS > LastSeekPTS && !isLikelyOldBufferedFrame)
 			break;
 
 		bool isBehind = LastFramePTS < LastSeekPTS;

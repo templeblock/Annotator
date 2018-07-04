@@ -48,6 +48,7 @@ public:
 	ColorHSVA   ToHSVA() const;
 	static void ToHSVA(const Vec4f& rgba, Vec4f& hsva);
 	std::string ToCSS() const;
+	uint8_t     Lum() const;
 
 	float Rf() const { return (float) r / 255.0f; } // Returns Red 0..1
 	float Gf() const { return (float) g / 255.0f; } // Returns Green 0..1
@@ -97,6 +98,22 @@ inline Color8 Color8::Premultipied() const {
 	Color8 copy = *this;
 	copy.Premultiply();
 	return copy;
+}
+
+inline uint8_t Color8::Lum() const {
+	//  (0.3 * R) + (0.59 * G) + (0.11 * B)
+	// If we reformulate the above ratios such that we're performing multiplication by 256,
+	// then we can downshift by 8 bits instead of diving by 100.
+	// 256 / 100 = 2.56
+	// So we multiply the coefficients by 2.56, to get 77, 151, 28, for R,G,B.
+	// And to check, we verify that R=G=B=255, does indeed produce 255 after downshifting by 8:
+	// (255*77 + 255*151 + 255*28) = 65280
+	// 65280 >> 8 = 255
+	auto _r = (unsigned) r * 77;  // 77  = 30 * 2.56
+	auto _g = (unsigned) g * 151; // 151 = 59 * 2.56
+	auto _b = (unsigned) b * 28;  // 28  = 11 * 2.56
+	auto m  = (_r + _g + _b) >> 8;
+	return (uint8_t) m;
 }
 
 } // namespace gfx

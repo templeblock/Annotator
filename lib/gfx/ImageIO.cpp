@@ -139,13 +139,14 @@ Error ImageIO::SavePng(bool withAlpha, int width, int height, int stride, const 
 }
 
 Error ImageIO::SavePngFile(const std::string& filename, bool withAlpha, int width, int height, int stride, const void* buf, int zlibLevel) {
-	void*  encBuf  = nullptr;
-	size_t encSize = 0;
-	auto   err     = SavePng(withAlpha, width, height, stride, buf, zlibLevel, encBuf, encSize);
+	ImageIO self;
+	void*   encBuf  = nullptr;
+	size_t  encSize = 0;
+	auto    err     = self.SavePng(withAlpha, width, height, stride, buf, zlibLevel, encBuf, encSize);
 	if (!err.OK())
 		return err;
 	err = os::WriteWholeFile(filename, encBuf, encSize);
-	FreeEncodedBuffer(ImageType::Png, encBuf);
+	self.FreeEncodedBuffer(ImageType::Png, encBuf);
 	return err;
 }
 
@@ -198,6 +199,18 @@ Error ImageIO::SaveJpeg(int width, int height, int stride, const void* buf, int 
 		return Error(tjGetErrorStr());
 	jpegSize = size;
 	return Error();
+}
+
+Error ImageIO::SaveJpegFile(const std::string& filename, int width, int height, int stride, const void* buf, int quality_0_to_100) {
+	ImageIO self;
+	void*   encBuf  = nullptr;
+	size_t  encSize = 0;
+	auto    err     = self.SaveJpeg(width, height, stride, buf, quality_0_to_100, encBuf, encSize);
+	if (!err.OK())
+		return err;
+	err = os::WriteWholeFile(filename, encBuf, encSize);
+	self.FreeEncodedBuffer(ImageType::Jpeg, encBuf);
+	return err;
 }
 
 } // namespace gfx

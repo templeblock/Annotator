@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Rect.h"
+#include "Color8.h"
+
 namespace imqs {
 namespace gfx {
 
@@ -16,6 +19,7 @@ enum class ImageFormat {
 	Null,
 	RGBA,  // RGBA not premultipled
 	RGBAP, // RGBA premultipled
+	Gray,
 };
 
 inline int BytesPerPixel(ImageFormat f) {
@@ -23,6 +27,7 @@ inline int BytesPerPixel(ImageFormat f) {
 	case ImageFormat::Null: return 0;
 	case ImageFormat::RGBA: return 4;
 	case ImageFormat::RGBAP: return 4;
+	case ImageFormat::Gray: return 1;
 	}
 	return 0;
 }
@@ -59,13 +64,26 @@ public:
 	void  Reset();                                                          // Free memory, and reset all fields
 	void  Alloc(ImageFormat format, int width, int height, int stride = 0); // Allocate memory and initialize data structure
 	Image Window(int x, int y, int width, int height) const;                // Returns a window into Image, at the specified rectangle. Does not copy memory. Parent must outlive window.
+	void  Fill(uint32_t color);
+	void  Fill(Rect32 rect, uint32_t color);
+	Image AsType(ImageFormat fmt) const;
+	Image HalfSizeCheap() const;             // Downscale by 1/2, in gamma/sRGB space (this is why it's labeled cheap. correct downscale is in linear space, not sRGB)
+	void  BoxBlur(int size, int iterations); // Box blur of size [1 + 2 * size], repeated 'iterations' times
 
-	uint8_t*       At(int x, int y) { return Data + (y * Stride) + x * BytesPerPixel(); }
-	const uint8_t* At(int x, int y) const { return Data + (y * Stride) + x * BytesPerPixel(); }
-	uint8_t*       Line(int y) { return Data + (y * Stride); }
-	const uint8_t* Line(int y) const { return Data + (y * Stride); }
-	int            BytesPerPixel() const { return gfx::BytesPerPixel(Format); }
-	size_t         BytesPerLine() const { return gfx::BytesPerPixel(Format) * Width; }
+	Error SavePng(const std::string& filename, bool withAlpha = true, int zlibLevel = 5) const;
+	Error SaveJpeg(const std::string& filename, int quality = 90) const;
+	Error SaveFile(const std::string& filename) const;
+
+	uint8_t*        At(int x, int y) { return Data + (y * Stride) + x * BytesPerPixel(); }
+	const uint8_t*  At(int x, int y) const { return Data + (y * Stride) + x * BytesPerPixel(); }
+	uint32_t*       At32(int x, int y) { return (uint32_t*) (Data + (y * Stride) + x * BytesPerPixel()); }
+	const uint32_t* At32(int x, int y) const { return (const uint32_t*) (Data + (y * Stride) + x * BytesPerPixel()); }
+	uint8_t*        Line(int y) { return Data + (y * Stride); }
+	const uint8_t*  Line(int y) const { return Data + (y * Stride); }
+	uint32_t*       Line32(int y) { return (uint32_t*) (Data + (y * Stride)); }
+	const uint32_t* Line32(int y) const { return (const uint32_t*) (Data + (y * Stride)); }
+	int             BytesPerPixel() const { return gfx::BytesPerPixel(Format); }
+	size_t          BytesPerLine() const { return gfx::BytesPerPixel(Format) * Width; }
 };
 
 } // namespace gfx
