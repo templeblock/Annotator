@@ -11,6 +11,7 @@
 #include "ImageIO.h"
 #include "Mat3.h"
 #include "Mat4.h"
+#include "Point.h"
 #include "Raster.h"
 #include "Rect.h"
 #include "Vec4.h"

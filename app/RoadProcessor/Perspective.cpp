@@ -58,69 +58,6 @@ float NewtonSearch(float x, float dx, float desiredY, float stopAtPrecision, int
 	return x;
 }
 
-/*
-// Total bastard version of 2D newton search.
-std::pair<float, float> NewtonSearch2D(float x1, float x2, float dx, float desiredY, float stopAtPrecision, int stopAtIteration, function<float(float x1, float x2)> func) {
-	for (int i = 0; i < stopAtIteration; i++) {
-		float y = func(x1, x2);
-		if (fabs(y - desiredY) <= stopAtPrecision)
-			break;
-		{
-			float ya   = func(x1 - dx, x2);
-			float yb   = func(x1 + dx, x2);
-			float grad = (yb - ya) / (dx * 2);
-			x1 -= (y - desiredY) / grad;
-		}
-		{
-			float ya   = func(x1, x2 - dx);
-			float yb   = func(x1, x2 + dx);
-			float grad = (yb - ya) / (dx * 2);
-			x2 -= (y - desiredY) / grad;
-		}
-	}
-	return std::pair<float, float>(x1, x2);
-}
-
-// Total bastard version of n-dimensional newton search. Is this gradient descent? I dunno!
-std::vector<float> NewtonSearchND(size_t n, const float* initialX, const float* dx, float desiredY, float stopAtPrecision, int stopAtIteration, function<float(size_t n, const float* x)> func) {
-	vector<float> x, xd, change;
-	x.resize(n);
-	xd.resize(n);
-	change.resize(n);
-	memcpy(&x[0], initialX, sizeof(initialX[0]) * n);
-
-	for (int i = 0; i < stopAtIteration; i++) {
-		float y = func(n, &x[0]);
-		if (fabs(y - desiredY) <= stopAtPrecision)
-			break;
-		for (size_t j = 0; j < n; j++) {
-			memcpy(&xd[0], &x[0], sizeof(float) * n);
-			xd[j]      = x[j] - dx[j];
-			float ya   = func(n, &xd[0]);
-			xd[j]      = x[j] + dx[j];
-			float yb   = func(n, &xd[0]);
-			float grad = (yb - ya) / (dx[j] * 2);
-			change[j]  = 0.01 * (y - desiredY) / grad;
-		}
-		for (size_t j = 0; j < n; j++) {
-			x[j] -= change[j];
-		}
-		tsf::print("%v: %v %v %v, %v %v %v\n", y, change[0], change[1], change[2], x[0], x[1], x[2]);
-	}
-
-	return x;
-}
-
-// a version with a constant 'dx' for every dimension
-std::vector<float> NewtonSearchND(size_t n, const float* initialX, float dx, float desiredY, float stopAtPrecision, int stopAtIteration, function<float(size_t n, const float* x)> func) {
-	vector<float> dxv;
-	dxv.resize(n);
-	for (size_t i = 0; i < n; i++)
-		dxv[i] = dx;
-	return NewtonSearchND(n, initialX, &dxv[0], desiredY, stopAtPrecision, stopAtIteration, func);
-}
-*/
-
 void FitQuadratic(const std::vector<std::pair<double, double>>& xy, double& a, double& b, double& c) {
 	// http://mathforum.org/library/drmath/view/72047.html
 
@@ -169,24 +106,6 @@ void FitQuadratic(const std::vector<std::pair<double, double>>& xy, double& a, d
 	b /= denom;
 	c /= denom;
 }
-
-/*
-Vec2f BilinearXYFloat(float x, float y, const float* xyImg, int width, int height) {
-	int x1 = (int) x;
-	int y1 = (int) y;
-	if (x1 >= width - 2)
-		x1 = width - 2;
-	if (y1 >= height - 2)
-		y1 = height - 2;
-	const float* line1 = &xyImg[y1 * width * 2];
-	const float* line2 = line1 + width * 2;
-	float        a     = line1[x1];
-	float        b     = line1[x1 + 1];
-	float        c     = line2[x1];
-	float        d     = line2[x1 + 1];
-	
-}
-*/
 
 // When we speak of normalized coordinates, we mean coordinates that are centered around the origin of the image
 
@@ -335,6 +254,9 @@ void RemovePerspective(const Image& camera, Image& flat, float z1, float z2, flo
 	int32_t srcClampU = (camera.Width - 1) * 256 - 1;
 	int32_t srcClampV = (camera.Height - 1) * 256 - 1;
 
+	// weird.. getting less distortion during optical flow calculations with less correction off
+	bool doLensCorrection = false;
+
 #pragma omp parallel for
 	for (int y = 0; y < flat.Height; y++) {
 		uint32_t* dst32 = (uint32_t*) flat.Data;
@@ -353,13 +275,15 @@ void RemovePerspective(const Image& camera, Image& flat, float z1, float z2, flo
 			FlatToCameraInt256(z1, z2, xM, yM, u, v);
 			u += camHalfX;
 			v += camHalfY;
-			// undistorted camera to raw camera
-			uint64_t fixed = raster::ImageBilinear_RG_U16(fixedToRaw, srcWidth, srcClampU, srcClampV, u, v);
-			u              = fixed & 0xffff;
-			v              = fixed >> 16;
-			// bring the distortion parameters up to the required 8 bits of sub-pixel precision
-			u = u << (8 - DistortSubPixelBits);
-			v = v << (8 - DistortSubPixelBits);
+			if (doLensCorrection) {
+				// undistorted camera to raw camera
+				uint64_t fixed = raster::ImageBilinear_RG_U16(fixedToRaw, srcWidth, srcClampU, srcClampV, u, v);
+				u              = fixed & 0xffff;
+				v              = fixed >> 16;
+				// bring the distortion parameters up to the required 8 bits of sub-pixel precision
+				u = u << (8 - DistortSubPixelBits);
+				v = v << (8 - DistortSubPixelBits);
+			}
 			// read from raw camera
 			uint32_t color = raster::ImageBilinearRGBA(src, srcWidth, srcClampU, srcClampV, u, v);
 			dst32[x]       = color;

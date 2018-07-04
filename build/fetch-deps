@@ -47,5 +47,8 @@ sudo apt-get install -y \
 # export CC=/usr/bin/clang
 # export CXX=/usr/bin/clang++
 # cmake -D WITH_CUDA=OFF -D OPENCV_EXTRA_MODULES_PATH=/home/ben/dev/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local -D ENABLE_CXX11=ON -D BUILD_LIST=core,features2d,xfeatures2d ..
+# with CUDA and optical flow:
+# We can't build CUDA support with clang, so leave CC and CXX blank, to compile with GCC
+# cmake -D WITH_CUDA=ON -D OPENCV_EXTRA_MODULES_PATH=/home/ben/dev/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local -D ENABLE_CXX11=ON -D BUILD_LIST=calib3d,core,cudaoptflow,cudev,features2d,xfeatures2d,stitching ..
 # make -j
 # sudo make install
