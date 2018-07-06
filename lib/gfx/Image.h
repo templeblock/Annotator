@@ -67,8 +67,10 @@ public:
 	void  Fill(uint32_t color);
 	void  Fill(Rect32 rect, uint32_t color);
 	Image AsType(ImageFormat fmt) const;
-	Image HalfSizeCheap() const;             // Downscale by 1/2, in gamma/sRGB space (this is why it's labeled cheap. correct downscale is in linear space, not sRGB)
-	void  BoxBlur(int size, int iterations); // Box blur of size [1 + 2 * size], repeated 'iterations' times
+	Image HalfSizeCheap() const;                                          // Downscale by 1/2, in gamma/sRGB space (this is why it's labeled cheap. correct downscale is in linear space, not sRGB)
+	void  BoxBlur(int size, int iterations);                              // Box blur of size [1 + 2 * size], repeated 'iterations' times
+	void  CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect);     // Source and destination rectangles are clipped before copying, but they must be equal in size
+	void  CopyFrom(const Image& src, Rect32 srcRect, int dstX, int dstY); // Source rectangle is clipped before copying
 
 	Error SavePng(const std::string& filename, bool withAlpha = true, int zlibLevel = 5) const;
 	Error SaveJpeg(const std::string& filename, int quality = 90) const;

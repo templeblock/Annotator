@@ -287,6 +287,56 @@ void Image::BoxBlur(int size, int iterations) {
 	free(buf2);
 }
 
+void Image::CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect) {
+	IMQS_ASSERT(srcRect.Width() == dstRect.Width());
+	IMQS_ASSERT(srcRect.Height() == dstRect.Height());
+	IMQS_ASSERT(src.Format == Format);
+
+	if (srcRect.x1 < 0) {
+		dstRect.x1 -= srcRect.x1;
+		srcRect.x1 = 0;
+	}
+	if (srcRect.y1 < 0) {
+		dstRect.y1 -= srcRect.y1;
+		srcRect.y1 = 0;
+	}
+	if (srcRect.x2 > src.Width) {
+		dstRect.x2 -= srcRect.x2 - src.Width;
+		srcRect.x2 = src.Width;
+	}
+	if (srcRect.y2 > src.Height) {
+		dstRect.y2 -= srcRect.x2 - src.Height;
+		srcRect.y2 = src.Height;
+	}
+
+	if (dstRect.x1 < 0) {
+		srcRect.x1 -= dstRect.x1;
+		dstRect.x1 = 0;
+	}
+	if (dstRect.y1 < 0) {
+		srcRect.y1 -= dstRect.y1;
+		dstRect.y1 = 0;
+	}
+	if (dstRect.x2 > Width) {
+		srcRect.x2 -= dstRect.x2 - Width;
+		dstRect.x2 = Width;
+	}
+	if (dstRect.y2 > Height) {
+		srcRect.y2 -= dstRect.x2 - Height;
+		dstRect.y2 = Height;
+	}
+
+	if (srcRect.Width() < 0 || srcRect.Height() < 0)
+		return;
+
+	for (int y = 0; y < srcRect.Height(); y++)
+		memcpy(At(dstRect.x1, dstRect.y1 + y), src.At(srcRect.x1, srcRect.y1 + y), srcRect.Width() * BytesPerPixel());
+}
+
+void Image::CopyFrom(const Image& src, Rect32 srcRect, int dstX, int dstY) {
+	CopyFrom(src, srcRect, Rect32(dstX, dstY, dstX + srcRect.Width(), dstY + srcRect.Height()));
+}
+
 Error Image::SavePng(const std::string& filename, bool withAlpha, int zlibLevel) const {
 	if (Format == ImageFormat::Gray) {
 		auto copy = AsType(ImageFormat::RGBA);

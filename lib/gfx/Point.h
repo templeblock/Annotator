@@ -11,6 +11,9 @@ public:
 
 	Point() {}
 	Point(T _x, T _y) : x(_x), y(_y) {}
+
+	Point operator+(const Point& p) const { return Point(x + p.x, y + p.y); }
+	Point operator-(const Point& p) const { return Point(x - p.x, y - p.y); }
 };
 
 typedef Point<int32_t> Point32;

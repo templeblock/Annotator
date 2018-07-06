@@ -71,8 +71,8 @@ int main(int argc, char** argv) {
 	speed->AddSwitch("", "csv", "Write CSV output (otherwise JSON)");
 	speed->AddValue("o", "outfile", "Write output to file", "stdout");
 
-	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameter z2.", Perspective);
-	auto stitch      = args.AddCommand("stitch <video> <z2>", "Unproject video frames and stitch together.", Stitch);
+	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
+	auto stitch      = args.AddCommand("stitch <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
 	stitch->AddValue("n", "number", "Number of frames", "2");
 	stitch->AddValue("s", "start", "Start time in seconds", "0");
 

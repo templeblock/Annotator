@@ -29,6 +29,11 @@ precision at the bottom of the frame, then we make sure that the bottom edge of 
 is exactly 1920 pixels across. We can apply any arbitrary factor on top of that, if we want
 to sacrifice resolution, for performance, but that shouldn't be necessary.
 
+Solving for y, given Y:
+(a = z1, b = Zx, c = Zy, u = Y, v = X)
+With Wolfram Alpha, to solve for y: solve {y=(v*a+v*b*((u*a+u*c*y)/(1-u*b)))/(1-v*c)}
+Result: y = -(a v)/(b u + c v - 1), which is what we use, and looks correct.
+
 */
 
 using namespace std;
@@ -37,8 +42,8 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
-void Frustum::DebugPrintParams(float z1, float z2, int frameWidth, int frameHeight) const {
-	tsf::print("%.4f %10f => %v x %v   %6.1f .. %6.1f (bottom scale %v, top scale %v)\n", z1, z2, Width, Height, X1, X2, (X2 - X1) / frameWidth, (float) Width / frameWidth);
+void Frustum::DebugPrintParams(float z1, float zx, float zy, int frameWidth, int frameHeight) const {
+	tsf::print("%.4f %10f %10f => %v x %v   %6.1f .. %6.1f (bottom scale %v, top scale %v)\n", z1, zx, zy, Width, Height, X1, X2, (X2 - X1) / frameWidth, (float) Width / frameWidth);
 }
 
 // This runs newton's method, until it produces a y value that is
@@ -109,14 +114,14 @@ void FitQuadratic(const std::vector<std::pair<double, double>>& xy, double& a, d
 
 // When we speak of normalized coordinates, we mean coordinates that are centered around the origin of the image
 
-Vec2f FlatToCamera(float x, float y, float z1, float z2) {
-	float z = z1 + z2 * y;
+Vec2f FlatToCamera(float x, float y, float z1, float zx, float zy) {
+	float z = z1 + zx * x + zy * y;
 	return Vec2f(x / z, y / z);
 }
 
 // ux and uy are base-256
-void FlatToCameraInt256(float z1, float z2, float x, float y, int32_t& u, int32_t& v) {
-	float z  = z1 + z2 * y;
+void FlatToCameraInt256(float z1, float zx, float zy, float x, float y, int32_t& u, int32_t& v) {
+	float z  = z1 + zx * x + zy * y;
 	float fx = x / z;
 	float fy = y / z;
 	fx *= 256;
@@ -125,34 +130,42 @@ void FlatToCameraInt256(float z1, float z2, float x, float y, int32_t& u, int32_
 	v = (int32_t) fy;
 }
 
-Vec2f FlatToCamera(int frameWidth, int frameHeight, float x, float y, float z1, float z2) {
-	auto cam = FlatToCamera(x, y, z1, z2);
+Vec2f FlatToCamera(int frameWidth, int frameHeight, float x, float y, float z1, float zx, float zy) {
+	auto cam = FlatToCamera(x, y, z1, zx, zy);
 	cam.x += float(frameWidth / 2);
 	cam.y += float(frameHeight / 2);
 	return cam;
 }
 
-Vec2f CameraToFlat(Vec2f cam, float z1, float z2) {
-	float yf = (cam.y * z1) / (1 - cam.y * z2);
-	float xf = cam.x * (z1 + z2 * yf);
+Vec2f CameraToFlat(Vec2f cam, float z1, float zx, float zy) {
+	// If zx is zero, then:
+	//float yf = (cam.y * z1) / (1 - cam.y * zy);
+	//float xf = cam.x * (z1 + zy * yf);
+	// If zx is not zero, then:
+	float yf = (cam.y * z1) / (1 - zx * (zy * cam.x * cam.y + cam.x));
+	float xf = (cam.x * z1 + cam.x * zy * yf) / (1 - cam.x * zx);
 	return Vec2f(xf, yf);
 }
 
-Vec2f CameraToFlat(int frameWidth, int frameHeight, Vec2f cam, float z1, float z2) {
-	cam.x    = cam.x - float(frameWidth / 2);
-	cam.y    = cam.y - float(frameHeight / 2);
-	float yf = (cam.y * z1) / (1 - cam.y * z2);
-	float xf = cam.x * (z1 + z2 * yf);
+Vec2f CameraToFlat(int frameWidth, int frameHeight, Vec2f cam, float z1, float zx, float zy) {
+	cam.x       = cam.x - float(frameWidth / 2);
+	cam.y       = cam.y - float(frameHeight / 2);
+	float yfOld = (cam.y * z1) / (1 - cam.y * zy);
+	float xfOld = cam.x * (z1 + zy * yfOld);
+	//float yf    = (cam.y * z1) / (1 - zx * (zy * cam.x * cam.y + cam.x));
+	//float xf    = (cam.x * z1 + cam.x * zy * yf) / (1 - cam.x * zx);
+	float yf = (cam.y * z1) / (1 - (zx * cam.x + zy * cam.y));
+	float xf = cam.x * (z1 + zy * yf) / (1 - cam.x * zx);
 	return Vec2f(xf, yf);
 }
 
 // Given a camera frame width and height, compute a frustum such that the bottom edge of the frustum
 // has the exact same resolution as the bottom edge of the camera frame.
-Frustum ComputeFrustum(int frameWidth, int frameHeight, float z1, float z2) {
-	auto    topLeft  = CameraToFlat(frameWidth, frameHeight, Vec2f(0, 0), z1, z2);
-	auto    topRight = CameraToFlat(frameWidth, frameHeight, Vec2f(frameWidth, 0), z1, z2);
-	auto    botLeft  = CameraToFlat(frameWidth, frameHeight, Vec2f(0, frameHeight), z1, z2);
-	auto    botRight = CameraToFlat(frameWidth, frameHeight, Vec2f(frameWidth, frameHeight), z1, z2);
+Frustum ComputeFrustum(int frameWidth, int frameHeight, float z1, float zx, float zy) {
+	auto    topLeft  = CameraToFlat(frameWidth, frameHeight, Vec2f(0, 0), z1, zx, zy);
+	auto    topRight = CameraToFlat(frameWidth, frameHeight, Vec2f(frameWidth, 0), z1, zx, zy);
+	auto    botLeft  = CameraToFlat(frameWidth, frameHeight, Vec2f(0, frameHeight), z1, zx, zy);
+	auto    botRight = CameraToFlat(frameWidth, frameHeight, Vec2f(frameWidth, frameHeight), z1, zx, zy);
 	Frustum f;
 	f.Width  = (int) (topRight.x - topLeft.x);
 	f.Height = (int) (botLeft.y - topLeft.y);
@@ -163,37 +176,38 @@ Frustum ComputeFrustum(int frameWidth, int frameHeight, float z1, float z2) {
 
 // Use an iterative solution to find a value for Z1 (ie scale), which produces a 1:1 scale at
 // the bottom of our flattened space.
-float FindZ1ForIdentityScaleAtBottom(int frameWidth, int frameHeight, float z2) {
+float FindZ1ForIdentityScaleAtBottom(int frameWidth, int frameHeight, float zx, float zy) {
 	auto scale = [=](float x) -> float {
-		auto f = ComputeFrustum(frameWidth, frameHeight, x, z2);
+		auto f = ComputeFrustum(frameWidth, frameHeight, x, zx, zy);
 		return (f.X2 - f.X1) / frameWidth;
 	};
 	return NewtonSearch(1.0, 0.001, 1.0, 1e-6, 50, scale);
 }
 
-static void PrintCamToFlat(int frameWidth, int frameHeight, float z1, float z2, Vec2f cam) {
-	auto p = CameraToFlat(frameWidth, frameHeight, cam, z1, z2);
-	tsf::print("(%5.0f,%5.0f) -> (%5.0f,%5.0f)\n", cam.x, cam.y, p.x, p.y);
+static void PrintCamToFlat(int frameWidth, int frameHeight, float z1, float zx, float zy, Vec2f cam) {
+	auto p = CameraToFlat(frameWidth, frameHeight, cam, z1, zx, zy);
+	auto r = FlatToCamera(frameWidth, frameHeight, p.x, p.y, z1, zx, zy);
+	tsf::print("(%5.0f,%5.0f) -> (%5.0f,%5.0f) -> (%5.0f,%5.0f)\n", cam.x, cam.y, p.x, p.y, r.x, r.y);
 }
 
-static void Test(float z1, float z2) {
+static void TestPerspectiveAndFrustum(float z1, float zx, float zy) {
 	int frameWidth  = 1920;
 	int frameHeight = 1080;
 	// compute raw numbers on z1, z2
-	auto f = ComputeFrustum(frameWidth, frameHeight, z1, z2);
-	f.DebugPrintParams(z1, z2, frameWidth, frameHeight);
+	auto f = ComputeFrustum(frameWidth, frameHeight, z1, zx, zy);
+	f.DebugPrintParams(z1, zx, zy, frameWidth, frameHeight);
 
 	// auto compute frustum
-	z1 = FindZ1ForIdentityScaleAtBottom(frameWidth, frameHeight, z2);
-	f  = ComputeFrustum(frameWidth, frameHeight, z1, z2);
-	f.DebugPrintParams(z1, z2, frameWidth, frameHeight);
+	z1 = FindZ1ForIdentityScaleAtBottom(frameWidth, frameHeight, zx, zy);
+	f  = ComputeFrustum(frameWidth, frameHeight, z1, zx, zy);
+	f.DebugPrintParams(z1, zx, zy, frameWidth, frameHeight);
 
 	int w = frameWidth;
 	int h = frameHeight;
-	PrintCamToFlat(w, h, z1, z2, Vec2f(0, 0));
-	PrintCamToFlat(w, h, z1, z2, Vec2f(w, 0));
-	PrintCamToFlat(w, h, z1, z2, Vec2f(0, h));
-	PrintCamToFlat(w, h, z1, z2, Vec2f(w, h));
+	PrintCamToFlat(w, h, z1, zx, zy, Vec2f(0, 0));
+	PrintCamToFlat(w, h, z1, zx, zy, Vec2f(w, 0));
+	PrintCamToFlat(w, h, z1, zx, zy, Vec2f(0, h));
+	PrintCamToFlat(w, h, z1, zx, zy, Vec2f(w, h));
 
 	tsf::print("\n");
 }
@@ -235,13 +249,13 @@ uint16_t* ComputeLensDistortionMatrix(int width, int height) {
 	return fixedToRaw;
 }
 
-void RemovePerspective(const Image& camera, Image& flat, float z1, float z2, float originX, float originY) {
+void RemovePerspective(const Image& camera, Image& flat, float z1, float zx, float zy, float originX, float originY) {
 	uint16_t* fixedToRaw = ComputeLensDistortionMatrix(camera.Width, camera.Height);
 
 	// Because our end product here is a frustum, we can compute straight lines down the edges, and
 	// avoid sampling into those lines, which wins us a little bit of performance, because it's
 	// less filtering that we need to do.
-	auto  f     = ComputeFrustum(camera.Width, camera.Height, z1, z2);
+	auto  f     = ComputeFrustum(camera.Width, camera.Height, z1, zx, zy);
 	float x1Inc = (f.X1 + f.Width / 2) / (float) flat.Height;
 	float x2Inc = (f.X2 + f.Width / 2 - flat.Width) / (float) flat.Height;
 	// start the lines one pixel in. If we make this buffer large enough, then we don't need to
@@ -272,12 +286,12 @@ void RemovePerspective(const Image& camera, Image& flat, float z1, float z2, flo
 		for (size_t x = xStart; x < xEnd; x++, xM++) {
 			int32_t u, v;
 			// Flat to undistorted camera
-			FlatToCameraInt256(z1, z2, xM, yM, u, v);
+			FlatToCameraInt256(z1, zx, zy, xM, yM, u, v);
 			u += camHalfX;
 			v += camHalfY;
 			if (doLensCorrection) {
 				// undistorted camera to raw camera
-				uint64_t fixed = raster::ImageBilinear_RG_U16(fixedToRaw, srcWidth, srcClampU, srcClampV, u, v);
+				uint32_t fixed = raster::ImageBilinear_RG_U16(fixedToRaw, srcWidth, srcClampU, srcClampV, u, v);
 				u              = fixed & 0xffff;
 				v              = fixed >> 16;
 				// bring the distortion parameters up to the required 8 bits of sub-pixel precision
@@ -302,12 +316,12 @@ struct ImageDiffResult {
 };
 
 // Returns the difference between the two images, after they've been unprojected, and aligned
-static ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float z2) {
+static ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float zx, float zy) {
 	bool debug = false;
 
-	float z1         = FindZ1ForIdentityScaleAtBottom(img1.Width, img1.Height, z2);
-	auto  f          = ComputeFrustum(img1.Width, img1.Height, z1, z2);
-	auto  flatOrigin = CameraToFlat(img1.Width, img1.Height, Vec2f(0, 0), z1, z2);
+	float z1         = FindZ1ForIdentityScaleAtBottom(img1.Width, img1.Height, zx, zy);
+	auto  f          = ComputeFrustum(img1.Width, img1.Height, z1, zx, zy);
+	auto  flatOrigin = CameraToFlat(img1.Width, img1.Height, Vec2f(0, 0), z1, zx, zy);
 	int   orgX       = (int) flatOrigin.x;
 	int   orgY       = (int) flatOrigin.y;
 
@@ -315,8 +329,8 @@ static ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float z2)
 	flat1.Alloc(ImageFormat::RGBA, f.Width, f.Height);
 	flat2.Alloc(ImageFormat::RGBA, f.Width, f.Height);
 
-	RemovePerspective(img1, flat1, z1, z2, orgX, orgY);
-	RemovePerspective(img2, flat2, z1, z2, orgX, orgY);
+	RemovePerspective(img1, flat1, z1, zx, zy, orgX, orgY);
+	RemovePerspective(img2, flat2, z1, zx, zy, orgX, orgY);
 
 	int   windowX1 = flat1.Width / 2 + f.X1 + 2;
 	int   windowX2 = flat1.Width / 2 + f.X2 - 2;
@@ -365,7 +379,7 @@ static ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float z2)
 	return res;
 }
 
-static Error EstimateZ2(vector<string> videoFiles, float& bestZ2Estimate) {
+static Error EstimateZY(vector<string> videoFiles, float& bestZYEstimate) {
 	video::VideoFile video;
 	auto             err = video.OpenFile(videoFiles[0]);
 	if (!err.OK())
@@ -404,14 +418,14 @@ static Error EstimateZ2(vector<string> videoFiles, float& bestZ2Estimate) {
 	// z2 = -0.0011,  7 iterations, step with z2 += 0.0001
 	// z2 = -0.0011, 14 iterations, step with z2 += 0.00005
 
-	float z2_min = -0.0011;
-	float z2_max = -0.0005;
+	float zy_min = -0.0011;
+	float zy_max = -0.0005;
 	//float z2 = -0.001;
 	//float z2 = -0.001050;
 	//float z2 = -0.000750;
 
-	// pairs of z2 and X match variance, which we fit a parabola to.
-	vector<pair<double, double>> z2AndVar;
+	// pairs of zy and X match variance, which we fit a parabola to.
+	vector<pair<double, double>> zyAndVar;
 	/*
 	z2AndVar = {
 	    {-0.001100, 268.786},
@@ -440,11 +454,13 @@ static Error EstimateZ2(vector<string> videoFiles, float& bestZ2Estimate) {
 		tooSlow.push_back(0);
 	}
 
+	float zx = 0;
+
 	int niter = 20;
 	for (int iter = 0; iter < niter; iter++) {
-		float z2 = z2_min + iter * (z2_max - z2_min) / (niter - 1);
-		float z1 = FindZ1ForIdentityScaleAtBottom(samples[0].first.Width, samples[0].first.Height, z2);
-		auto  f  = ComputeFrustum(samples[0].first.Width, samples[0].first.Height, z1, z2);
+		float zy = zy_min + iter * (zy_max - zy_min) / (niter - 1);
+		float z1 = FindZ1ForIdentityScaleAtBottom(samples[0].first.Width, samples[0].first.Height, zx, zy);
+		auto  f  = ComputeFrustum(samples[0].first.Width, samples[0].first.Height, z1, zx, zy);
 		//double score   = 0;
 		//double nsample = 0;
 		vector<Vec2d> stats;
@@ -454,7 +470,7 @@ static Error EstimateZ2(vector<string> videoFiles, float& bestZ2Estimate) {
 				continue;
 			}
 			const auto& sample = samples[i];
-			auto        diff   = ImageDiff(sample.first, sample.second, z2);
+			auto        diff   = ImageDiff(sample.first, sample.second, zx, zy);
 			if (diff.MatchCount < 100) {
 				tooFew[i]++;
 			} else {
@@ -479,30 +495,30 @@ static Error EstimateZ2(vector<string> videoFiles, float& bestZ2Estimate) {
 		}
 		double nsample = stats.size() - 2 * burn;
 		score /= nsample;
-		z2AndVar.emplace_back(z2, score);
-		tsf::print("%.6f,%.3f,%v,%v,%v\n", z2, score, nsample, f.Width, f.Height);
+		zyAndVar.emplace_back(zy, score);
+		tsf::print("%.6f,%.3f,%v,%v,%v\n", zy, score, nsample, f.Width, f.Height);
 		//z2 += 0.00005;
 	}
 
-	// scale and bias the z2 values so that the quadratic fit has better conditioned numbers
-	float z2FitBias  = 0.0009;
-	float z2FitScale = 1000000;
-	for (auto& p : z2AndVar)
-		p.first = (p.first + z2FitBias) * z2FitScale;
+	// scale and bias the zy values so that the quadratic fit has better conditioned numbers
+	float zyFitBias  = 0.0009;
+	float zyFitScale = 1000000;
+	for (auto& p : zyAndVar)
+		p.first = (p.first + zyFitBias) * zyFitScale;
 
 	double a, b, c;
-	FitQuadratic(z2AndVar, a, b, c);
-	double bestZ2  = -b / (2 * a);
-	bestZ2         = bestZ2 / z2FitScale - z2FitBias;
-	bestZ2Estimate = (float) bestZ2;
+	FitQuadratic(zyAndVar, a, b, c);
+	double bestZY  = -b / (2 * a);
+	bestZY         = bestZY / zyFitScale - zyFitBias;
+	bestZYEstimate = (float) bestZY;
 	//tsf::print("%v %v %v -> %v\n", a, b, c, bestZ2);
 
 	return Error();
 }
 
 static Error DoPerspective(vector<string> videoFiles) {
-	float z2  = 0;
-	auto  err = EstimateZ2(videoFiles, z2);
+	float zy  = 0;
+	auto  err = EstimateZY(videoFiles, zy);
 	if (!err.OK())
 		return err;
 
@@ -512,7 +528,8 @@ static Error DoPerspective(vector<string> videoFiles) {
 }
 
 int Perspective(argparse::Args& args) {
-	//Test(1, -0.0007);
+	TestPerspectiveAndFrustum(1, 0, -0.0007);
+	TestPerspectiveAndFrustum(1, 0.00001, -0.0007);
 	auto videoFiles = strings::Split(args.Params[0], ',');
 	auto err        = DoPerspective(videoFiles);
 	if (!err.OK()) {

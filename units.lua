@@ -879,7 +879,7 @@ local Labeler = Program {
 local RoadProcessor = Program {
 	Name = "RoadProcessor",
 	Depends = {
-		winCrt, Video, gfx, opencv, ffmpeg, pal, libjpeg_turbo, png, stb, tsf,
+		winCrt, Video, gfx, opencv, ffmpeg, pal, libjpeg_turbo, png, stb, tsf, agg
 	},
 	--Env = {
 	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },

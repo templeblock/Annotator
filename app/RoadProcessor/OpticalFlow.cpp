@@ -69,7 +69,9 @@ OpticalFlow::OpticalFlow() {
 void OpticalFlow::SetupGrid(Image& img1) {
 	// These windows and regions could be setup in a range of different configurations, and they could
 	// be more flexible at runtime. I'm just nailing it down here to make it easier to prototype and think about.
-	int vWindow = 300;
+	int vWindow = img1.Height;
+
+	// CHANGE THAT... now img1 is the entire match window. We are going to be blending over the entire img1.
 
 	// We take the bottom 900 pixels of img1, and divide it into 3 equal parts.
 	// The bottom part will remain constant.
@@ -85,9 +87,10 @@ void OpticalFlow::SetupGrid(Image& img1) {
 
 	// Populate the grid centers
 	int gridLeft = (img1.Width - availWidth) / 2;
-	int gridTop  = img1.Height - vWindow * 2 + CellSize / 2;
+	//int gridTop  = img1.Height - vWindow * 2 + CellSize / 2;
+	int gridTop = CellSize / 2;
 
-	GridW = availWidth / (CellSize * 3);
+	GridW = availWidth / (CellSize * 3); // *3 is thumbsuck
 	GridH = availHeight / (CellSize * 3);
 	GridW = min(GridW, 16);
 	GridH = min(GridH, 16);
@@ -108,6 +111,7 @@ void OpticalFlow::SetupGrid(Image& img1) {
 }
 
 // We compute the transform from img1 to img2
+// We expect img1 to be a small window, like 1920x300, and img2 to be a larger unprojected camera frame
 void OpticalFlow::Frame(Image& img1, Image& img2) {
 	int frameNumber = HistorySize++;
 
@@ -120,17 +124,16 @@ void OpticalFlow::Frame(Image& img1, Image& img2) {
 	const Image& tiny1 = img1G;
 	const Image& tiny2 = img2G;
 
-	tiny1.SavePng("tiny1.png");
-	tiny2.SavePng("tiny2.png");
+	//tiny1.SavePng("tiny1.png");
+	//tiny2.SavePng("tiny2.png");
 
 	int imgScale = 1;
 
-	int minVSearch = AbsMinVSearch;
-	int maxVSearch = AbsMaxVSearch;
-	int minHSearch = AbsMinHSearch;
-	int maxHSearch = AbsMaxHSearch;
+	int minVSearch = AbsMinVSearch + FirstFrameBiasV;
+	int maxVSearch = AbsMaxVSearch + FirstFrameBiasV;
+	int minHSearch = AbsMinHSearch + FirstFrameBiasH;
+	int maxHSearch = AbsMaxHSearch + FirstFrameBiasH;
 
-	int            smallW = 16;
 	vector<double> allDx, allDy;
 	vector<Vec2d>  grid;
 	vector<double> allD;
@@ -144,15 +147,13 @@ void OpticalFlow::Frame(Image& img1, Image& img2) {
 				maxVSearch = (int) (LastGridEl(gx, gy).y + StableVSearchRange / (double) imgScale);
 				minHSearch = (int) (LastGridEl(gx, gy).x - StableHSearchRange / (double) imgScale);
 				maxHSearch = (int) (LastGridEl(gx, gy).x + StableHSearchRange / (double) imgScale);
-				minHSearch = max(minHSearch, AbsMinHSearch);
-				maxHSearch = min(maxHSearch, AbsMaxHSearch);
-				minVSearch = max(minVSearch, AbsMinVSearch);
-				maxVSearch = min(maxVSearch, AbsMaxVSearch);
+				minHSearch = max(minHSearch, AbsMinHSearch + FirstFrameBiasH);
+				maxHSearch = min(maxHSearch, AbsMaxHSearch + FirstFrameBiasH);
+				minVSearch = max(minVSearch, AbsMinVSearch + FirstFrameBiasV);
+				maxVSearch = min(maxVSearch, AbsMaxVSearch + FirstFrameBiasV);
 			}
 			Point32 center = GridCenterAt(gx, gy);
-			//int            x = -absMinHSearch + gx * (tiny1.Width + absMinHSearch - absMaxHSearch - smallW) / (GridW - 1);
-			//int            y = -absMinVSearch + gy * (tiny1.Height + absMinVSearch - absMaxVSearch - smallW) / (GridH - 1);
-			Rect32 rect(center.x, center.y, center.x, center.y);
+			Rect32  rect(center.x, center.y, center.x, center.y);
 			rect.Expand(CellSize / 2, CellSize / 2);
 			double startBestD = 1e10;
 			double bestD      = startBestD;
@@ -188,14 +189,15 @@ void OpticalFlow::Frame(Image& img1, Image& img2) {
 	pdqsort(allDy.begin(), allDy.end());
 	//double finalDx = allDx[allDx.size() / 2];
 	//double finalDy = allDy[allDy.size() / 2];
-	auto   allDxMV = math::MeanAndVariance<double, double>(5, &allDx[allDx.size() - 5]);
-	auto   allDyMV = math::MeanAndVariance<double, double>(5, &allDy[allDy.size() - 5]);
+	int    topN    = 15;
+	auto   allDxMV = math::MeanAndVariance<double, double>(topN, &allDx[allDx.size() - topN]);
+	auto   allDyMV = math::MeanAndVariance<double, double>(topN, &allDy[allDy.size() - topN]);
 	double finalDx = allDxMV.first;
 	double finalDy = allDyMV.first;
 	tsf::print("%.2f,%.2f,%.2f,%.2f,%.2f\n", (double) frameNumber / 29.97, finalDy, finalDx, avgSD, avgDiff);
 
 	// might need to compute max vehicle accel/break speed to know what this number 'a' should be
-	double a = frameNumber == 0 ? 1 : 0.1;
+	double a = frameNumber == 0 ? 1 : 0.2;
 	LastDx   = LastDx + a * (finalDx - LastDx);
 	LastDy   = LastDy + a * (finalDy - LastDy);
 	// Update running averages of grid offsets
@@ -207,6 +209,7 @@ void OpticalFlow::Frame(Image& img1, Image& img2) {
 		}
 	}
 	PrintGrid(2);
+	//DrawGrid(img1);
 }
 
 // 0: x
@@ -227,6 +230,35 @@ void OpticalFlow::PrintGrid(int dim) {
 		}
 		tsf::print("\n");
 	}
+}
+
+void OpticalFlow::DrawGrid(Image& img1) {
+	Canvas c;
+	float  gridSpaceX = (GridCenterAt(GridW - 1, 0).x - GridCenterAt(0, 0).x) / GridW;
+	float  gridSpaceY = (GridCenterAt(0, GridH - 1).y - GridCenterAt(0, 0).y) / GridH;
+	c.Alloc((GridW + 1.5) * gridSpaceX, (GridH + 1.5) * gridSpaceY, Color8(255, 255, 255, 255));
+
+	Vec2d avgD(0, 0);
+	for (int x = 0; x < GridW; x++) {
+		for (int y = 0; y < GridH; y++) {
+			avgD += LastGridEl(x, y) / (double) (GridW * GridH);
+		}
+	}
+
+	Point32 topG = GridCenterAt(0, 0);
+
+	for (int x = 0; x < GridW; x++) {
+		for (int y = 0; y < GridH; y++) {
+			auto p = GridCenterAt(x, y) - topG;
+			p.x += (int) (gridSpaceX / 1.5);
+			p.y += (int) (gridSpaceY / 1.5);
+			auto d = LastGridEl(x, y);
+			d.y -= avgD.y;
+			c.FillCircle(p.x, p.y, 1.2, Color8(150, 0, 0, 255));
+			c.StrokeLine(p.x, p.y, p.x + d.x, p.y + d.y, Color8(150, 0, 0, 255), 1.0f);
+		}
+	}
+	c.GetImage()->SavePng("flow-grid.png");
 }
 
 } // namespace roadproc
