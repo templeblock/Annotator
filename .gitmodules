@@ -28,3 +28,6 @@
 [submodule "third_party/pdqsort"]
 	path = third_party/pdqsort
 	url = https://github.com/orlp/pdqsort.git
+[submodule "third_party/glfw"]
+	path = third_party/glfw
+	url = https://github.com/glfw/glfw.git

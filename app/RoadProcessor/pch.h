@@ -20,3 +20,6 @@
 #include <lensfun/lensfun.h>
 
 #include <pdqsort/pdqsort.h>
+
+#include <glfw/deps/glad/glad.h>
+#include <glfw/include/GLFW/glfw3.h>

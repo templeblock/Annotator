@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Globals.h"
 #include "Perspective.h"
+#include "MeshRenderer.h"
 
 namespace imqs {
 namespace roadproc {
@@ -59,6 +60,9 @@ int main(int argc, char** argv) {
 
 	imqs::video::VideoFile::Initialize();
 	//imqs::gfx::raster::TestBilinear();
+	//imqs::roadproc::MeshRenderer rend;
+	//rend.Initialize(1024, 1024);
+	//return 0;
 
 	argparse::Args args("Usage: RoadProcessor [options] <command>");
 	args.AddValue("e", "lensdb", "Camera/Lens database", "/usr/local/share/lensfun/version_2/");

@@ -103,7 +103,7 @@ void Image::Alloc(ImageFormat format, int width, int height, int stride) {
 
 	IMQS_ASSERT(stride >= gfx::BytesPerPixel(format) * width);
 
-	if (Width == width && Height == height && Stride == stride) {
+	if (Width == width && Height == height && Stride == stride && OwnData) {
 		Format = format;
 		return;
 	}

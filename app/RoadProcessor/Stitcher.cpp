@@ -4,8 +4,8 @@
 #include "Perspective.h"
 #include "OpticalFlow.h"
 
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 2 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000879688
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 10 --start 5 /home/ben/win/c/mldata/DSCF3023.MOV -0.00001 -0.000879688
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 5 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.0009
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 10 --start 5 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000879688
 
 using namespace std;
 using namespace imqs::gfx;
@@ -135,7 +135,7 @@ public:
 			}
 		}
 
-		bool printWarpMesh = true;
+		bool printWarpMesh = false;
 		if (printWarpMesh) {
 			tsf::print("\n");
 			for (int y = 0; y < meshH; y++) {

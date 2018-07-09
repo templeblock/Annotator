@@ -12,6 +12,14 @@ sudo apt-get install -y \
 
 	#libpng-dev \
 
+# Building glfw
+# sudo apt-get install -y xorg-dev
+# cd third_party/glfw
+# mkdir build
+# cd build
+# cmake -DBUILD_SHARED_LIBS=OFF -DGLFW_BUILD_EXAMPLES=ON -DGLFW_BUILD_TESTS=OFF -DGLFW_BUILD_DOCS=OFF ..
+# make -j
+
 # Last time I checked (June 4 2018), ffmpeg was not yet buildable on linux from vcpkg.
 #
 # ffmpeg must be installed from source on ubuntu 16.04, because we need at least version 3.3

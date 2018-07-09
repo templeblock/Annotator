@@ -437,6 +437,26 @@ local opencv = ExternalLibrary {
 	},
 }
 
+local glfw = ExternalLibrary {
+	Name = "glfw",
+	Propagate = {
+		Env = {
+--			CPPPATH = {
+--
+--			},
+			LIBPATH = {
+				{ "third_party/glfw/build/src"; Config = linuxFilter },
+			},
+		},
+		Includes = {
+			"third_party/glfw/deps",
+		},
+		Libs = {
+			{ "glfw3"; Config = linuxFilter },
+		}
+	}
+}
+
 local tsf = StaticLibrary {
 	Name = "tsf",
 	Depends = { winCrt, },
@@ -879,13 +899,13 @@ local Labeler = Program {
 local RoadProcessor = Program {
 	Name = "RoadProcessor",
 	Depends = {
-		winCrt, Video, gfx, opencv, ffmpeg, pal, libjpeg_turbo, png, stb, tsf, agg
+		winCrt, Video, gfx, opencv, ffmpeg, pal, libjpeg_turbo, png, stb, tsf, agg, glfw, lz4
 	},
 	--Env = {
 	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	--},
 	Libs = { 
-		{ "rt", "m", "stdc++", "omp", "lensfun"; Config = linuxFilter },
+		{ "lensfun", "dl", "pthread", "X11", "rt", "m", "stdc++", "omp"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/RoadProcessor/pch.cpp",
