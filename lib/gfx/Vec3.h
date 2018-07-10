@@ -83,6 +83,11 @@ public:
 		this->y = b.y;
 		this->z = b.z;
 	}
+	Vec3(Vec2Base<T> b, float z) {
+		this->x = b.x;
+		this->y = b.y;
+		this->z = z;
+	}
 };
 
 typedef Vec3<double> Vec3d;

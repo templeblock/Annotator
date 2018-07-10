@@ -128,6 +128,10 @@ Image Image::Window(int x, int y, int width, int height) const {
 	return Image(Format, ConstructWindow, Stride, const_cast<uint8_t*>(At(x, y)), width, height);
 }
 
+Image Image::Window(Rect32 rect) const {
+	return Window(rect.x1, rect.y1, rect.Width(), rect.Height());
+}
+
 void Image::Fill(uint32_t color) {
 	Fill(Rect32(0, 0, Width, Height), color);
 }

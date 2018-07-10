@@ -64,6 +64,7 @@ public:
 	void  Reset();                                                          // Free memory, and reset all fields
 	void  Alloc(ImageFormat format, int width, int height, int stride = 0); // Allocate memory and initialize data structure
 	Image Window(int x, int y, int width, int height) const;                // Returns a window into Image, at the specified rectangle. Does not copy memory. Parent must outlive window.
+	Image Window(Rect32 rect) const;                                        // Returns a window into Image, at the specified rectangle. Does not copy memory. Parent must outlive window.
 	void  Fill(uint32_t color);
 	void  Fill(Rect32 rect, uint32_t color);
 	Image AsType(ImageFormat fmt) const;

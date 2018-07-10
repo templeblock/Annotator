@@ -7,6 +7,7 @@ namespace imqs {
 namespace roadproc {
 int Speed(argparse::Args& args);
 int Stitch(argparse::Args& args);
+int Stitch2(argparse::Args& args);
 } // namespace roadproc
 } // namespace imqs
 
@@ -77,8 +78,11 @@ int main(int argc, char** argv) {
 
 	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
 	auto stitch      = args.AddCommand("stitch <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
+	auto stitch2     = args.AddCommand("stitch2 <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch2);
 	stitch->AddValue("n", "number", "Number of frames", "2");
 	stitch->AddValue("s", "start", "Start time in seconds", "0");
+	stitch2->AddValue("n", "number", "Number of frames", "2");
+	stitch2->AddValue("s", "start", "Start time in seconds", "0");
 
 	if (!args.Parse(argc, (const char**) argv))
 		return 1;

@@ -1,6 +1,8 @@
 /.tundra2.*
 /t2-output
 /ide
+/*.png
+/*.jpeg
 pkg/
 CMakeFiles/
 /third_party/cntk/Windows
