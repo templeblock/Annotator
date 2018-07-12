@@ -8,7 +8,7 @@
             "name": "(gdb) Launch RoadProcessor",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../../t2-output/linux-clang-debug-default/RoadProcessor",
+            "program": "${workspaceFolder}/../../t2-output/linux-clang-release-default/RoadProcessor",
             //"args": [
             //    "perspective",
             //    "/home/ben/win/c/mldata/DSCF3023.MOV",
@@ -20,17 +20,17 @@
                 "-s",
                 "0.7",
                 "-n",
-                "10",
+                "40",
                 "/home/ben/win/c/mldata/DSCF3023.MOV",
                 "0",
-                "-0.00089",
+                "-0.000999",
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [
                 {
                     "name": "LD_LIBRARY_PATH",
-                    "value": "${workspaceFolder}/../../t2-output/linux-clang-debug-default"
+                    "value": "${workspaceFolder}/../../t2-output/linux-clang-release-default"
                 }
             ],
             "externalConsole": true,

@@ -6,8 +6,13 @@
 #include "OpticalFlow2.h"
 #include "Mesh.h"
 
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 1 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.0009
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 5 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.0009
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 1 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 40 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 40 --start 0.7 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 30 --start 260 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+
+// TODO: Align the warp mesh so that on the bottom, it has cells which touch right up against the bottom of the image.
+// This should help substantially with the alignment in the most visible, highly detailed region - ie the middle of the road.
 
 using namespace std;
 using namespace imqs::gfx;
@@ -43,7 +48,8 @@ Error Stitcher2::DoStitch(string videoFile, float zx, float zy, double seconds, 
 	frame.Alloc(gfx::ImageFormat::RGBA, video.Width(), video.Height());
 
 	//err = Rend.Initialize(5120, 4096);
-	err = Rend.Initialize(5120, 6144);
+	//err = Rend.Initialize(5120, 6144);
+	err = Rend.Initialize(6144, 6144);
 	//err = Rend.Initialize(8192, 8192);
 	if (!err.OK())
 		return err;
@@ -142,7 +148,8 @@ Error Stitcher2::DoStitch(string videoFile, float zx, float zy, double seconds, 
 
 			//Rend.SaveToFile("giant1.jpeg");
 			Rend.DrawMesh(m, flat);
-			Rend.SaveToFile("giant2.jpeg");
+			if (i % 4 == 0)
+				Rend.SaveToFile("giant2.jpeg");
 
 			PrevBottomMidAlignPoint = bottomMidAlignPoint;
 		}

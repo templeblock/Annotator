@@ -276,6 +276,7 @@ void RemovePerspective(const Image& camera, Image& flat, float z1, float zx, flo
 	int32_t srcClampV = (camera.Height - 1) * 256 - 1;
 
 	// weird.. getting less distortion during optical flow calculations with less correction off
+	// UPDATE: version 2 of the sticher looks better with lense correction on
 	bool doLensCorrection = true;
 
 #pragma omp parallel for

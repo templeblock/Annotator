@@ -224,19 +224,14 @@ static int MedianFilter(DeltaGrid& g) {
 				// Build up a small set of "clean" samples, which are those that are close to the median.
 				// We don't want to be filtering based on dirty samples.
 				int iClean = 0;
-				for (int loop = 0; loop < 2; loop++) {
-					for (int j = 0; j < i; j++) {
-						if (fabs(samplesX[j] - samplesX[i / 2]) <= maxDistance &&
-						    fabs(samplesY[j] - samplesY[i / 2]) <= maxDistance &&
-						    fabs(samplesX[j] - globalMedian.x) <= maxGlobalDistance &&
-						    fabs(samplesY[j] - globalMedian.y) <= maxGlobalDistance) {
-							samplesCleanX[iClean] = samplesX[j];
-							samplesCleanY[iClean] = samplesY[j];
-							iClean++;
-						}
-					}
-					if (iClean == 0) {
-						int abc = 123;
+				for (int j = 0; j < i; j++) {
+					if (fabs(samplesX[j] - samplesX[i / 2]) <= maxDistance &&
+					    fabs(samplesY[j] - samplesY[i / 2]) <= maxDistance &&
+					    fabs(samplesX[j] - globalMedian.x) <= maxGlobalDistance &&
+					    fabs(samplesY[j] - globalMedian.y) <= maxGlobalDistance) {
+						samplesCleanX[iClean] = samplesX[j];
+						samplesCleanY[iClean] = samplesY[j];
+						iClean++;
 					}
 				}
 				if (iClean >= 2) {
@@ -296,8 +291,8 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	Image warpImgG   = warpImg.AsType(ImageFormat::Gray);
 	Image stableImgG = stableImg.AsType(ImageFormat::Gray);
 
-	warpImgG.SaveFile("warpImgG.jpeg");
-	stableImgG.SaveFile("stableImgG.jpeg");
+	//warpImgG.SaveFile("warpImgG.jpeg");
+	//stableImgG.SaveFile("stableImgG.jpeg");
 
 	int minHSearch = -StableHSearchRange;
 	int maxHSearch = StableHSearchRange;
@@ -366,8 +361,12 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	}
 	warpMeshValidRect.x2++;
 	warpMeshValidRect.y2++;
+	IMQS_ASSERT(warpMeshValidRect.x1 >= 0);
+	IMQS_ASSERT(warpMeshValidRect.y1 >= 0);
+	IMQS_ASSERT(warpMeshValidRect.x2 <= warpMesh.Width);
+	IMQS_ASSERT(warpMeshValidRect.y2 <= warpMesh.Height);
 
-	warpMesh.PrintValid();
+	//warpMesh.PrintValid();
 
 	// Run multiple passes, where at the end of each pass, we perform maximum likelihood filtering, and then
 	// on the subsequent pass, restrict the search window to a much smaller region.
@@ -376,7 +375,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 
 	int maxPass = 2;
 	for (int pass = 0; pass < maxPass; pass++) {
-		tsf::print("Flow pass %v\n", pass);
+		//tsf::print("Flow pass %v\n", pass);
 		int dyMin = minVSearch;
 		int dyMax = maxVSearch;
 		int dxMin = minHSearch;
@@ -416,14 +415,14 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 			}
 			warpMesh.At(c.x, c.y).Pos += Vec2f(bestDx, bestDy);
 		}
-		warpMesh.PrintDeltaPos(warpMeshValidRect);
+		//warpMesh.PrintDeltaPos(warpMeshValidRect);
 
 		int       nfilterPasses = 0;
 		DeltaGrid dg;
 		CopyMeshToDelta(warpMesh, warpMeshValidRect, dg);
 		for (int ifilter = 0; ifilter < 10; ifilter++) {
 			int nrep = MedianFilter(dg);
-			tsf::print("Median Filter replaced %v samples\n", nrep);
+			//tsf::print("Median Filter replaced %v samples\n", nrep);
 			if (nrep == 0)
 				break;
 			nfilterPasses++;
@@ -433,7 +432,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 			// If we performed no filtering, then a second alignment pass will not change anything
 			break;
 		}
-		warpMesh.PrintDeltaPos(warpMeshValidRect);
+		//warpMesh.PrintDeltaPos(warpMeshValidRect);
 	}
 
 	//warpMesh.DrawFlowImage(warpMeshValidRect, "flow-diagram.png");
@@ -474,7 +473,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		//warpMesh.DrawFlowImage("flow-diagram-all.png");
 	}
 
-	// smooth the invalid cells (but not too high up, since they aren't aligned at all)
+	// smooth the invalid cells (but not too high up, since they aren't aligned at all, so that's just computation wasted)
 	{
 		DeltaGrid dg;
 		int       y1 = warpMesh.Height / 2;
@@ -497,7 +496,26 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 				warpMesh.At(x, y).Color.a = 0;
 		}
 	}
-	//warpMesh.DrawFlowImage("flow-diagram-all.png");
+
+	// lower the opacity of all cells outside of the frustum
+	// NOTE: This is a poor substitute for aligning the outer triangular edges
+	// via optical flow. Right now I want to avoid doing that alignment, because
+	// of the expensive cost of reading a MUCH larger portion of the framebuffer
+	// on which to perform alignment. I will be even more expensive once we do rotation.
+	if (true) {
+		for (int y = 0; y < warpMesh.Height; y++) {
+			for (int x = 0; x < warpMesh.Width; x++) {
+				Vec2f p = warpMesh.At(x, y).UV;
+				// a larger buffer generally improves the quality of the stitching, in the absence of doing any optical flow
+				// on the periphery.
+				int buffer = 200;
+				if (!geom2d::PtInsidePoly(p.x - buffer, p.y, 4, &warpFrustumPoly[0].x, 2) || !geom2d::PtInsidePoly(p.x + buffer, p.y, 4, &warpFrustumPoly[0].x, 2))
+					warpMesh.At(x, y).Color.a = 0;
+			}
+		}
+	}
+
+	//warpMesh.DrawFlowImage(tsf::fmt("flow-diagram-all-%d.png", frameNumber));
 
 	//warpMesh.PrintSample(warpMesh.Width / 2, warpMesh.Height - 1);
 
