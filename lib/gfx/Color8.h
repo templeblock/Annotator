@@ -52,8 +52,12 @@ public:
 
 	float Rf() const { return (float) r / 255.0f; } // Returns Red 0..1
 	float Gf() const { return (float) g / 255.0f; } // Returns Green 0..1
-	float Bf() const { return (float) b / 255.0f; } // Returns Bue 0..1
+	float Bf() const { return (float) b / 255.0f; } // Returns Blue 0..1
 	float Af() const { return (float) a / 255.0f; } // Returns Alpha 0..1
+
+	float RLinear() const { return SRGBtoLinear((float) r / 255.0f); } // Returns Red 0..1, after converting from sRGB to linear
+	float GLinear() const { return SRGBtoLinear((float) g / 255.0f); } // Returns Green 0..1, after converting from sRGB to linear
+	float BLinear() const { return SRGBtoLinear((float) b / 255.0f); } // Returns Blue 0..1, after converting from sRGB to linear
 
 	// Input values are clamped between 0..1
 	static Color8 FromFloat(float h, float s, float v, float a);
@@ -79,12 +83,9 @@ public:
 	}
 
 	static void LinearToSRGB(Vec4f& v) {
-		v.x = math::Clamp(v.x, 0.0f, 1.0f);
-		v.y = math::Clamp(v.y, 0.0f, 1.0f);
-		v.z = math::Clamp(v.z, 0.0f, 1.0f);
-		v.x = LinearToSRGB(v.x);
-		v.y = LinearToSRGB(v.y);
-		v.z = LinearToSRGB(v.z);
+		v.x = LinearToSRGB(math::Clamp(v.x, 0.0f, 1.0f));
+		v.y = LinearToSRGB(math::Clamp(v.y, 0.0f, 1.0f));
+		v.z = LinearToSRGB(math::Clamp(v.z, 0.0f, 1.0f));
 	}
 };
 

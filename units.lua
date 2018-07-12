@@ -901,9 +901,13 @@ local RoadProcessor = Program {
 	Depends = {
 		winCrt, Video, gfx, opencv, ffmpeg, pal, libjpeg_turbo, png, stb, tsf, agg, glfw, lz4
 	},
-	--Env = {
-	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
-	--},
+	Env = {
+		--PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
+		-- If you want asan, you also need to add "asan" to the front of the Libs list
+		--CXXOPTS = {
+		--	{ "-fsanitize=address" },
+		--},
+	},
 	Libs = { 
 		{ "lensfun", "dl", "pthread", "X11", "rt", "m", "stdc++", "omp"; Config = linuxFilter },
 	},

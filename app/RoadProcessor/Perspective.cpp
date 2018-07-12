@@ -46,6 +46,13 @@ void Frustum::DebugPrintParams(float z1, float zx, float zy, int frameWidth, int
 	tsf::print("%.4f %10f %10f => %v x %v   %6.1f .. %6.1f (bottom scale %v, top scale %v)\n", z1, zx, zy, Width, Height, X1, X2, (X2 - X1) / frameWidth, (float) Width / frameWidth);
 }
 
+void Frustum::Polygon(Vec2f* poly, int xPadding) {
+	poly[0] = Vec2f(xPadding, 0);
+	poly[1] = Vec2f((float) Width / 2.0f + X1 + xPadding, Height);
+	poly[2] = Vec2f((float) Width / 2.0f + X2 - xPadding, Height);
+	poly[3] = Vec2f(Width - xPadding, 0);
+}
+
 // This runs newton's method, until it produces a y value that is
 // within stopAtPrecision distance from desiredY, or until stopAtIteration iterations.
 // Returns the best-performing x.
@@ -269,7 +276,7 @@ void RemovePerspective(const Image& camera, Image& flat, float z1, float zx, flo
 	int32_t srcClampV = (camera.Height - 1) * 256 - 1;
 
 	// weird.. getting less distortion during optical flow calculations with less correction off
-	bool doLensCorrection = false;
+	bool doLensCorrection = true;
 
 #pragma omp parallel for
 	for (int y = 0; y < flat.Height; y++) {

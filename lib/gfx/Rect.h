@@ -36,6 +36,13 @@ public:
 		y2 += y;
 	}
 
+	void Offset(int x, int y) {
+		x1 += x;
+		y1 += y;
+		x2 += x;
+		y2 += y;
+	}
+
 	void ExpandToFit(int x, int y) {
 		x1 = std::min(x1, x);
 		y1 = std::min(y1, y);

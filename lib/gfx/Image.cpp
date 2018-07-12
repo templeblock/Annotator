@@ -156,6 +156,7 @@ Image Image::AsType(ImageFormat fmt) const {
 	r.Alloc(fmt, Width, Height);
 	uint32_t combo = MAKE_IMAGE_FORMAT_PAIR(Format, fmt);
 	switch (combo) {
+	case MAKE_IMAGE_FORMAT_PAIR(ImageFormat::RGBAP, ImageFormat::Gray):
 	case MAKE_IMAGE_FORMAT_PAIR(ImageFormat::RGBA, ImageFormat::Gray):
 		for (int y = 0; y < Height; y++) {
 			size_t         w   = Width;
@@ -169,6 +170,7 @@ Image Image::AsType(ImageFormat fmt) const {
 		}
 		break;
 	case MAKE_IMAGE_FORMAT_PAIR(ImageFormat::Gray, ImageFormat::RGBA):
+	case MAKE_IMAGE_FORMAT_PAIR(ImageFormat::Gray, ImageFormat::RGBAP):
 		for (int y = 0; y < Height; y++) {
 			size_t         w   = Width;
 			const uint8_t* src = Line(y);

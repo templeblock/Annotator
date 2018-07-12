@@ -255,7 +255,7 @@ void OpticalFlow::DrawGrid(Image& img1) {
 			auto d = LastGridEl(x, y);
 			d.y -= avgD.y;
 			c.FillCircle(p.x, p.y, 1.2, Color8(150, 0, 0, 255));
-			c.StrokeLine(p.x, p.y, p.x + d.x, p.y + d.y, Color8(150, 0, 0, 255), 1.0f);
+			c.Line(p.x, p.y, p.x + d.x, p.y + d.y, Color8(150, 0, 0, 255), 1.0f);
 		}
 	}
 	c.GetImage()->SavePng("flow-grid.png");

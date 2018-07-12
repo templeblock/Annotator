@@ -49,7 +49,7 @@ void Canvas::FillRect(Rect32 box, Color8 color) {
 	InvalidRect.ExpandToFit(box);
 }
 
-void Canvas::StrokeRect(Rect32 box, Color8 color, float linewidth) {
+void Canvas::Rect(Rect32 box, Color8 color, float linewidth) {
 	if (!IsAlive)
 		return;
 
@@ -64,10 +64,10 @@ void Canvas::StrokeRect(Rect32 box, Color8 color, float linewidth) {
 	    (float) box.y2,
 	};
 
-	StrokeLine(true, 4, v, 2 * sizeof(float), color, linewidth);
+	Line(true, 4, v, 2 * sizeof(float), color, linewidth);
 }
 
-void Canvas::StrokeRect(RectF box, Color8 color, float linewidth) {
+void Canvas::Rect(RectF box, Color8 color, float linewidth) {
 	if (!IsAlive)
 		return;
 
@@ -82,10 +82,10 @@ void Canvas::StrokeRect(RectF box, Color8 color, float linewidth) {
 	    box.y2,
 	};
 
-	StrokeLine(true, 4, v, 2 * sizeof(float), color, linewidth);
+	Line(true, 4, v, 2 * sizeof(float), color, linewidth);
 }
 
-void Canvas::StrokeLine(bool closed, int nvx, const float* vx, int vx_stride_bytes, Color8 color, float linewidth) {
+void Canvas::Line(bool closed, int nvx, const float* vx, int vx_stride_bytes, Color8 color, float linewidth) {
 	if (!IsAlive)
 		return;
 
@@ -132,17 +132,17 @@ void Canvas::StrokeLine(bool closed, int nvx, const float* vx, int vx_stride_byt
 	RenderScanlines();
 }
 
-void Canvas::StrokeLine(float x1, float y1, float x2, float y2, Color8 color, float linewidth) {
+void Canvas::Line(float x1, float y1, float x2, float y2, Color8 color, float linewidth) {
 	float vx[4] = {
 	    x1,
 	    y1,
 	    x2,
 	    y2,
 	};
-	StrokeLine(false, 2, vx, 2 * sizeof(float), color, linewidth);
+	Line(false, 2, vx, 2 * sizeof(float), color, linewidth);
 }
 
-void Canvas::StrokeCircle(float x, float y, float radius, Color8 color, float linewidth) {
+void Canvas::Circle(float x, float y, float radius, Color8 color, float linewidth) {
 	if (!IsAlive)
 		return;
 

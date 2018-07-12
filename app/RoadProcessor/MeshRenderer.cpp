@@ -4,6 +4,7 @@
 #include <glfw/deps/linmath.h>
 
 using namespace imqs::gfx;
+using namespace std;
 
 namespace imqs {
 namespace roadproc {
@@ -17,10 +18,11 @@ struct VxGen {
 	gfx::Vec2f  UV;
 	gfx::Color8 Color;
 
-	static VxGen Make(const gfx::Vec3f& pos, const gfx::Vec2f& uv) {
+	static VxGen Make(const gfx::Vec3f& pos, const gfx::Vec2f& uv, gfx::Color8 color = gfx::Color8(255, 255, 255, 255)) {
 		VxGen v;
-		v.Pos = pos;
-		v.UV  = uv;
+		v.Pos   = pos;
+		v.UV    = uv;
+		v.Color = color;
 		return v;
 	}
 };
@@ -132,9 +134,7 @@ Error MeshRenderer::Initialize(int fbWidth, int fbHeight) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	// enable this when ready:
 	glEnable(GL_FRAMEBUFFER_SRGB);
-	// glClearColor(SRGB2Linear(clear.r), SRGB2Linear(clear.g), SRGB2Linear(clear.b), clear.a / 255.0f);
 
 	glViewport(0, 0, FBWidth, FBHeight);
 	Clear(Color8(0, 150, 0, 60));
@@ -158,84 +158,22 @@ void MeshRenderer::Destroy() {
 }
 
 void MeshRenderer::Clear(gfx::Color8 color) {
-	glClearColor(color.Rf(), color.Gf(), color.Bf(), color.Af());
+	glClearColor(color.RLinear(), color.GLinear(), color.BLinear(), color.Af());
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
-void MeshRenderer::CopyImageToDevice(const Image& img) {
-	glUseProgram(CopyShader);
-
-	auto locMVP  = glGetUniformLocation(CopyShader, "MVP");
-	auto locvPos = glGetAttribLocation(CopyShader, "vPos");
-	auto locvUV  = glGetAttribLocation(CopyShader, "vUV");
-	auto locTex  = glGetAttribLocation(CopyShader, "tex");
-	IMQS_ASSERT(locMVP != -1 && locvPos != -1 && locvUV != -1 && locTex != -1);
-
-	GLuint tex = -1;
-	glGenTextures(1, &tex);
-	glBindTexture(GL_TEXTURE_2D, tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, img.Width, img.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.Data);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-	VxGen vertices[4] = {
-	    {{0, 0, 0}, {0, 0}},
-	    {{1, 0, 0}, {1, 0}},
-	    {{1, 1, 0}, {1, 1}},
-	    {{0, 1, 0}, {0, 1}},
-	};
-	const int nindices          = 6;
-	int       indices[nindices] = {0, 1, 2, 0, 2, 3};
-
-	//GLuint vxBuf = -1;
-	//glGenBuffers(1, &vxBuf);
-	//glBindBuffer(GL_ARRAY_BUFFER, vxBuf);
-	//glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	const uint8_t* vptr = (const uint8_t*) vertices;
-
-	glEnableVertexAttribArray(locvPos);
-	glVertexAttribPointer(locvPos, 3, GL_FLOAT, GL_FALSE, sizeof(VxGen), vptr + offsetof(VxGen, Pos));
-	glEnableVertexAttribArray(locvUV);
-	glVertexAttribPointer(locvUV, 2, GL_FLOAT, GL_FALSE, sizeof(VxGen), vptr + offsetof(VxGen, UV));
-
-	Mat4f mvp;
-	mvp.MakeIdentity();
-	mvp.Ortho(0, FBWidth, 0, FBHeight, -1, 1);
-	glUniformMatrix4fv(locMVP, 1, GL_FALSE, &mvp.row[0].x);
-
-	glUniform1i(locTex, 0); // texture unit 0
-
-	glDrawElements(GL_TRIANGLES, nindices, GL_UNSIGNED_SHORT, indices);
-
-	glDisableVertexAttribArray(locvPos);
-	glDisableVertexAttribArray(locvUV);
-	//glDeleteBuffers(1, &vxBuf);
-	glDeleteTextures(1, &tex);
-}
-
-void MeshRenderer::CopyDeviceToImage(Image& img) {
-	// glReadPixels returns an image that is bottom-up, so we need to flip it, in order to be top-down
-	// We make a bunch of assumptions here (inside our assertions), which make the code simpler
+void MeshRenderer::CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, Image& img) {
 	// HMMM. this is actually premultiplied alpha (ImageFormat::RGBAP)
-	img.Alloc(ImageFormat::RGBA, FBWidth, FBHeight);
-	int width     = FBWidth;
-	int height    = FBHeight;
-	int stripSize = 64;
-	IMQS_ASSERT(height % stripSize == 0);
-	uint8_t* buf = (uint8_t*) imqs_malloc_or_die(stripSize * width * 4);
-	// read in strips, from the top down
-	for (int y = 0; y < height; y += stripSize) {
-		glReadPixels(0, height - y - stripSize, width, stripSize, GL_RGBA, GL_UNSIGNED_BYTE, buf);
-		uint8_t* src = buf + (stripSize - 1) * width * 4;
-		for (int i = 0; i < stripSize; i++) {
-			memcpy(img.At(0, y + i), src, width * 4);
-			src -= width * 4;
-		}
+	if (img.Width == 0) {
+		img.Alloc(ImageFormat::RGBA, srcRect.Width(), srcRect.Height());
+	} else {
+		IMQS_ASSERT(img.Width >= srcRect.Width());
+		IMQS_ASSERT(img.Height >= srcRect.Height());
 	}
-	free(buf);
+	glPixelStorei(GL_PACK_ROW_LENGTH, img.Stride / 4);
+	glReadPixels(srcRect.x1, srcRect.y1, srcRect.Width(), srcRect.Height(), GL_RGBA, GL_UNSIGNED_BYTE, img.At(dstX, dstY));
+	glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 }
 
 void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img) {
@@ -268,8 +206,11 @@ void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img) {
 	VxGen* vxout = vx;
 	for (int y = 0; y < m.Height; y++) {
 		for (int x = 0; x < m.Width; x++) {
-			*vxout++        = VxGen::Make(Vec3f(m.At(x, y), 0.f), m.UVAt(x, y));
-			vxout[-1].Color = Color8(255, 255, 255, 255);
+			const auto& mv = m.At(x, y);
+			Vec2f       uv = mv.UV;
+			uv.x           = uv.x / (float) img.Width;
+			uv.y           = uv.y / (float) img.Height;
+			*vxout++       = VxGen::Make(Vec3f(mv.Pos, 0), uv, mv.Color);
 		}
 	}
 
@@ -306,7 +247,7 @@ void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img) {
 
 	Mat4f mvp;
 	mvp.MakeIdentity();
-	mvp.Ortho(0, FBWidth, FBHeight, 0, -1, 1);
+	mvp.Ortho(0, FBWidth, 0, FBHeight, -1, 1);
 	auto mvpT = mvp;
 	mvpT.Transpose();
 	glUniformMatrix4fv(locMVP, 1, GL_FALSE, &mvpT.row[0].x); // GLES doesn't support TRANSPOSE = TRUE
@@ -323,6 +264,12 @@ void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img) {
 	glDeleteTextures(1, &tex);
 
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
+}
+
+void MeshRenderer::SaveToFile(std::string filename) {
+	Image img;
+	CopyDeviceToImage(Rect32(0, 0, FBWidth, FBHeight), 0, 0, img);
+	img.SaveFile(filename);
 }
 
 Error MeshRenderer::DrawHelloWorldTriangle() {

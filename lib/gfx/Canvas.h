@@ -67,11 +67,11 @@ public:
 	// Drawing functions
 	void Fill(Color8 color);
 	void FillRect(Rect32 box, Color8 color);
-	void StrokeRect(Rect32 box, Color8 color, float linewidth);
-	void StrokeRect(RectF box, Color8 color, float linewidth);
-	void StrokeLine(bool closed, int nvx, const float* vx, int vx_stride_bytes, Color8 color, float linewidth);
-	void StrokeLine(float x1, float y1, float x2, float y2, Color8 color, float linewidth);
-	void StrokeCircle(float x, float y, float radius, Color8 color, float linewidth);
+	void Rect(Rect32 box, Color8 color, float linewidth);
+	void Rect(RectF box, Color8 color, float linewidth);
+	void Line(bool closed, int nvx, const float* vx, int vx_stride_bytes, Color8 color, float linewidth);
+	void Line(float x1, float y1, float x2, float y2, Color8 color, float linewidth);
+	void Circle(float x, float y, float radius, Color8 color, float linewidth);
 	void FillCircle(float x, float y, float radius, Color8 color);
 	void FillPoly(int nvx, const float* vx, int vx_stride_bytes, Color8 color);
 	//void RenderSVG(const char* svg);

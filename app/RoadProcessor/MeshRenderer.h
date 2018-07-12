@@ -21,9 +21,9 @@ public:
 	void  Destroy(); // Called by destructor
 
 	void Clear(gfx::Color8 color);
-	void CopyImageToDevice(const gfx::Image& img);
-	void CopyDeviceToImage(gfx::Image& img);
+	void CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, gfx::Image& img);
 	void DrawMesh(const Mesh& m, const gfx::Image& img);
+	void SaveToFile(std::string filename);
 
 	Error DrawHelloWorldTriangle();
 
