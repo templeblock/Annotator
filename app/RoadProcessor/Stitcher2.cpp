@@ -94,9 +94,19 @@ Error Stitcher2::DoStitch(string videoFile, float zx, float zy, double seconds, 
 			//StitchTopLeft += StitchVelocity;
 		}
 		if (i != 0) {
-			int  pixelsPerMeshCell  = 60; // intuitively makes sense to have this be more than flow.MatchRadius * 2
-			int  pixelsPerAlignCell = flow.MatchRadius * 2;
-			Mesh m((flat.Width + pixelsPerAlignCell - 1) / pixelsPerMeshCell, (flat.Height + pixelsPerAlignCell - 1) / pixelsPerMeshCell);
+			int pixelsPerMeshCell  = 60; // intuitively makes sense to have this be more than flow.MatchRadius * 2
+			int pixelsPerAlignCell = flow.MatchRadius * 2;
+			int mWidth             = (flat.Width + pixelsPerAlignCell - 1) / pixelsPerMeshCell;
+			int mHeight            = (flat.Height + pixelsPerAlignCell - 1) / pixelsPerMeshCell;
+			if (mWidth % 2 == 0) {
+				// Ensure that the grid has an odd number of cells, which guarantees that there is
+				// a mesh line running through the horizontal center of the grid (from top to bottom),
+				// which is perfectly in the center of the grid. We use this center point to compute
+				// horizontal drift, so that's why it's vital that we have it perfectly in the center
+				// of the image. See bottomMidAlignPoint and PrevBottomMidAlignPoint.
+				mWidth++;
+			}
+			Mesh m(mWidth, mHeight);
 			m.ResetIdentityForWarpMesh(flat.Width, flat.Height, flow.MatchRadius);
 			m.SnapToUVPixelEdges();
 			//m.Print(Rect32(0, 0, 5, 5), flat.Width, flat.Height);
@@ -127,7 +137,7 @@ Error Stitcher2::DoStitch(string videoFile, float zx, float zy, double seconds, 
 			Vec2f delta                  = bottomMidAlignPoint - PrevBottomMidAlignPoint;
 			tsf::print("Alignment delta: %v, %v\n", delta.x, delta.y);
 			//StitchVelocity   = bottomMidAlignPoint - PrevBottomMidAlignPoint;
-			delta.x = 0; // HACK.. uncertain how to handle this
+			//delta.x = 0; // HACK.. uncertain how to handle this
 			// We want the BOTTOM of our alignment window to line up with the BOTTOM of this most recent frame, BUT offset by the
 			// current velocity. And AFTER that, add some padding, to account for vehicle velocity changes. But hang on.. the vehicle
 			// could slow down OR speed up, so we can't pad it out here. The padding must come from StitchWindowHeight alone.
@@ -137,9 +147,9 @@ Error Stitcher2::DoStitch(string videoFile, float zx, float zy, double seconds, 
 			Vec2f stitchBotLeft = Vec2f(bottomMidAlignPoint.x - StitchWindowWidth / 2, bottomMidAlignPoint.y) + delta;
 			// Then, we bring it down by the max incremental V search.
 			stitchBotLeft.y += flow.StableVSearchRange;
-			float prevLeft    = StitchTopLeft.x;
-			StitchTopLeft     = stitchBotLeft - Vec2f(0, StitchWindowHeight);
-			StitchTopLeft.x   = prevLeft; // HACK to prevent horizontal drift
+			float prevLeft = StitchTopLeft.x;
+			StitchTopLeft  = stitchBotLeft - Vec2f(0, StitchWindowHeight);
+			//StitchTopLeft.x   = prevLeft; // HACK to prevent horizontal drift
 			flatToAlignBias.y = -(flat.Height - StitchWindowHeight + flow.StableVSearchRange);
 
 			//StitchTopLeft     = Vec2f(bottomMidAlignPoint.x - StitchWindowWidth / 2, bottomMidAlignPoint.y - StitchWindowHeight) + delta;

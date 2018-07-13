@@ -64,12 +64,15 @@ void Mesh::ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius
 	// it is exactly matchRadius away from the bottom of the image. These vertices are the most important
 	// vertices for optical flow, because they lie in the highest resolution area of the camera, where
 	// we care about the image the most.
+	// SEE COMMENT ABOVE FUNCTION
+	/*
 	int y = Height - 2;
 	for (int x = 0; x < Width; x++) {
 		auto& p = At(x, y);
 		p.Pos.y = imgHeight - matchRadius;
 		p.UV.y  = imgHeight - matchRadius;
 	}
+	*/
 }
 
 void Mesh::TransformTargets(gfx::Vec2f translate) {

@@ -246,8 +246,8 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	Image warpImgG   = warpImg.AsType(ImageFormat::Gray);
 	Image stableImgG = stableImg.AsType(ImageFormat::Gray);
 
-	//warpImgG.SaveFile("warpImgG.jpeg");
-	//stableImgG.SaveFile("stableImgG.jpeg");
+	warpImgG.SaveFile("warpImgG.jpeg");
+	stableImgG.SaveFile("stableImgG.jpeg");
 
 	int minHSearch = -StableHSearchRange;
 	int maxHSearch = StableHSearchRange;
@@ -421,9 +421,10 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		//}
 		// This limit here.. the "-4", is intimately tied to the mesh rect that we stitch inside Stitcher2,
 		// right before it calls Rend.DrawMesh().
-		for (int y = 0; y < warpMesh.Height - 4; y++) {
+		for (int y = 0; y < warpMesh.Height - 5; y++) {
 			for (int x = 0; x < warpMesh.Width; x++) {
-				warpMesh.At(x, y).Pos.x   = warpMesh.At(x, y).UV.x + bias.x;
+				//warpMesh.At(x, y).Pos.x   = warpMesh.At(x, y).UV.x + bias.x; // lock horizontal drift (bad hack)
+				warpMesh.At(x, y).Pos.x   = warpMesh.At(x, y).UV.x + avgDisp.x;
 				warpMesh.At(x, y).Pos.y   = warpMesh.At(x, y).UV.y + avgDisp.y;
 				warpMesh.At(x, y).IsValid = false;
 			}
@@ -436,7 +437,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		DeltaGrid dg;
 		int       y1 = warpMesh.Height / 2;
 		CopyMeshToDelta(warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height), dg);
-		BlurInvalid(dg, 1);
+		BlurInvalid(dg, 3);
 		CopyDeltaToMesh(dg, warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height));
 		//warpMesh.DrawFlowImage("flow-diagram-all.png");
 	}
@@ -481,7 +482,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		}
 	}
 
-	warpMesh.DrawFlowImage(tsf::fmt("flow-diagram-all-%d.png", frameNumber));
+	//warpMesh.DrawFlowImage(tsf::fmt("flow-diagram-all-%d.png", frameNumber));
 
 	//warpMesh.PrintSample(warpMesh.Width / 2, warpMesh.Height - 1);
 
