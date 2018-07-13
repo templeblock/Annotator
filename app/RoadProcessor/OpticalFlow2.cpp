@@ -54,52 +54,6 @@ static double ImageStdDev(const Image& img, Rect32 crop) {
 OpticalFlow2::OpticalFlow2() {
 }
 
-/*
-void OpticalFlow2::SetupGrid(Image& img1) {
-	// These windows and regions could be setup in a range of different configurations, and they could
-	// be more flexible at runtime. I'm just nailing it down here to make it easier to prototype and think about.
-	int vWindow = img1.Height;
-
-	// CHANGE THAT... now img1 is the entire match window. We are going to be blending over the entire img1.
-
-	// We take the bottom 900 pixels of img1, and divide it into 3 equal parts.
-	// The bottom part will remain constant.
-	// The middle part will be matched to the incoming frame (img2), and blended with it.
-	// The top part will come entirely from img2 (or perhaps blended also).
-
-	IMQS_ASSERT(AbsMaxHSearch == -AbsMinHSearch);
-
-	int availWidth  = img1.Width - AbsMaxHSearch * 2; // outer edges of grid cells touch up against this size
-	int availHeight = vWindow;                        // outer edges of grid cells touch up against this size
-	availWidth -= CellSize;                           // remove 1/2 a cell width from left, and 1/2 a cell width from right
-	availHeight -= CellSize;                          // same for vertical
-
-	// Populate the grid centers
-	int gridLeft = (img1.Width - availWidth) / 2;
-	//int gridTop  = img1.Height - vWindow * 2 + CellSize / 2;
-	int gridTop = CellSize / 2;
-
-	GridW = availWidth / (CellSize * 3); // *3 is thumbsuck
-	GridH = availHeight / (CellSize * 3);
-	GridW = min(GridW, 16);
-	GridH = min(GridH, 16);
-
-	GridCenter.resize(GridW * GridH);
-
-	for (int x = 0; x < GridW; x++) {
-		int cx = gridLeft + (x * availWidth) / (GridW - 1);
-		for (int y = 0; y < GridH; y++) {
-			int cy             = gridTop + (y * availHeight) / (GridH - 1);
-			GridCenterAt(x, y) = Point32(cx, cy);
-		}
-	}
-
-	LastGrid.resize(GridW * GridH);
-	for (auto& v : LastGrid)
-		v = Vec2d(0, 0);
-}
-*/
-
 static Rect32 MakeBoxAroundPoint(int x, int y, int radius) {
 	return Rect32(x - radius, y - radius, x + radius, y + radius);
 }
@@ -282,11 +236,12 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	int frameNumber = HistorySize++;
 
 	IMQS_ASSERT(warpImg.Width == warpFrustum.Width); // just sanity check
-	Vec2f warpFrustumPoly[4 * 10];                   // why 4*10? because we have some kind of stack corruption going on here. we should only need 4 elements.
-	warpFrustum.Polygon(warpFrustumPoly, 1);
-
-	//if (frameNumber == 0)
-	//	SetupGrid(img1);
+	Vec2f warpFrustumPoly[4];
+	// subtle things:
+	// shrink X by 1, to ensure we don't touch any black pixels outside the frustum
+	// expand Y by 0.1, so that our bottom-most vertices, which are built to butt up
+	// against the bottom, are considered inside.
+	warpFrustum.Polygon(warpFrustumPoly, -1, 0.1);
 
 	Image warpImgG   = warpImg.AsType(ImageFormat::Gray);
 	Image stableImgG = stableImg.AsType(ImageFormat::Gray);
@@ -306,7 +261,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		// stableImg is a small extract from the bottom middle of the first flat image.
 		// We assume that stableImg lies in the center of warpImg, and at the bottom.
 		bias.x     = (warpImg.Width - stableImg.Width) / 2;
-		bias.y     = warpImg.Height - stableImg.Height;
+		bias.y     = warpImg.Height - stableImg.Height + AbsMaxVSearch;
 		bias       = -bias; // get it from warp -> stable
 		minHSearch = AbsMinHSearch;
 		maxHSearch = AbsMaxHSearch;
@@ -456,6 +411,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	}
 
 	// For cells higher up, make their horizontal drift = 0, so that we force the system to always move forward in a straight line
+	// UPDATE: make them homogenous in X and Y
 	if (true) {
 		//warpMesh.DrawFlowImage("flow-diagram-all.png");
 		//for (int y = 0; y < warpMeshValidRect.y1; y++) {
@@ -463,7 +419,9 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		//		warpMesh.At(x, y).Pos.x = warpMesh.At(x, y).UV.x + bias.x;
 		//	}
 		//}
-		for (int y = 0; y < warpMesh.Height - 2; y++) {
+		// This limit here.. the "-4", is intimately tied to the mesh rect that we stitch inside Stitcher2,
+		// right before it calls Rend.DrawMesh().
+		for (int y = 0; y < warpMesh.Height - 4; y++) {
 			for (int x = 0; x < warpMesh.Width; x++) {
 				warpMesh.At(x, y).Pos.x   = warpMesh.At(x, y).UV.x + bias.x;
 				warpMesh.At(x, y).Pos.y   = warpMesh.At(x, y).UV.y + avgDisp.y;
@@ -483,7 +441,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		//warpMesh.DrawFlowImage("flow-diagram-all.png");
 	}
 
-	// For the cells at the bottom, extrapolate
+	// For the cells at the bottom, clone from vertex above
 	for (int x = 0; x < warpMesh.Width; x++) {
 		auto delta                              = warpMesh.At(x, warpMesh.Height - 2).Pos - warpMesh.At(x, warpMesh.Height - 2).UV;
 		warpMesh.At(x, warpMesh.Height - 1).Pos = warpMesh.At(x, warpMesh.Height - 1).UV + delta;
@@ -496,6 +454,14 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 				warpMesh.At(x, y).Color.a = 0;
 		}
 	}
+
+	// lower the opacity of ALL cells on the bottom
+	// Why? Because the outer edges of the frame are darker, because of the cheap lens
+	//for (int y = warpMesh.Height - 2; y < warpMesh.Height; y++) {
+	//	for (int x = 0; x < warpMesh.Width; x++) {
+	//		warpMesh.At(x, y).Color.a = 0;
+	//	}
+	//}
 
 	// lower the opacity of all cells outside of the frustum
 	// NOTE: This is a poor substitute for aligning the outer triangular edges
@@ -515,7 +481,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		}
 	}
 
-	//warpMesh.DrawFlowImage(tsf::fmt("flow-diagram-all-%d.png", frameNumber));
+	warpMesh.DrawFlowImage(tsf::fmt("flow-diagram-all-%d.png", frameNumber));
 
 	//warpMesh.PrintSample(warpMesh.Width / 2, warpMesh.Height - 1);
 

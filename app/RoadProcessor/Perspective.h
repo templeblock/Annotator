@@ -20,7 +20,7 @@ struct Frustum {
 	float X2;
 
 	void DebugPrintParams(float z1, float zx, float zy, int frameWidth, int frameHeight) const;
-	void Polygon(gfx::Vec2f poly[4], int xPadding = 0);
+	void Polygon(gfx::Vec2f poly[4], float expandX = 0, float expandY = 0);
 };
 
 float      FindZ1ForIdentityScaleAtBottom(int frameWidth, int frameHeight, float zx, float zy);

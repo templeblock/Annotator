@@ -84,7 +84,12 @@ varying vec2 uv;
 varying vec4 color;
 void main()
 {
-    gl_FragColor = texture2D(tex, uv) * color;
+	vec4 c = color;
+	//if (c.a < 0.5)
+	//	c.a = 0.0;
+	//else
+	//	c.a = 1.0;
+    gl_FragColor = texture2D(tex, uv) * c;
 }
 )";
 
@@ -176,7 +181,11 @@ void MeshRenderer::CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, Im
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 }
 
-void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img) {
+void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect) {
+	if (meshRenderRect.IsInverted())
+		meshRenderRect = Rect32(0, 0, m.Width, m.Height);
+	auto mr = meshRenderRect;
+
 	glUseProgram(CopyShader);
 
 	auto locMVP    = glGetUniformLocation(CopyShader, "MVP");
@@ -197,15 +206,15 @@ void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	IMQS_ASSERT(m.Width * m.Height <= 65535); // If you blow this limit, then just switch to uint32 indices.
+	IMQS_ASSERT(mr.Width() * mr.Height() <= 65535); // If you blow this limit, then just switch to uint32 indices.
 
-	VxGen*    vx       = new VxGen[m.Width * m.Height];
-	int       nindices = (m.Width - 1) * (m.Height - 1) * 6;
+	VxGen*    vx       = new VxGen[mr.Width() * mr.Height()];
+	int       nindices = (mr.Width() - 1) * (mr.Height() - 1) * 6;
 	uint16_t* indices  = new uint16_t[nindices];
 
 	VxGen* vxout = vx;
-	for (int y = 0; y < m.Height; y++) {
-		for (int x = 0; x < m.Width; x++) {
+	for (int y = mr.y1; y < mr.y2; y++) {
+		for (int x = mr.x1; x < mr.x2; x++) {
 			const auto& mv = m.At(x, y);
 			Vec2f       uv = mv.UV;
 			uv.x           = uv.x / (float) img.Width;
@@ -215,10 +224,10 @@ void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img) {
 	}
 
 	uint16_t* indout = indices;
-	for (int y = 0; y < m.Height - 1; y++) {
-		size_t row1 = y * m.Width;
-		size_t row2 = (y + 1) * m.Width;
-		for (int x = 0; x < m.Width - 1; x++) {
+	for (int y = 0; y < mr.Height() - 1; y++) {
+		size_t row1 = y * mr.Width();
+		size_t row2 = (y + 1) * mr.Width();
+		for (int x = 0; x < mr.Width() - 1; x++) {
 			// triangle 1 (top right)
 			*indout++ = row1 + x;
 			*indout++ = row2 + x + 1;
@@ -354,6 +363,19 @@ Error MeshRenderer::DrawHelloWorldTriangle() {
 	return Error();
 }
 
+static Error CheckShaderCompilation(const std::string& shaderSrc, GLuint shader) {
+	int       ilen;
+	const int maxBuff = 8000;
+	GLchar    ibuff[maxBuff];
+
+	GLint compileStat;
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStat);
+	glGetShaderInfoLog(shader, maxBuff, &ilen, ibuff);
+	if (compileStat == 0)
+		return Error::Fmt("Shader failed to compile\nShader: %.50s\nError: %v", shaderSrc, ibuff);
+	return Error();
+}
+
 Error MeshRenderer::CompileShader(std::string vertexSrc, std::string fragSrc, GLuint& shader) {
 	const char* vertexSrcPtr[] = {vertexSrc.c_str(), nullptr};
 	const char* fragSrcPtr[]   = {fragSrc.c_str(), nullptr};
@@ -363,12 +385,18 @@ Error MeshRenderer::CompileShader(std::string vertexSrc, std::string fragSrc, GL
 	glCompileShader(vertexShader);
 	if (glGetError() != GL_NO_ERROR)
 		return Error("Failed to compile vertex shader");
+	auto err = CheckShaderCompilation(vertexSrc, vertexShader);
+	if (!err.OK())
+		return err;
 
 	GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(fragShader, 1, fragSrcPtr, nullptr);
 	glCompileShader(fragShader);
 	if (glGetError() != GL_NO_ERROR)
 		return Error("Failed to compile fragment shader");
+	err = CheckShaderCompilation(fragSrc, fragShader);
+	if (!err.OK())
+		return err;
 
 	shader = glCreateProgram();
 	glAttachShader(shader, vertexShader);

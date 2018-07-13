@@ -40,6 +40,38 @@ void Mesh::ResetUniformRectangular(gfx::Vec2f topLeft, gfx::Vec2f topRight, gfx:
 	}
 }
 
+// NOTE: The special tweak that we do at the bottom here turns out to be pointless, because we
+// throw these pixels away anyway. We throw them away because of lens vignetting. Perhaps if we
+// implement vignetting for lensfun, then this might become relevant again. It might give us
+// slightly improved resolution. The reason it "might", is because the camera could be focused
+// a little bit away from the nearest point (aka the bottom of the sensor).
+void Mesh::ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius) {
+	// This is for the typical case, where we're generating a warp mesh from a flattened camera frame.
+	for (int y = 0; y < Height; y++) {
+		for (int x = 0; x < Width; x++) {
+			float xf         = ((float) x / (float) (Width - 1));
+			float yf         = ((float) y / (float) (Height - 1));
+			At(x, y).Pos     = Vec2f(xf * (float) imgWidth, yf * (float) imgHeight);
+			At(x, y).UV      = Vec2f(xf * (float) imgWidth, yf * (float) imgHeight);
+			At(x, y).IsValid = true;
+		}
+	}
+
+	// It is vital in this case that the row of vertices which are second from the bottom, are positioned
+	// such that they but up against the bottom, precisely. The bottom-most row of vertices must be the
+	// edge of the image, so we don't mess with that.
+	// What we're doing here is taking the second row from the bottom, and squishing it downwards so that
+	// it is exactly matchRadius away from the bottom of the image. These vertices are the most important
+	// vertices for optical flow, because they lie in the highest resolution area of the camera, where
+	// we care about the image the most.
+	int y = Height - 2;
+	for (int x = 0; x < Width; x++) {
+		auto& p = At(x, y);
+		p.Pos.y = imgHeight - matchRadius;
+		p.UV.y  = imgHeight - matchRadius;
+	}
+}
+
 void Mesh::TransformTargets(gfx::Vec2f translate) {
 	for (int y = 0; y < Height; y++) {
 		for (int x = 0; x < Width; x++) {

@@ -22,7 +22,7 @@ public:
 
 	void Clear(gfx::Color8 color);
 	void CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, gfx::Image& img);
-	void DrawMesh(const Mesh& m, const gfx::Image& img);
+	void DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect = gfx::Rect32::Inverted());
 	void SaveToFile(std::string filename);
 
 	Error DrawHelloWorldTriangle();

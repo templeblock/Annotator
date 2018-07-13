@@ -23,6 +23,7 @@ public:
 	~Mesh();
 	void Initialize(int width, int height);
 	void ResetUniformRectangular(gfx::Vec2f topLeft, gfx::Vec2f topRight, gfx::Vec2f bottomLeft, int imgWidth, int imgHeight);
+	void ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius);
 	void TransformTargets(gfx::Vec2f translate);
 
 	// Snap each mesh vertex so that it lies in the crack between the four nearest pixels (or on the

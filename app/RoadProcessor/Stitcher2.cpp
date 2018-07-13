@@ -97,8 +97,7 @@ Error Stitcher2::DoStitch(string videoFile, float zx, float zy, double seconds, 
 			int  pixelsPerMeshCell  = 60; // intuitively makes sense to have this be more than flow.MatchRadius * 2
 			int  pixelsPerAlignCell = flow.MatchRadius * 2;
 			Mesh m((flat.Width + pixelsPerAlignCell - 1) / pixelsPerMeshCell, (flat.Height + pixelsPerAlignCell - 1) / pixelsPerMeshCell);
-			m.ResetUniformRectangular(Vec2f(0, 0), Vec2f(flat.Width, 0), Vec2f(0, flat.Height), flat.Width, flat.Height);
-			//m.SnapToUVPixelEdges(flat.Width, flat.Height);
+			m.ResetIdentityForWarpMesh(flat.Width, flat.Height, flow.MatchRadius);
 			m.SnapToUVPixelEdges();
 			//m.Print(Rect32(0, 0, 5, 5), flat.Width, flat.Height);
 
@@ -147,8 +146,13 @@ Error Stitcher2::DoStitch(string videoFile, float zx, float zy, double seconds, 
 			//flatToAlignBias.y = -(flat.Height - StitchWindowHeight + delta.y);
 
 			//Rend.SaveToFile("giant1.jpeg");
-			Rend.DrawMesh(m, flat);
-			if (i % 4 == 0)
+			// Discard the final 3 rows of the warp mesh, so that we avoid using areas of the lens where there's substantial vignetting.
+			// We *could* use lensfun to remove the vignetting, but then we need to perform that processing on the GPU, because the color
+			// corrections need to happen in linear space. Actually.. now that I write this, I haven't measured the speed of doing it in CPU.
+			// It could be acceptable. This constant here is intimately related to the constant in OpticalFlow2.cpp - search for "Rend.DrawMesh" there.
+			Rect32 mrect(0, 0, m.Width, m.Height - 3);
+			Rend.DrawMesh(m, flat, mrect);
+			if (i % 4 == 0 || count < 4)
 				Rend.SaveToFile("giant2.jpeg");
 
 			PrevBottomMidAlignPoint = bottomMidAlignPoint;

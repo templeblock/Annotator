@@ -46,11 +46,11 @@ void Frustum::DebugPrintParams(float z1, float zx, float zy, int frameWidth, int
 	tsf::print("%.4f %10f %10f => %v x %v   %6.1f .. %6.1f (bottom scale %v, top scale %v)\n", z1, zx, zy, Width, Height, X1, X2, (X2 - X1) / frameWidth, (float) Width / frameWidth);
 }
 
-void Frustum::Polygon(Vec2f* poly, int xPadding) {
-	poly[0] = Vec2f(xPadding, 0);
-	poly[1] = Vec2f((float) Width / 2.0f + X1 + xPadding, Height);
-	poly[2] = Vec2f((float) Width / 2.0f + X2 - xPadding, Height);
-	poly[3] = Vec2f(Width - xPadding, 0);
+void Frustum::Polygon(Vec2f* poly, float expandX, float expandY) {
+	poly[0] = Vec2f(-expandX, -expandY);
+	poly[1] = Vec2f((float) Width / 2.0f + X1 - expandX, (float) Height + expandY);
+	poly[2] = Vec2f((float) Width / 2.0f + X2 + expandX, (float) Height + expandY);
+	poly[3] = Vec2f(Width + expandX, -expandY);
 }
 
 // This runs newton's method, until it produces a y value that is
