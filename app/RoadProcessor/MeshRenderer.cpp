@@ -61,8 +61,37 @@ void main()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static const char* CopyShaderVertex = R"(
+static const char* GLSLPrefix = R"(
 #version 110
+float fromSRGB_Component(float srgb)
+{
+	float sRGB_Low	= 0.0031308;
+	float sRGB_a	= 0.055;
+
+	if (srgb <= 0.04045)
+		return srgb / 12.92;
+	else
+		return pow((srgb + sRGB_a) / (1.0 + sRGB_a), 2.4);
+}
+
+vec4 fromSRGB(vec4 c)
+{
+	vec4 linear_c;
+	linear_c.r = fromSRGB_Component(c.r);
+	linear_c.g = fromSRGB_Component(c.g);
+	linear_c.b = fromSRGB_Component(c.b);
+	linear_c.a = c.a;
+	return linear_c;
+}
+
+vec4 premultiply(vec4 c)
+{
+	return vec4(c.r * c.a, c.g * c.a, c.b * c.a, c.a);
+}
+)";
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+static const char* CopyShaderVertex = R"(
 uniform mat4 MVP;
 attribute vec3 vPos;
 attribute vec2 vUV;
@@ -72,13 +101,12 @@ varying vec4 color;
 void main()
 {
     gl_Position = MVP * vec4(vPos, 1.0);
-	color = vColor;
+	color = premultiply(fromSRGB(vColor));
 	uv = vUV;
 }
 )";
 
 static const char* CopyShaderFrag = R"(
-#version 110
 uniform sampler2D tex;
 varying vec2 uv;
 varying vec4 color;
@@ -137,16 +165,18 @@ Error MeshRenderer::Initialize(int fbWidth, int fbHeight) {
 	glDisable(GL_CULL_FACE);
 	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 	glEnable(GL_FRAMEBUFFER_SRGB);
 
 	glViewport(0, 0, FBWidth, FBHeight);
-	Clear(Color8(0, 150, 0, 60));
+	//Clear(Color8(0, 150, 0, 60));
 
 	auto err = CompileShader(CopyShaderVertex, CopyShaderFrag, CopyShader);
 	if (!err.OK())
 		return err;
+
+	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 
 	//DrawHelloWorldTriangle();
 
@@ -168,9 +198,8 @@ void MeshRenderer::Clear(gfx::Color8 color) {
 }
 
 void MeshRenderer::CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, Image& img) {
-	// HMMM. this is actually premultiplied alpha (ImageFormat::RGBAP)
 	if (img.Width == 0) {
-		img.Alloc(ImageFormat::RGBA, srcRect.Width(), srcRect.Height());
+		img.Alloc(ImageFormat::RGBAP, srcRect.Width(), srcRect.Height());
 	} else {
 		IMQS_ASSERT(img.Width >= srcRect.Width());
 		IMQS_ASSERT(img.Height >= srcRect.Height());
@@ -181,10 +210,21 @@ void MeshRenderer::CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, Im
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 }
 
+void MeshRenderer::CopyImageToDevice(const gfx::Image& img, int dstX, int dstY) {
+	Vec2f topLeft  = Vec2f((float) dstX, (float) dstY);
+	Vec2f topRight = topLeft + Vec2f(img.Width, 0);
+	Vec2f botLeft  = topLeft + Vec2f(0, img.Height);
+	Mesh  m(2, 2);
+	m.ResetUniformRectangular(topLeft, topRight, botLeft, img.Width, img.Height);
+	DrawMesh(m, img);
+}
+
 void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect) {
 	if (meshRenderRect.IsInverted())
 		meshRenderRect = Rect32(0, 0, m.Width, m.Height);
 	auto mr = meshRenderRect;
+
+	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 
 	glUseProgram(CopyShader);
 
@@ -377,11 +417,11 @@ static Error CheckShaderCompilation(const std::string& shaderSrc, GLuint shader)
 }
 
 Error MeshRenderer::CompileShader(std::string vertexSrc, std::string fragSrc, GLuint& shader) {
-	const char* vertexSrcPtr[] = {vertexSrc.c_str(), nullptr};
-	const char* fragSrcPtr[]   = {fragSrc.c_str(), nullptr};
+	const char* vertexSrcPtr[] = {GLSLPrefix, vertexSrc.c_str(), nullptr};
+	const char* fragSrcPtr[]   = {GLSLPrefix, fragSrc.c_str(), nullptr};
 
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertexShader, 1, vertexSrcPtr, nullptr);
+	glShaderSource(vertexShader, 2, vertexSrcPtr, nullptr);
 	glCompileShader(vertexShader);
 	if (glGetError() != GL_NO_ERROR)
 		return Error("Failed to compile vertex shader");
@@ -390,7 +430,7 @@ Error MeshRenderer::CompileShader(std::string vertexSrc, std::string fragSrc, GL
 		return err;
 
 	GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragShader, 1, fragSrcPtr, nullptr);
+	glShaderSource(fragShader, 2, fragSrcPtr, nullptr);
 	glCompileShader(fragShader);
 	if (glGetError() != GL_NO_ERROR)
 		return Error("Failed to compile fragment shader");
@@ -404,6 +444,7 @@ Error MeshRenderer::CompileShader(std::string vertexSrc, std::string fragSrc, GL
 	glLinkProgram(shader);
 	if (glGetError() != GL_NO_ERROR)
 		return Error("Failed to link vertex/fragment shader");
+
 	return Error();
 }
 

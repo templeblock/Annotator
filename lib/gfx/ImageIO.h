@@ -40,6 +40,9 @@ public:
 	// Decodes a jpeg image into a memory buffer of the desired type. Stride is natural, rounded up to the nearest 4 bytes.
 	Error LoadJpeg(const void* jpegBuf, size_t jpegLen, int& width, int& height, void*& buf, TJPF format = TJPF_RGBA);
 
+	// Decodes a jpeg image with downscaling by 1/2 or 1/4. scaleFactor can be 1,2,4, for 1/1, 1/2, 1/4 scales.
+	Error LoadJpegScaled(const void* jpegBuf, size_t jpegLen, int scaleFactor, int& width, int& height, void*& buf, TJPF format = TJPF_RGBA);
+
 	// Encode an RGBA buffer to jpeg
 	Error SaveJpeg(int width, int height, int stride, const void* buf, int quality_0_to_100, void*& jpegBuf, size_t& jpegSize);
 

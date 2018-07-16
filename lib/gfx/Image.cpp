@@ -199,7 +199,7 @@ Image Image::HalfSizeCheap() const {
 		auto   srcB = Line(y * 2 + 1); // bottom line
 		auto   dstP = half.Line(y);
 		size_t dstW = half.Width;
-		if (Format == ImageFormat::RGBA) {
+		if (NumChannels() == 4) {
 			for (size_t x = 0; x < dstW; x++) {
 				uint32_t r = ((uint32_t) srcA[0] + (uint32_t) srcA[4] + (uint32_t) srcB[0] + (uint32_t) srcB[4]) >> 2;
 				uint32_t g = ((uint32_t) srcA[1] + (uint32_t) srcA[5] + (uint32_t) srcB[1] + (uint32_t) srcB[5]) >> 2;
@@ -213,9 +213,50 @@ Image Image::HalfSizeCheap() const {
 				srcB += 8;
 				dstP += 4;
 			}
-		} else if (Format == ImageFormat::Gray) {
+		} else if (NumChannels() == 1) {
 			for (size_t x = 0; x < dstW; x++) {
 				dstP[0] = ((uint32_t) srcA[0] + (uint32_t) srcA[1] + (uint32_t) srcB[0] + (uint32_t) srcB[1]) >> 2;
+				srcA += 2;
+				srcB += 2;
+				dstP += 1;
+			}
+		} else {
+			IMQS_DIE();
+		}
+	}
+	return half;
+}
+
+Image Image::HalfSizeLinear() const {
+	Image half;
+	half.Alloc(Format, Width / 2, Height / 2);
+	for (int y = 0; y < half.Height; y++) {
+		auto   srcA = Line(y * 2);     // top line
+		auto   srcB = Line(y * 2 + 1); // bottom line
+		auto   dstP = half.Line(y);
+		size_t dstW = half.Width;
+		if (NumChannels() == 4) {
+			for (size_t x = 0; x < dstW; x++) {
+				float    r = 0.25f * (Color8::SRGBtoLinearU8(srcA[0]) + Color8::SRGBtoLinearU8(srcA[4]) + Color8::SRGBtoLinearU8(srcB[0]) + Color8::SRGBtoLinearU8(srcB[4]));
+				float    g = 0.25f * (Color8::SRGBtoLinearU8(srcA[1]) + Color8::SRGBtoLinearU8(srcA[5]) + Color8::SRGBtoLinearU8(srcB[1]) + Color8::SRGBtoLinearU8(srcB[5]));
+				float    b = 0.25f * (Color8::SRGBtoLinearU8(srcA[2]) + Color8::SRGBtoLinearU8(srcA[6]) + Color8::SRGBtoLinearU8(srcB[2]) + Color8::SRGBtoLinearU8(srcB[6]));
+				uint32_t a = ((uint32_t) srcA[3] + (uint32_t) srcA[7] + (uint32_t) srcB[3] + (uint32_t) srcB[7]) >> 2;
+				dstP[0]    = Color8::LinearToSRGBU8(r);
+				dstP[1]    = Color8::LinearToSRGBU8(g);
+				dstP[2]    = Color8::LinearToSRGBU8(b);
+				dstP[3]    = a;
+				srcA += 8;
+				srcB += 8;
+				dstP += 4;
+			}
+		} else if (NumChannels() == 1) {
+			for (size_t x = 0; x < dstW; x++) {
+				float a = Color8::SRGBtoLinearU8(srcA[0]);
+				float b = Color8::SRGBtoLinearU8(srcA[1]);
+				float c = Color8::SRGBtoLinearU8(srcB[0]);
+				float d = Color8::SRGBtoLinearU8(srcB[1]);
+				a       = 0.25f * (a + b + c + d);
+				dstP[0] = Color8::LinearToSRGBU8(a);
 				srcA += 2;
 				srcB += 2;
 				dstP += 1;

@@ -139,8 +139,9 @@ void Mesh::PrintValid() const {
 	}
 }
 
-void Mesh::PrintDeltaPos(gfx::Rect32 rect) const {
-	gfx::Vec2f norm = At(rect.x1, rect.y1).Pos - At(rect.x1, rect.y1).UV;
+void Mesh::PrintDeltaPos(gfx::Rect32 rect, gfx::Vec2f norm) const {
+	if (norm == gfx::Vec2f(FLT_MAX, FLT_MAX))
+		norm = At(rect.x1, rect.y1).Pos - At(rect.x1, rect.y1).UV;
 	tsf::print("X Delta:\n");
 	for (int y = rect.y1; y < rect.y2; y++) {
 		for (int x = rect.x1; x < rect.x2; x++) {

@@ -71,6 +71,10 @@ public:
 		return v <= 0.04045f ? v / 12.92f : pow((v + a) / (1 + a), 2.4f);
 	}
 
+	static float SRGBtoLinearU8(uint8_t v) {
+		return SRGBtoLinear((float) v * (1.0f / 255.0f));
+	}
+
 	static void SRGBtoLinear(Vec4f& v) {
 		v.x = SRGBtoLinear(v.x);
 		v.y = SRGBtoLinear(v.y);
@@ -80,6 +84,15 @@ public:
 	static float LinearToSRGB(float v) {
 		const float a = 0.055f;
 		return v <= 0.0031308f ? 12.92f * v : (1 + a) * pow(v, (1 / 2.4f));
+	}
+
+	static uint8_t LinearToSRGBU8(float v) {
+		v = 255.0f * LinearToSRGB(v);
+		if (v < 0)
+			return 0;
+		if (v > 255)
+			return 255;
+		return (uint8_t) v;
 	}
 
 	static void LinearToSRGB(Vec4f& v) {

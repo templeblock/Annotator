@@ -25,7 +25,8 @@
 			"chrono": "cpp",
 			"string_view": "cpp",
 			"initializer_list": "cpp",
-			"algorithm": "cpp"
+			"algorithm": "cpp",
+			"*.ipp": "cpp"
 		}
 	}
 }

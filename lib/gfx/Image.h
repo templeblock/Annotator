@@ -32,6 +32,16 @@ inline int BytesPerPixel(ImageFormat f) {
 	return 0;
 }
 
+inline int NumChannels(ImageFormat f) {
+	switch (f) {
+	case ImageFormat::Null: return 0;
+	case ImageFormat::RGBA: return 4;
+	case ImageFormat::RGBAP: return 4;
+	case ImageFormat::Gray: return 1;
+	}
+	return 0;
+}
+
 // An image in memory.
 // The buffer is by default owned by the Image object, but it doesn't need to be.
 // There is no reference counting, so if you construct a window from an image, then
@@ -69,6 +79,7 @@ public:
 	void  Fill(Rect32 rect, uint32_t color);
 	Image AsType(ImageFormat fmt) const;
 	Image HalfSizeCheap() const;                                          // Downscale by 1/2, in gamma/sRGB space (this is why it's labeled cheap. correct downscale is in linear space, not sRGB)
+	Image HalfSizeLinear() const;                                         // Downscale by 1/2, in linear light space. Slower, but correct.
 	void  BoxBlur(int size, int iterations);                              // Box blur of size [1 + 2 * size], repeated 'iterations' times
 	void  CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect);     // Source and destination rectangles are clipped before copying, but they must be equal in size
 	void  CopyFrom(const Image& src, Rect32 srcRect, int dstX, int dstY); // Source rectangle is clipped before copying
@@ -86,6 +97,7 @@ public:
 	uint32_t*       Line32(int y) { return (uint32_t*) (Data + (y * Stride)); }
 	const uint32_t* Line32(int y) const { return (const uint32_t*) (Data + (y * Stride)); }
 	int             BytesPerPixel() const { return gfx::BytesPerPixel(Format); }
+	int             NumChannels() const { return gfx::NumChannels(Format); }
 	size_t          BytesPerLine() const { return gfx::BytesPerPixel(Format) * Width; }
 };
 

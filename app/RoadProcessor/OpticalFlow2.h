@@ -27,15 +27,18 @@ struct DeltaGrid {
 
 class OpticalFlow2 {
 public:
-	int GridW              = 0;
-	int GridH              = 0;
-	int MatchRadius        = 0;
-	int AbsMinHSearch      = -10;  // minimum horizontal displacement for alignment points
-	int AbsMaxHSearch      = 10;   // maximum horizontal displacement for alignment points
-	int AbsMinVSearch      = -200; // minimum horizontal displacement for alignment points (driving forwards)
-	int AbsMaxVSearch      = 20;   // maximum horizontal displacement for alignment points (driving backwards)
-	int StableHSearchRange = 10;   // Max diversion, frame to frame
-	int StableVSearchRange = 20;   // Max diversion, frame to frame
+	int GridW       = 0;
+	int GridH       = 0;
+	int MatchRadius = 0;
+
+	int AbsMinHSearch = -20; // minimum horizontal displacement for alignment points
+	int AbsMaxHSearch = 20;  // maximum horizontal displacement for alignment points
+
+	int AbsMinVSearch = -350; // minimum vertical displacement for alignment points (driving forwards)
+	int AbsMaxVSearch = 10;   // maximum vertical displacement for alignment points (driving backwards)
+
+	int StableHSearchRange = 10; // Max horizontal diversion, frame to frame
+	int StableVSearchRange = 10; // Max vertical diversion, frame to frame
 
 	OpticalFlow2();
 

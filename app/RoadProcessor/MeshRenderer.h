@@ -8,7 +8,6 @@ namespace roadproc {
 // GPU based mesh renderer
 // This thing takes an unprojected image, with a distortion mesh, and renders that mesh
 // onto the gigantic flat earth canvas.
-// I've tested creating a framebuffer up to 8192x8192 on a Geforce 1080.
 class MeshRenderer {
 public:
 	int FBWidth  = 0; // Framebuffer width
@@ -22,6 +21,7 @@ public:
 
 	void Clear(gfx::Color8 color);
 	void CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, gfx::Image& img);
+	void CopyImageToDevice(const gfx::Image& img, int dstX, int dstY);
 	void DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect = gfx::Rect32::Inverted());
 	void SaveToFile(std::string filename);
 

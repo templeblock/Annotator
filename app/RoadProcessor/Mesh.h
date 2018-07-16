@@ -10,7 +10,7 @@ public:
 		gfx::Vec2f  Pos;                                       // Pixel coordinates in destination image
 		gfx::Vec2f  UV;                                        // Pixel coordinates (not normalized) in source image
 		bool        IsValid = true;                            // Used by OpticalFlow to mark cells as being invalid, because partially outside of frustum
-		gfx::Color8 Color   = gfx::Color8(255, 255, 255, 255); // Alpha can be used to lighten parts of the mesh, or tint parts, for debug viz
+		gfx::Color8 Color   = gfx::Color8(255, 255, 255, 255); // Alpha can be used to lighten parts of the mesh, or tint parts, for debug viz. Colors are sRGB, non-premultiplied
 	};
 
 	int Width    = 0;
@@ -52,7 +52,7 @@ public:
 	void PrintSample(int x, int y) const;
 	void Print(gfx::Rect32 rect) const;
 	void PrintValid() const;
-	void PrintDeltaPos(gfx::Rect32 rect) const;
+	void PrintDeltaPos(gfx::Rect32 rect, gfx::Vec2f norm = gfx::Vec2f(FLT_MAX, FLT_MAX)) const;
 	void DrawFlowImage(std::string filename) const;
 	void DrawFlowImage(gfx::Rect32 rect, std::string filename) const;
 };

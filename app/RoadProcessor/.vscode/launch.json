@@ -5,6 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}"
+        },
+        {
             "name": "(gdb) Launch RoadProcessor",
             "type": "cppdbg",
             "request": "launch",
@@ -14,17 +20,21 @@
             //    "/home/ben/win/c/mldata/DSCF3023.MOV",
             //],
             "args": [
-                "--lens",
-                "Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS",
-                "stitch2",
-                "-s",
-                "0.7",
-                "-n",
-                "3",
-                "/home/ben/win/c/mldata/DSCF3023.MOV",
-                "0",
-                "-0.000980",
+                "webtiles",
+                "/home/ben/inf",
             ],
+            //"args": [
+            //    "--lens",
+            //    "Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS",
+            //    "stitch2",
+            //    "-s",
+            //    "17",
+            //    "-n",
+            //    "2",
+            //    "/home/ben/win/c/mldata/DSCF3023.MOV",
+            //    "0",
+            //    "-0.000995",
+            //],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [
@@ -35,13 +45,13 @@
             ],
             "externalConsole": true,
             "MIMode": "gdb",
-            //"setupCommands": [
-            //    {
-            //        "description": "Enable pretty-printing for gdb",
-            //        "text": "-enable-pretty-printing",
-            //        "ignoreFailures": true
-            //    }
-            //]
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         },
     ]
 }

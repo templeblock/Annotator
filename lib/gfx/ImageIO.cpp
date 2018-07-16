@@ -173,12 +173,18 @@ static int BytesPerSample(TJPF format) {
 };
 
 Error ImageIO::LoadJpeg(const void* jpegBuf, size_t jpegLen, int& width, int& height, void*& buf, TJPF format) {
+	return LoadJpegScaled(jpegBuf, jpegLen, 1, width, height, buf, format);
+}
+
+Error ImageIO::LoadJpegScaled(const void* jpegBuf, size_t jpegLen, int scaleFactor, int& width, int& height, void*& buf, TJPF format) {
 	if (!JpegDecomp)
 		JpegDecomp = tjInitDecompress();
 	int subsamp;
 	int colorspace;
 	if (0 != tjDecompressHeader3(JpegDecomp, (uint8_t*) jpegBuf, (unsigned long) jpegLen, &width, &height, &subsamp, &colorspace))
 		return ErrJpegHead;
+	width /= scaleFactor;
+	height /= scaleFactor;
 	int stride = BytesPerSample(format) * width;
 	stride     = math::RoundUpInt(stride, 4);
 	buf        = imqs_malloc_or_die(stride * height);

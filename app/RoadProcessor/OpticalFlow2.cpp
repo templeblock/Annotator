@@ -90,9 +90,9 @@ void DeltaGrid::Alloc(int w, int h) {
 	}
 }
 
-static void CopyMeshToDelta(const Mesh& m, Rect32 rect, DeltaGrid& g) {
+static void CopyMeshToDelta(const Mesh& m, Rect32 rect, DeltaGrid& g, Vec2f norm) {
 	g.Alloc(rect.Width(), rect.Height());
-	Vec2f norm = m.At(rect.x1, rect.y1).Pos - m.At(rect.x1, rect.y1).UV;
+	//Vec2f norm = m.At(rect.x1, rect.y1).Pos - m.At(rect.x1, rect.y1).UV;
 	for (int y = rect.y1; y < rect.y2; y++) {
 		for (int x = rect.x1; x < rect.x2; x++) {
 			g.At(x - rect.x1, y - rect.y1)      = m.At(x, y).Pos - m.At(x, y).UV - norm;
@@ -101,8 +101,8 @@ static void CopyMeshToDelta(const Mesh& m, Rect32 rect, DeltaGrid& g) {
 	}
 }
 
-static void CopyDeltaToMesh(const DeltaGrid& g, Mesh& m, Rect32 rect) {
-	Vec2f norm = m.At(rect.x1, rect.y1).Pos - m.At(rect.x1, rect.y1).UV;
+static void CopyDeltaToMesh(const DeltaGrid& g, Mesh& m, Rect32 rect, Vec2f norm) {
+	//Vec2f norm = m.At(rect.x1, rect.y1).Pos - m.At(rect.x1, rect.y1).UV;
 
 	for (int y = rect.y1; y < rect.y2; y++) {
 		for (int x = rect.x1; x < rect.x2; x++) {
@@ -120,31 +120,119 @@ static bool CompareVec2Y(const Vec2f& a, const Vec2f& b) {
 	return a.y < b.y;
 }
 
+struct ClusterStat {
+	Vec2f Center    = Vec2f(0, 0);
+	int   Count     = 0;
+	float Tightness = 0;
+	// typical decent values for tightness are around 5, so an epsilon of 0.1 feels about right
+	float Alpha() const { return (float) Count / (Tightness + 0.1); }
+};
+
+static void ComputeClusterStats(const vector<cv::Point2f>& allCV, const vector<int>& cluster, const vector<cv::Point2f>& clusterCenters, vector<ClusterStat>& stats) {
+	stats.resize(clusterCenters.size());
+	for (size_t i = 0; i < clusterCenters.size(); i++) {
+		stats[i]          = ClusterStat();
+		stats[i].Center.x = clusterCenters[i].x;
+		stats[i].Center.y = clusterCenters[i].y;
+	}
+
+	for (size_t i = 0; i < cluster.size(); i++) {
+		int   c  = cluster[i];
+		Vec2f cv = Vec2f(clusterCenters[c].x, clusterCenters[c].y);
+		stats[c].Count++;
+		stats[c].Tightness += cv.distance2D(Vec2f(allCV[i].x, allCV[i].y));
+	}
+	for (size_t i = 0; i < clusterCenters.size(); i++) {
+		stats[i].Tightness /= (float) stats[i].Count;
+	}
+}
+
+static void DumpKMeans(vector<ClusterStat> clusters) {
+	tsf::print("%v clusters:\n", clusters.size());
+	for (auto c : clusters) {
+		tsf::print("  Alpha: %4.2f Count: %2d, Tightness: %.1f, Center: %5.1f, %5.1f\n", c.Alpha(), c.Count, c.Tightness, c.Center.x, c.Center.y);
+	}
+}
+
 // Returns the number of points that were replaced with a filtered replica
 // I tried a smaller filter size of 3x3, but it easily introduces noisy samples
 // into the final dataset. This is partly due to the sloppy metric "maxGlobalDistance".
-static int MedianFilter(DeltaGrid& g) {
-	DeltaGrid gnew              = g;
-	const int filterRadius      = 2;
-	const int filterSize        = 2 * filterRadius + 1;
-	const int filterSizeSQ      = filterSize * filterSize;
-	float     maxDistance       = 2;  // If sample is more than maxDistance from median, then it is filtered
-	float     maxGlobalDistance = 15; // If sample is more than maxGlobalDistance from median distance, then it is filtered
-	int       nrep              = 0;
+static int MedianFilter(int pass, DeltaGrid& g, bool& hasMassiveOutliers) {
+	DeltaGrid gnew                  = g;
+	hasMassiveOutliers              = false;
+	const int filterRadius          = 2;
+	const int filterSize            = 2 * filterRadius + 1;
+	const int filterSizeSQ          = filterSize * filterSize;
+	float     maxDistance           = 2;  // If sample is more than maxDistance from local filter estimate, then it is filtered
+	float     maxGlobalDistanceSoft = 15; // If sample is more than maxGlobalDistanceSoft from global distance estimate, then it is filtered
+	float     maxGlobalDistanceHard = 25; // If sample is more than maxGlobalDistanceHard from global distance estimate, then it is replaced with the global estimate
+	int       nrep                  = 0;
 
 	// compute global median, so that we can throw away extreme outliers
-	Vec2f         globalMedian;
-	vector<Vec2f> all;
+	Vec2f               globalEstimate;
+	vector<Vec2f>       all;
+	vector<cv::Point2f> allCV;
 	all.reserve(g.Width * g.Height);
 	for (int y = 0; y < g.Height; y++) {
 		for (int x = 0; x < g.Width; x++) {
-			all.push_back(g.At(x, y));
+			Vec2f p = g.At(x, y);
+			all.push_back(p);
+			allCV.push_back(cv::Point2f(p.x, p.y));
 		}
 	}
 	pdqsort(all.begin(), all.end(), CompareVec2X);
-	globalMedian.x = all[all.size() / 2].x;
+	globalEstimate.x = all[all.size() / 2].x;
 	pdqsort(all.begin(), all.end(), CompareVec2Y);
-	globalMedian.y = all[all.size() / 2].y;
+	globalEstimate.y = all[all.size() / 2].y;
+
+	// after the first pass, we can skip this expensive step
+	if (pass == 0) {
+		bool                debugKMeans = false;
+		vector<int>         icluster;
+		vector<cv::Point2f> clusterCenters;
+		vector<float>       clusterTightness;
+		vector<ClusterStat> clusters;
+		cv::TermCriteria    term(cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 10, 1.0);
+		if (debugKMeans) {
+			for (int ncluster = 2; ncluster <= 6; ncluster++) {
+				cv::kmeans(allCV, ncluster, icluster, term, 1, 0, clusterCenters);
+				ComputeClusterStats(allCV, icluster, clusterCenters, clusters);
+				DumpKMeans(clusters);
+			}
+			exit(0);
+		} else {
+			// From one video that I looked at, 5 seems to be a sweet spot
+			int nclusters = 5;
+			cv::kmeans(allCV, nclusters, icluster, term, 3, 0, clusterCenters);
+			ComputeClusterStats(allCV, icluster, clusterCenters, clusters);
+			float       maxAlpha = 0;
+			ClusterStat best;
+			for (const auto& c : clusters) {
+				// This constant of 5% is a thumbsuck, given the typical number of points that we align
+				int minCount = int(0.05 * (double) allCV.size());
+				if (c.Count > minCount && c.Alpha() > maxAlpha) {
+					maxAlpha = c.Alpha();
+					best     = c;
+				}
+			}
+			globalEstimate = best.Center;
+		}
+	}
+	//tsf::print("%3d. %5.1f,%5.1f\n", pass, globalEstimate.x, globalEstimate.y);
+
+	// replace obvious outliers with the global estimate
+	for (int y = 0; y < g.Height; y++) {
+		for (int x = 0; x < g.Width; x++) {
+			Vec2f pp = g.At(x, y);
+			float d  = g.At(x, y).distance(globalEstimate);
+			if (d > maxGlobalDistanceHard) {
+				nrep++;
+				hasMassiveOutliers = true;
+				g.At(x, y)         = globalEstimate;
+				gnew.At(x, y)      = globalEstimate;
+			}
+		}
+	}
 
 	float samplesX[filterSizeSQ];
 	float samplesY[filterSizeSQ];
@@ -172,8 +260,8 @@ static int MedianFilter(DeltaGrid& g) {
 			pdqsort(samplesY, samplesY + i);
 			if (fabs(g.At(x, y).x - samplesX[i / 2]) > maxDistance ||
 			    fabs(g.At(x, y).y - samplesY[i / 2]) > maxDistance ||
-			    fabs(g.At(x, y).x - globalMedian.x) > maxGlobalDistance ||
-			    fabs(g.At(x, y).y - globalMedian.y) > maxGlobalDistance) {
+			    fabs(g.At(x, y).x - globalEstimate.x) > maxGlobalDistanceSoft ||
+			    fabs(g.At(x, y).y - globalEstimate.y) > maxGlobalDistanceSoft) {
 				nrep++;
 				// Build up a small set of "clean" samples, which are those that are close to the median.
 				// We don't want to be filtering based on dirty samples.
@@ -181,8 +269,8 @@ static int MedianFilter(DeltaGrid& g) {
 				for (int j = 0; j < i; j++) {
 					if (fabs(samplesX[j] - samplesX[i / 2]) <= maxDistance &&
 					    fabs(samplesY[j] - samplesY[i / 2]) <= maxDistance &&
-					    fabs(samplesX[j] - globalMedian.x) <= maxGlobalDistance &&
-					    fabs(samplesY[j] - globalMedian.y) <= maxGlobalDistance) {
+					    fabs(samplesX[j] - globalEstimate.x) <= maxGlobalDistanceSoft &&
+					    fabs(samplesY[j] - globalEstimate.y) <= maxGlobalDistanceSoft) {
 						samplesCleanX[iClean] = samplesX[j];
 						samplesCleanY[iClean] = samplesY[j];
 						iClean++;
@@ -246,8 +334,8 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	Image warpImgG   = warpImg.AsType(ImageFormat::Gray);
 	Image stableImgG = stableImg.AsType(ImageFormat::Gray);
 
-	warpImgG.SaveFile("warpImgG.jpeg");
-	stableImgG.SaveFile("stableImgG.jpeg");
+	//warpImgG.SaveFile("warpImgG.jpeg");
+	//stableImgG.SaveFile("stableImgG.jpeg");
 
 	int minHSearch = -StableHSearchRange;
 	int maxHSearch = StableHSearchRange;
@@ -260,8 +348,10 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		// warpImg is a raw 'flat' image, which is typically large.
 		// stableImg is a small extract from the bottom middle of the first flat image.
 		// We assume that stableImg lies in the center of warpImg, and at the bottom.
-		bias.x     = (warpImg.Width - stableImg.Width) / 2;
-		bias.y     = warpImg.Height - stableImg.Height + AbsMaxVSearch;
+		// Also, we assume zero motion.
+		bias.x = (warpImg.Width - stableImg.Width) / 2;
+		//bias.y     = warpImg.Height - stableImg.Height + AbsMaxVSearch;
+		bias.y     = warpImg.Height - stableImg.Height;
 		bias       = -bias; // get it from warp -> stable
 		minHSearch = AbsMinHSearch;
 		maxHSearch = AbsMaxHSearch;
@@ -326,9 +416,12 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	// Run multiple passes, where at the end of each pass, we perform maximum likelihood filtering, and then
 	// on the subsequent pass, restrict the search window to a much smaller region.
 
-	//warpMesh.PrintDeltaPos(warpMeshValidRect);
+	bool debugMedianFilter = false;
 
-	int maxPass = 2;
+	//warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
+
+	bool hasMassiveOutliers = true;
+	int  maxPass            = 2;
 	for (int pass = 0; pass < maxPass; pass++) {
 		//tsf::print("Flow pass %v\n", pass);
 		int dyMin = minVSearch;
@@ -338,10 +431,11 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		if (pass == 1) {
 			// refinement after filtering
 			//tsf::print("Fine adjustment pass\n");
-			dyMin = -1;
-			dyMax = 1;
-			dxMin = -1;
-			dxMax = 1;
+			int fineAdjust = hasMassiveOutliers ? 8 : 2;
+			dyMin          = -fineAdjust;
+			dyMax          = fineAdjust;
+			dxMin          = -fineAdjust;
+			dxMax          = fineAdjust;
 		}
 		for (auto& c : validCells) {
 			//Vec2f  cSrc    = warpMesh.UVimg(warpImg.Width, warpImg.Height, c.x, c.y);
@@ -370,24 +464,27 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 			}
 			warpMesh.At(c.x, c.y).Pos += Vec2f(bestDx, bestDy);
 		}
-		//warpMesh.PrintDeltaPos(warpMeshValidRect);
+		if (debugMedianFilter)
+			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
 
 		int       nfilterPasses = 0;
 		DeltaGrid dg;
-		CopyMeshToDelta(warpMesh, warpMeshValidRect, dg);
+		CopyMeshToDelta(warpMesh, warpMeshValidRect, dg, bias);
 		for (int ifilter = 0; ifilter < 10; ifilter++) {
-			int nrep = MedianFilter(dg);
-			//tsf::print("Median Filter replaced %v samples\n", nrep);
+			int nrep = MedianFilter(pass, dg, hasMassiveOutliers);
+			if (debugMedianFilter)
+				tsf::print("Median Filter replaced %v samples\n", nrep);
 			if (nrep == 0)
 				break;
 			nfilterPasses++;
 		}
-		CopyDeltaToMesh(dg, warpMesh, warpMeshValidRect);
+		CopyDeltaToMesh(dg, warpMesh, warpMeshValidRect, bias);
 		if (nfilterPasses == 0) {
 			// If we performed no filtering, then a second alignment pass will not change anything
 			break;
 		}
-		//warpMesh.PrintDeltaPos(warpMeshValidRect);
+		if (debugMedianFilter)
+			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
 	}
 
 	//warpMesh.DrawFlowImage(warpMeshValidRect, "flow-diagram.png");
@@ -436,9 +533,9 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	{
 		DeltaGrid dg;
 		int       y1 = warpMesh.Height / 2;
-		CopyMeshToDelta(warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height), dg);
+		CopyMeshToDelta(warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height), dg, bias);
 		BlurInvalid(dg, 3);
-		CopyDeltaToMesh(dg, warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height));
+		CopyDeltaToMesh(dg, warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height), bias);
 		//warpMesh.DrawFlowImage("flow-diagram-all.png");
 	}
 
