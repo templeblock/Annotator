@@ -63,9 +63,9 @@ Error Stitcher2::DoStitch(string bitmapDir, string videoFile, float zx, float zy
 	//err = Rend.Initialize(5120, 4096);
 	//err = Rend.Initialize(5120, 6144);
 	//err = Rend.Initialize(6144, 6144);
-	err = Rend.Initialize(7168, 7168);
+	//err = Rend.Initialize(7168, 7168);
 	//err = Rend.Initialize(7168, 4096);
-	//err = Rend.Initialize(8192, 8192);
+	err = Rend.Initialize(8192, 8192);
 	if (!err.OK())
 		return err;
 	IMQS_ASSERT(Rend.FBWidth % InfBmp.TileSize == 0);
@@ -114,7 +114,7 @@ Error Stitcher2::DoStitch(string bitmapDir, string videoFile, float zx, float zy
 			Rend.SaveToFile("giant2.jpeg");
 		}
 		if (i != 0) {
-			int pixelsPerMeshCell  = 60; // intuitively makes sense to have this be more than flow.MatchRadius * 2
+			int pixelsPerMeshCell  = 60; // it makes sense to have this be more than flow.MatchRadius * 2
 			int pixelsPerAlignCell = flow.MatchRadius * 2;
 			int mWidth             = (flat.Width + pixelsPerAlignCell - 1) / pixelsPerMeshCell;
 			int mHeight            = (flat.Height + pixelsPerAlignCell - 1) / pixelsPerMeshCell;
@@ -169,7 +169,7 @@ Error Stitcher2::DoStitch(string bitmapDir, string videoFile, float zx, float zy
 			stitchBotLeft.y += flow.StableVSearchRange;
 			float prevLeft  = StitchTopLeft.x;
 			StitchTopLeft   = stitchBotLeft - Vec2f(0, StitchWindowHeight);
-			StitchTopLeft.x = prevLeft + 0.4 * (StitchTopLeft.x - prevLeft); // necessary hack to minimize the amount of horizontal drift
+			StitchTopLeft.x = prevLeft + 0.8 * (StitchTopLeft.x - prevLeft); // necessary hack to minimize the amount of horizontal drift
 			//StitchTopLeft.x   = prevLeft; // HACK to prevent horizontal drift
 			flatToAlignBias.y = -(flat.Height - StitchWindowHeight + flow.StableVSearchRange);
 
@@ -182,8 +182,11 @@ Error Stitcher2::DoStitch(string bitmapDir, string videoFile, float zx, float zy
 			// corrections need to happen in linear space. Actually.. now that I write this, I haven't measured the speed of doing it in CPU.
 			// It could be acceptable. This constant here is intimately related to the constant in OpticalFlow2.cpp - search for "Rend.DrawMesh" there.
 			Rect32 mrect(0, 0, m.Width, m.Height - 3);
+
+			// This is very useful to see where the stitch lines are
 			//for (int x = 0; x < m.Width; x++)
 			//	m.At(x, m.Height - 4).Color.r = 0;
+
 			Rend.DrawMesh(m, flat, mrect);
 			if (i % 8 == 0 || count < 8)
 				Rend.SaveToFile("giant2.jpeg");

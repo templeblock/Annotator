@@ -316,6 +316,68 @@ static void BlurInvalid(DeltaGrid& g, int passes) {
 		g = tmp;
 }
 
+// This thing exists solely to bring sanity to the 4 dimensional array accesses that we do here
+struct WarpScore {
+	int* Sum = nullptr;
+	int  MW  = 0;
+	int  MH  = 0;
+	int  MDX = 0;
+	int  MDY = 0;
+	int  StrideLev1;
+	int  StrideLev2;
+	WarpScore(int w, int h, int mdx, int mdy) {
+		MW         = w;
+		MH         = h;
+		MDX        = mdx;
+		MDY        = mdy;
+		StrideLev1 = MDX * MDY;
+		StrideLev2 = StrideLev1 * MW;
+		Sum        = new int[h * StrideLev2]();
+	}
+	~WarpScore() {
+		delete[] Sum;
+	}
+	int& At(int mx, int my, int dx, int dy) {
+		return Sum[my * StrideLev2 + mx * StrideLev1 + dy * MDX + dx];
+	}
+	void BestGlobalDelta(int& dx, int& dy) {
+		int bestSum = INT32_MAX;
+		for (int y = 0; y < MDY; y++) {
+			for (int x = 0; x < MDX; x++) {
+				int sum = 0;
+				for (int my = 0; my < MH; my++) {
+					for (int mx = 0; mx < MW; mx++) {
+						sum += At(mx, my, x, y);
+					}
+				}
+				if (sum < bestSum) {
+					bestSum = sum;
+					dx      = x;
+					dy      = y;
+				}
+			}
+		}
+	}
+};
+
+int FixElementsTooFarFromGlobalBest(Mesh& warpMesh, Rect32 warpMeshValidRect, Vec2f bias, Point32 bestDelta) {
+	Vec2f bestDeltaF((float) bestDelta.x, (float) bestDelta.y);
+	float maxDistSQ = 20 * 20;
+
+	int nfixed = 0;
+	for (int cy = warpMeshValidRect.y1; cy < warpMeshValidRect.y2; cy++) {
+		for (int cx = warpMeshValidRect.x1; cx < warpMeshValidRect.x2; cx++) {
+			Vec2f raw   = warpMesh.At(cx, cy).Pos;
+			Vec2f delta = warpMesh.At(cx, cy).Pos - bias;
+			if (delta.distance2D(bestDeltaF) > maxDistSQ) {
+				nfixed++;
+				warpMesh.At(cx, cy).Pos = bias + bestDeltaF;
+			}
+		}
+	}
+	return nfixed;
+}
+
 // We compute the transformed mesh of warpImg, so that it aligns to stableImg
 // All pixels in stableImg are expected to be defined, but we allow blank (zero alpha) pixels
 // in warpImg, and we make sure that we don't try to align any grid cells that have
@@ -417,8 +479,63 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	// on the subsequent pass, restrict the search window to a much smaller region.
 
 	bool debugMedianFilter = false;
+	if (debugMedianFilter)
+		tsf::print("------------------------------------------------------------------------------------\n");
 
 	//warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
+
+	// This seems to be a bad idea
+	bool doGlobalFit  = false;
+	bool useGlobalFit = false;
+	if (doGlobalFit) {
+		int       dyMin = minVSearch;
+		int       dyMax = maxVSearch;
+		int       dxMin = minHSearch;
+		int       dxMax = maxHSearch;
+		int       mW    = warpMeshValidRect.Width();
+		int       mH    = warpMeshValidRect.Height();
+		WarpScore scores(mW, mH, 1 + dxMax - dxMin, 1 + dyMax - dyMin);
+		for (auto& c : validCells) {
+			Vec2f  cSrc  = warpMesh.At(c.x, c.y).UV;
+			Vec2f  cDst  = warpMesh.At(c.x, c.y).Pos;
+			Rect32 rect1 = MakeBoxAroundPoint((int) cSrc.x, (int) cSrc.y, MatchRadius);
+			Rect32 rect2 = MakeBoxAroundPoint((int) cDst.x, (int) cDst.y, MatchRadius);
+			for (int dy = dyMin; dy <= dyMax; dy++) {
+				for (int dx = dxMin; dx <= dxMax; dx++) {
+					Rect32 r2 = rect2;
+					r2.Offset(dx, dy);
+					if (r2.x1 < 0 || r2.y1 < 0 || r2.x2 > stableImgG.Width || r2.y2 > stableImgG.Height) {
+						// skip invalid rectangle which is outside of stableImg
+						continue;
+					}
+					scores.At(c.x - warpMeshValidRect.x1, c.y - warpMeshValidRect.y1, dx - dxMin, dy - dyMin) = DiffSum(warpImgG, stableImgG, rect1, r2);
+				}
+			}
+		}
+		if (debugMedianFilter)
+			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
+
+		Point32 bestGlobal;
+		scores.BestGlobalDelta(bestGlobal.x, bestGlobal.y);
+		bestGlobal.x += dxMin;
+		bestGlobal.y += dyMin;
+		if (useGlobalFit) {
+			Vec2f bestGlobalF((float) bestGlobal.x, (float) bestGlobal.y);
+			for (auto& c : validCells) {
+				Vec2f raw = warpMesh.At(c.x, c.y).Pos;
+				warpMesh.At(c.x, c.y).Pos += bestGlobalF;
+			}
+			minVSearch = max(minVSearch, -20);
+			maxVSearch = min(maxVSearch, 20);
+			minHSearch = max(minHSearch, -20);
+			maxHSearch = min(maxHSearch, 20);
+		}
+
+		tsf::print("Best Global: %v, %v\n", bestGlobal.x, bestGlobal.y);
+		if (debugMedianFilter) {
+			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
+		}
+	}
 
 	bool hasMassiveOutliers = true;
 	int  maxPass            = 2;
@@ -467,10 +584,15 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 		if (debugMedianFilter)
 			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
 
+		//if (debugMedianFilter)
+		//	warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
+
+		int maxFilterPasses = 10;
+		//int       maxFilterPasses = 0;
 		int       nfilterPasses = 0;
 		DeltaGrid dg;
 		CopyMeshToDelta(warpMesh, warpMeshValidRect, dg, bias);
-		for (int ifilter = 0; ifilter < 10; ifilter++) {
+		for (int ifilter = 0; ifilter < maxFilterPasses; ifilter++) {
 			int nrep = MedianFilter(pass, dg, hasMassiveOutliers);
 			if (debugMedianFilter)
 				tsf::print("Median Filter replaced %v samples\n", nrep);

@@ -37,8 +37,8 @@ public:
 	int AbsMinVSearch = -350; // minimum vertical displacement for alignment points (driving forwards)
 	int AbsMaxVSearch = 10;   // maximum vertical displacement for alignment points (driving backwards)
 
-	int StableHSearchRange = 10; // Max horizontal diversion, frame to frame
-	int StableVSearchRange = 10; // Max vertical diversion, frame to frame
+	int StableHSearchRange = 15; // Max horizontal diversion, frame to frame
+	int StableVSearchRange = 15; // Max vertical diversion, frame to frame
 
 	OpticalFlow2();
 
