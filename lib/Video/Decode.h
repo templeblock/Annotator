@@ -26,6 +26,10 @@ struct IMQS_VIDEO_API VideoStreamInfo {
 	double FrameRateSeconds() const; // eg 29.97, or 24, etc
 };
 
+struct IMQS_VIDEO_API VideoMetadata {
+	time::Time CreationTime;
+};
+
 class IMQS_VIDEO_API VideoFile {
 public:
 	static void Initialize();
@@ -40,6 +44,7 @@ public:
 	Error           OpenFile(std::string filename);
 	std::string     GetFilename() const { return Filename; }
 	VideoStreamInfo GetVideoStreamInfo();
+	VideoMetadata   Metadata();
 	Error           SeekToPreviousFrame();
 	Error           SeekToFrame(int64_t frame, unsigned flags = Seek::None);
 	Error           SeekToFraction(double fraction_0_to_1, unsigned flags = Seek::None);

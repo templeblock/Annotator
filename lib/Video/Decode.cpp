@@ -94,6 +94,14 @@ VideoStreamInfo VideoFile::GetVideoStreamInfo() {
 	return inf;
 }
 
+VideoMetadata VideoFile::Metadata() {
+	VideoMetadata      md;
+	AVDictionaryEntry* v = av_dict_get(VideoStream->metadata, "creation_time", nullptr, 0);
+	if (v)
+		md.CreationTime.Parse8601(v->value, strlen(v->value));
+	return md;
+}
+
 Error VideoFile::SeekToPreviousFrame() {
 	auto timePerFrame = av_inv_q(VideoStream->avg_frame_rate);
 	auto t            = av_mul_q({(int) LastFramePTS, 1}, VideoStream->time_base);

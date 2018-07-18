@@ -12,11 +12,18 @@
 
 // To quickly test:
 // build/run-roadprocessor -r speed --csv /home/ben/win/c/mldata/StellenboschFuji/4K-F2/DSCF1008.MOV 2>/dev/null
+// build/run-roadprocessor -r speed --csv ~/mldata/DSCF3040.MOV 2>/dev/null
 
 // (the 2>/dev/null is to silence the FFMpeg warnings that are typically found in camera video files)
 
 // To generate JSON output in a file
 // build/run-roadprocessor -r speed -o speed.json /home/ben/win/c/mldata/StellenboschFuji/4K-F2/DSCF1008.MOV
+
+// Testing:
+// curl -v -c cookies -X POST -u admin@imqs.co.za:FvuSuGfbB8CChxSudtLrzsK2 roads.imqs.co.za/api/auth/login
+// curl -v -b cookies -X POST -H Content-Type:application/json -d @speed.json roads.imqs.co.za/api/tracks/align
+
+// curl -v -X POST -H Content-Type:application/json -d @speed.json localhost/api/tracks/align
 
 using namespace std;
 using namespace imqs::gfx;
@@ -81,15 +88,28 @@ static Error DoSpeed(vector<string> videoFiles, SpeedOutputMode outputMode, stri
 		tsf::print(outf, "time,speed\n");
 
 	// Before we start this potentially lengthy process, make sure we can open every one of the video files specified.
-	// Also, count their total time.
-	double totalVideoSeconds = 0;
-	for (const auto& v : videoFiles) {
+	// Also, count their total time, and extract the creation time of the first video
+	double     totalVideoSeconds = 0;
+	time::Time firstVideoCreationTime;
+	for (size_t i = 0; i < videoFiles.size(); i++) {
+		const auto&      v = videoFiles[i];
 		video::VideoFile video;
 		auto             err = video.OpenFile(v);
 		if (!err.OK())
 			return err;
+		if (i == 0) {
+			firstVideoCreationTime = video.Metadata().CreationTime;
+			// Assume camera time is in SAST (UTC+2). Obviously we'll need a different system going forward,
+			// for customers not in SAST
+			firstVideoCreationTime -= 2 * time::Hour;
+			if (outputMode == SpeedOutputMode::JSON)
+				tsf::print("Video creation time: %v\n", firstVideoCreationTime.Format8601());
+		}
 		totalVideoSeconds += video.GetVideoStreamInfo().DurationSeconds();
 	}
+
+	if (firstVideoCreationTime.IsNull())
+		return Error("Unable to extraction creation time metadata from video file");
 
 	// speeds for every frame except for frame 0, as [time,speed]
 	vector<pair<double, double>> speeds;
@@ -185,13 +205,16 @@ static Error DoSpeed(vector<string> videoFiles, SpeedOutputMode outputMode, stri
 
 	if (outputMode == SpeedOutputMode::JSON) {
 		nlohmann::json j;
+		j["time"] = firstVideoCreationTime.UnixNano() / 1000000;
+		nlohmann::json jspeed;
 		for (const auto& p : speeds) {
 			nlohmann::json jp;
 			jp.push_back(p.first);
 			jp.push_back(p.second);
-			j.push_back(std::move(jp));
+			jspeed.push_back(std::move(jp));
 		}
-		auto js = j.dump(4);
+		j["speeds"] = std::move(jspeed);
+		auto js     = j.dump(4);
 		fwrite(js.c_str(), js.size(), 1, outf);
 	}
 
