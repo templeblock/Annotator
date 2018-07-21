@@ -4,6 +4,8 @@
 #include "Globals.h"
 #include "Perspective.h"
 
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /home/ben/mldata/DSCF3040.MOV
+
 /*
 The functions in here compute the perspective factor Z2, from a video.
 We assume that the camera is pointed down at a plane, which makes the
@@ -166,6 +168,10 @@ Vec2f CameraToFlat(int frameWidth, int frameHeight, Vec2f cam, float z1, float z
 	return Vec2f(xf, yf);
 }
 
+gfx::Vec2f CameraToFlat(int frameWidth, int frameHeight, gfx::Vec2f cam, PerspectiveParams pp) {
+	return CameraToFlat(frameWidth, frameHeight, cam, pp.Z1, pp.ZX, pp.ZY);
+}
+
 // Given a camera frame width and height, compute a frustum such that the bottom edge of the frustum
 // has the exact same resolution as the bottom edge of the camera frame.
 Frustum ComputeFrustum(int frameWidth, int frameHeight, float z1, float zx, float zy) {
@@ -179,6 +185,10 @@ Frustum ComputeFrustum(int frameWidth, int frameHeight, float z1, float zx, floa
 	f.X1     = botLeft.x;
 	f.X2     = botRight.x;
 	return f;
+}
+
+Frustum ComputeFrustum(int frameWidth, int frameHeight, PerspectiveParams pp) {
+	return ComputeFrustum(frameWidth, frameHeight, pp.Z1, pp.ZX, pp.ZY);
 }
 
 // Use an iterative solution to find a value for Z1 (ie scale), which produces a 1:1 scale at
@@ -257,7 +267,8 @@ uint16_t* ComputeLensDistortionMatrix(int width, int height) {
 }
 
 void RemovePerspective(const Image& camera, Image& flat, float z1, float zx, float zy, float originX, float originY) {
-	uint16_t* fixedToRaw = ComputeLensDistortionMatrix(camera.Width, camera.Height);
+	if (global::LensFixedtoRaw == nullptr && global::Lens != nullptr)
+		global::LensFixedtoRaw = ComputeLensDistortionMatrix(camera.Width, camera.Height);
 
 	// Because our end product here is a frustum, we can compute straight lines down the edges, and
 	// avoid sampling into those lines, which wins us a little bit of performance, because it's
@@ -276,8 +287,8 @@ void RemovePerspective(const Image& camera, Image& flat, float z1, float zx, flo
 	int32_t srcClampV = (camera.Height - 1) * 256 - 1;
 
 	// weird.. getting less distortion during optical flow calculations with less correction off
-	// UPDATE: version 2 of the sticher looks better with lense correction on
-	bool doLensCorrection = true;
+	// UPDATE: version 2 of the sticher looks better with lens correction on
+	bool doLensCorrection = global::Lens != nullptr;
 
 #pragma omp parallel for
 	for (int y = 0; y < flat.Height; y++) {
@@ -299,7 +310,7 @@ void RemovePerspective(const Image& camera, Image& flat, float z1, float zx, flo
 			v += camHalfY;
 			if (doLensCorrection) {
 				// undistorted camera to raw camera
-				uint32_t fixed = raster::ImageBilinear_RG_U16(fixedToRaw, srcWidth, srcClampU, srcClampV, u, v);
+				uint32_t fixed = raster::ImageBilinear_RG_U16(global::LensFixedtoRaw, srcWidth, srcClampU, srcClampV, u, v);
 				u              = fixed & 0xffff;
 				v              = fixed >> 16;
 				// bring the distortion parameters up to the required 8 bits of sub-pixel precision
@@ -311,8 +322,10 @@ void RemovePerspective(const Image& camera, Image& flat, float z1, float zx, flo
 			dst32[x]       = color;
 		}
 	}
+}
 
-	free(fixedToRaw);
+void RemovePerspective(const gfx::Image& camera, gfx::Image& flat, PerspectiveParams pp, float originX, float originY) {
+	RemovePerspective(camera, flat, pp.Z1, pp.ZX, pp.ZY, originX, originY);
 }
 
 struct ImageDiffResult {
@@ -395,16 +408,22 @@ static Error EstimateZY(vector<string> videoFiles, float& bestZYEstimate) {
 
 	// we store this many pairs of frames in memory
 	// A 1920x1080 RGBA image takes 8 MB memory. So 20 pairs is 316 MB, 100 pairs is 1.6 GB
-	int nSamples = 100;
+	int nSamples = 110;
 
 	// If we have less than this number of valid (ie decent quality) frame pairs, then the entire process is considered a failure
-	int minValidSamples = 60;
+	int minValidSamples = 30;
 
 	// seconds apart each sample
 	double spacing = video.GetVideoStreamInfo().DurationSeconds() / (nSamples + 1);
 
 	int width  = video.Width();
 	int height = video.Height();
+
+	if (global::Lens != nullptr) {
+		err = global::Lens->InitializeDistortionCorrect(video.Width(), video.Height());
+		if (!err.OK())
+			return err;
+	}
 
 	vector<pair<Image, Image>> samples;
 	for (int i = 0; i < nSamples; i++) {
@@ -474,7 +493,7 @@ static Error EstimateZY(vector<string> videoFiles, float& bestZYEstimate) {
 		vector<Vec2d> stats;
 		for (size_t i = 0; i < samples.size(); i++) {
 			// once we've seen a frame as been "too slow" or "too few" too often, skip it forever
-			if (tooFew[i] >= 3 || tooSlow[i] >= 3) {
+			if (tooFew[i] >= 5 || tooSlow[i] >= 5) {
 				continue;
 			}
 			const auto& sample = samples[i];

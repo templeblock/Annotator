@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# ubuntu 16.04
 sudo apt-get install -y \
 	libcurl4-openssl-dev \
 	liblz4-dev \
@@ -11,6 +12,11 @@ sudo apt-get install -y \
 	# libswscale-dev
 
 	#libpng-dev \
+
+# ubuntu 18.04
+sudo apt-get install -y \
+	libunwind-dev \
+	libbsd-dev
 
 # Building glfw
 # sudo apt-get install -y xorg-dev
@@ -58,5 +64,17 @@ sudo apt-get install -y \
 # with CUDA and optical flow:
 # We can't build CUDA support with clang, so leave CC and CXX blank, to compile with GCC
 # cmake -D WITH_CUDA=ON -D OPENCV_EXTRA_MODULES_PATH=/home/ben/dev/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local -D ENABLE_CXX11=ON -D BUILD_LIST=calib3d,core,cudaoptflow,cudev,features2d,xfeatures2d ..
+# make -j
+# sudo make install
+
+# You also need to install proj4
+# I did that with the OS package manager .. apt-get install libproj9.. or libproj-dev, I think, on 18.04
+
+# Lensfun:
+# sudo apt-get install libglib2.0-dev
+# clone source and follow build instructions
+# mkdir build
+# cd build
+# cmake -DCMAKE_BUILD_TYPE=Release ..
 # make -j
 # sudo make install

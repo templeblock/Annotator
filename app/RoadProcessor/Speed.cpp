@@ -21,7 +21,7 @@
 
 // Testing:
 // curl -v -c cookies -X POST -u admin@imqs.co.za:FvuSuGfbB8CChxSudtLrzsK2 roads.imqs.co.za/api/auth/login
-// curl -v -b cookies -X POST -H Content-Type:application/json -d @speed.json roads.imqs.co.za/api/tracks/align
+// curl -v -b cookies -X POST -H Content-Type:application/json -d @DSCF3040-speed.json -o @DSCF3040-positions.json roads.imqs.co.za/api/tracks/align
 
 // curl -v -X POST -H Content-Type:application/json -d @speed.json localhost/api/tracks/align
 

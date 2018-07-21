@@ -194,9 +194,11 @@ public:
 		if (!err.OK())
 			return err;
 
-		err = global::Lens->InitializeDistortionCorrect(video.Width(), video.Height());
-		if (!err.OK())
-			return err;
+		if (global::Lens != nullptr) {
+			err = global::Lens->InitializeDistortionCorrect(video.Width(), video.Height());
+			if (!err.OK())
+				return err;
+		}
 
 		float z1 = FindZ1ForIdentityScaleAtBottom(video.Width(), video.Height(), zx, zy);
 		auto  f  = ComputeFrustum(video.Width(), video.Height(), z1, zx, zy);

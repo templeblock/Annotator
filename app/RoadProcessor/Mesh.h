@@ -9,8 +9,11 @@ public:
 	struct VX {
 		gfx::Vec2f  Pos;                                       // Pixel coordinates in destination image
 		gfx::Vec2f  UV;                                        // Pixel coordinates (not normalized) in source image
-		bool        IsValid = true;                            // Used by OpticalFlow to mark cells as being invalid, because partially outside of frustum
+		gfx::Vec4f  Extra   = gfx::Vec4f(0, 0, 0, 0);          // Interpretation depends on shader
 		gfx::Color8 Color   = gfx::Color8(255, 255, 255, 255); // Alpha can be used to lighten parts of the mesh, or tint parts, for debug viz. Colors are sRGB, non-premultiplied
+		bool        IsValid = true;                            // Used by OpticalFlow to mark cells as being invalid, because partially outside of frustum
+
+		// float       DeltaStrength = 0; // Not used - concept didn't work
 	};
 
 	int Width    = 0;
@@ -20,11 +23,17 @@ public:
 
 	Mesh();
 	Mesh(int width, int height);
+	Mesh(const Mesh& m);
 	~Mesh();
-	void Initialize(int width, int height);
-	void ResetUniformRectangular(gfx::Vec2f topLeft, gfx::Vec2f topRight, gfx::Vec2f bottomLeft, int imgWidth, int imgHeight);
-	void ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius);
-	void TransformTargets(gfx::Vec2f translate);
+	Mesh& operator=(const Mesh& m);
+
+	void       Initialize(int width, int height);
+	void       ResetUniformRectangular(gfx::Vec2f topLeft, gfx::Vec2f topRight, gfx::Vec2f bottomLeft, int imgWidth, int imgHeight);
+	void       ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius);
+	void       TransformTargets(gfx::Vec2f translate);
+	Error      SaveCompact(std::string filename);
+	Error      LoadCompact(std::string filename);
+	gfx::Vec2f AvgValidDisplacement() const;
 
 	// Snap each mesh vertex so that it lies in the crack between the four nearest pixels (or on the
 	// edge, if it is an edge vertex). We do this so that when we run the optional flow algorithm,
@@ -43,6 +52,11 @@ public:
 		return Vertices[y * Width + x];
 	}
 
+	void SetPosAndUV(int x, int y, const gfx::Vec2f& pos, const gfx::Vec2f& uv) {
+		At(x, y).Pos = pos;
+		At(x, y).UV  = uv;
+	}
+
 	//gfx::Vec2f UVimg(int imgWidth, int imgHeight, int x, int y) const {
 	//	const auto& p = At(x, y);
 	//	return gfx::Vec2f(p.UV.x * (float) imgWidth, p.UV.y * (float) imgHeight);
@@ -53,6 +67,7 @@ public:
 	void Print(gfx::Rect32 rect) const;
 	void PrintValid() const;
 	void PrintDeltaPos(gfx::Rect32 rect, gfx::Vec2f norm = gfx::Vec2f(FLT_MAX, FLT_MAX)) const;
+	void PrintDeltaStrength(gfx::Rect32 rect) const;
 	void DrawFlowImage(std::string filename) const;
 	void DrawFlowImage(gfx::Rect32 rect, std::string filename) const;
 };

@@ -7,45 +7,9 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
-// Compute sum of absolute differences
-static int32_t DiffSum(const Image& img1, const Image& img2, Rect32 rect1, Rect32 rect2) {
-	IMQS_ASSERT(img1.Format == ImageFormat::Gray);
-	IMQS_ASSERT(img2.Format == ImageFormat::Gray);
-	IMQS_ASSERT(rect1.Width() == rect2.Width());
-	IMQS_ASSERT(rect1.Height() == rect2.Height());
-	int     w   = rect1.Width();
-	int     h   = rect1.Height();
-	int32_t sum = 0;
-	for (int y = 0; y < h; y++) {
-		const uint8_t* p1 = img1.At(rect1.x1, rect1.y1 + y);
-		const uint8_t* p2 = img2.At(rect2.x1, rect2.y1 + y);
-		for (int x = 0; x < w; x++) {
-			int d = (int) p1[x] - (int) p2[x];
-			sum += abs(d);
-		}
-	}
-	return sum;
-}
-
-static double ImageStdDev(const Image& img, Rect32 crop) {
-	uint32_t sum = 0;
-	for (int y = crop.y1; y < crop.y2; y++) {
-		const uint8_t* p = img.At(crop.x1, y);
-		for (int x = crop.x1; x < crop.x2; x++, p++)
-			sum += *p;
-	}
-	sum /= crop.Width() * crop.Height();
-	uint32_t var = 0;
-	for (int y = crop.y1; y < crop.y2; y++) {
-		const uint8_t* p = img.At(crop.x1, y);
-		for (int x = crop.x1; x < crop.x2; x++, p++) {
-			var += ((uint32_t) *p - sum) * ((uint32_t) *p - sum);
-		}
-	}
-	double dvar = (double) var;
-	dvar        = sqrt(dvar / (double) (crop.Width() * crop.Height()));
-	return dvar;
-}
+static void    LocalContrast(Image& img, int size, int iterations);
+static int32_t DiffSum(const Image& img1, const Image& img2, Rect32 rect1, Rect32 rect2);
+static double  ImageStdDev(const Image& img, Rect32 crop);
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -318,13 +282,14 @@ static void BlurInvalid(DeltaGrid& g, int passes) {
 
 // This thing exists solely to bring sanity to the 4 dimensional array accesses that we do here
 struct WarpScore {
-	int* Sum = nullptr;
-	int  MW  = 0;
-	int  MH  = 0;
-	int  MDX = 0;
-	int  MDY = 0;
-	int  StrideLev1;
-	int  StrideLev2;
+	int*     Sum    = nullptr;
+	Point32* Result = nullptr;
+	int      MW     = 0; // Mesh width
+	int      MH     = 0; // Mesh height
+	int      MDX    = 0; // Maximum delta x
+	int      MDY    = 0; // Maximum delta y
+	int      StrideLev1; // The data for a single mesh vertex
+	int      StrideLev2; // The data for a row of mesh vertices
 	WarpScore(int w, int h, int mdx, int mdy) {
 		MW         = w;
 		MH         = h;
@@ -333,13 +298,19 @@ struct WarpScore {
 		StrideLev1 = MDX * MDY;
 		StrideLev2 = StrideLev1 * MW;
 		Sum        = new int[h * StrideLev2]();
+		Result     = new Point32[MW * MH];
 	}
 	~WarpScore() {
 		delete[] Sum;
+		delete[] Result;
 	}
 	int& At(int mx, int my, int dx, int dy) {
 		return Sum[my * StrideLev2 + mx * StrideLev1 + dy * MDX + dx];
 	}
+	Point32& ResultAt(int mx, int my) {
+		return Result[my * MW + mx];
+	}
+
 	void BestGlobalDelta(int& dx, int& dy) {
 		int bestSum = INT32_MAX;
 		for (int y = 0; y < MDY; y++) {
@@ -357,6 +328,99 @@ struct WarpScore {
 				}
 			}
 		}
+	}
+
+	void BruteForceBestFit(int maxHDiv, int maxVDiv) {
+		//typedef pair<int, int> ScoreAndIndex;
+		//vector<ScoreAndIndex>  scores;
+		//scores.resize(MDX * MDY);
+
+		int     bestTotalDx  = 0;
+		int     bestTotalDy  = 0;
+		int64_t bestTotalSum = INT64_MAX;
+
+		for (int dy = 0; dy < MDY; dy++) {
+			for (int dx = 0; dx < MDX; dx++) {
+				int64_t totalSum = 0;
+				for (int my = 0; my < MH; my++) {
+					for (int mx = 0; mx < MW; mx++) {
+						int     bestDx;
+						int     bestDy;
+						int64_t bestSum;
+						BestDeltaWithinDivergenceLimit(mx, my, dx, dy, maxHDiv, maxVDiv, bestDx, bestDy, bestSum);
+						if (bestSum < 0) {
+							tsf::print("negative\n");
+							IMQS_ASSERT(false);
+						}
+						totalSum += bestSum;
+					}
+				}
+				if (totalSum < bestTotalSum) {
+					bestTotalSum = totalSum;
+					bestTotalDx  = dx;
+					bestTotalDy  = dy;
+				}
+			}
+		}
+
+		bool debugPrint = false;
+		if (debugPrint)
+			tsf::print("---------------- global fit -----------------------------------------------------------------------------\n");
+
+		for (int my = 0; my < MH; my++) {
+			for (int mx = 0; mx < MW; mx++) {
+				int     bestDx;
+				int     bestDy;
+				int64_t bestSum;
+				BestDeltaWithinDivergenceLimit(mx, my, bestTotalDx, bestTotalDy, maxHDiv, maxVDiv, bestDx, bestDy, bestSum);
+				ResultAt(mx, my) = Point32(bestDx, bestDy);
+				if (debugPrint)
+					tsf::print("%4d ", bestDy);
+			}
+		}
+		if (debugPrint)
+			tsf::print("\n");
+
+		/*
+		for (int my = 0; my < MH; my++) {
+			for (int mx = 0; mx < MW; mx++) {
+				// Try the top 5 positions
+				for (int dy = 0; dy < MDY; dy++) {
+					for (int dx = 0; dx < MDX; dx++) {
+						int index     = dx + dy * MDX;
+						scores[index] = ScoreAndIndex(At(mx, my, dx, dy), index);
+					}
+				}
+				pdqsort(scores.begin(), scores.end());
+				for (int i = 0; i < 15; i++)
+					tsf::print("%v,%v\n", scores[i].first, scores[i].second);
+
+				// Try all other positions that are within legal distance from this dx,dy
+				int topn = 5;
+				for (int i = 0; i < topn; i++) {
+				}
+			}
+		}
+		*/
+	}
+
+	void BestDeltaWithinDivergenceLimit(int mx, int my, int cdx, int cdy, int maxDivH, int maxDivV, int& bestDx, int& bestDy, int64_t& bestSum) {
+		int     dxS  = max(cdx - maxDivH, 0);
+		int     dxE  = min(cdx + maxDivH, MDX);
+		int     dyS  = max(cdy - maxDivV, 0);
+		int     dyE  = min(cdy + maxDivV, MDY);
+		int64_t best = INT64_MAX;
+		for (int dx = dxS; dx < dxE; dx++) {
+			for (int dy = dyS; dy < dyE; dy++) {
+				int64_t sum = At(mx, my, dx, dy);
+				if (sum < best) {
+					bestDx = dx;
+					bestDy = dy;
+					best   = sum;
+				}
+			}
+		}
+		bestSum = best;
 	}
 };
 
@@ -382,22 +446,37 @@ int FixElementsTooFarFromGlobalBest(Mesh& warpMesh, Rect32 warpMeshValidRect, Ve
 // All pixels in stableImg are expected to be defined, but we allow blank (zero alpha) pixels
 // in warpImg, and we make sure that we don't try to align any grid cells that have
 // one or more blank pixels inside them.
-void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpImg, gfx::Image& stableImg, gfx::Vec2f& bias) {
-	int frameNumber = HistorySize++;
+FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpImg, gfx::Image& stableImg, gfx::Vec2f& bias) {
+	FlowResult result;
+	int        frameNumber = HistorySize++;
 
-	IMQS_ASSERT(warpImg.Width == warpFrustum.Width); // just sanity check
+	bool  haveFrustum = warpFrustum.Width != 0;
 	Vec2f warpFrustumPoly[4];
-	// subtle things:
-	// shrink X by 1, to ensure we don't touch any black pixels outside the frustum
-	// expand Y by 0.1, so that our bottom-most vertices, which are built to butt up
-	// against the bottom, are considered inside.
-	warpFrustum.Polygon(warpFrustumPoly, -1, 0.1);
+
+	if (haveFrustum) {
+		IMQS_ASSERT(warpImg.Width == warpFrustum.Width); // just sanity check
+		// subtle things:
+		// shrink X by 1, to ensure we don't touch any black pixels outside the frustum
+		// expand Y by 0.1, so that our bottom-most vertices, which are built to butt up
+		// against the bottom, are considered inside.
+		warpFrustum.Polygon(warpFrustumPoly, -1, 0.1);
+	}
+
+	bool drawDebugImages   = false;
+	bool debugMedianFilter = false;
 
 	Image warpImgG   = warpImg.AsType(ImageFormat::Gray);
 	Image stableImgG = stableImg.AsType(ImageFormat::Gray);
 
-	//warpImgG.SaveFile("warpImgG.jpeg");
-	//stableImgG.SaveFile("stableImgG.jpeg");
+	LocalContrast(warpImgG, 1, 1);
+	LocalContrast(stableImgG, 1, 1);
+
+	if (drawDebugImages) {
+		//warpImg.SaveFile("warpImgColor.png");
+		//stableImg.SaveFile("stableImgColor.png");
+		warpImgG.SaveFile("warpImgG.png");
+		stableImgG.SaveFile("stableImgG.png");
+	}
 
 	int minHSearch = -StableHSearchRange;
 	int maxHSearch = StableHSearchRange;
@@ -447,10 +526,12 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 			p  = warpMesh.At(x, y).UV;
 			p1 = p - Vec2f(MatchRadius, MatchRadius);
 			p2 = p + Vec2f(MatchRadius, MatchRadius);
-			if (!geom2d::PtInsidePoly(p1.x, p1.y, 4, &warpFrustumPoly[0].x, 2) || !geom2d::PtInsidePoly(p2.x, p2.y, 4, &warpFrustumPoly[0].x, 2)) {
-				// warp cell has pixels that are outside of the frustum (ie inside the triangular black regions on the bottom left/right of the flattened image)
-				warpMesh.At(x, y).IsValid = false;
-				continue;
+			if (haveFrustum) {
+				if (!geom2d::PtInsidePoly(p1.x, p1.y, 4, &warpFrustumPoly[0].x, 2) || !geom2d::PtInsidePoly(p2.x, p2.y, 4, &warpFrustumPoly[0].x, 2)) {
+					// warp cell has pixels that are outside of the frustum (ie inside the triangular black regions on the bottom left/right of the flattened image)
+					warpMesh.At(x, y).IsValid = false;
+					continue;
+				}
 			}
 		}
 	}
@@ -478,7 +559,6 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	// Run multiple passes, where at the end of each pass, we perform maximum likelihood filtering, and then
 	// on the subsequent pass, restrict the search window to a much smaller region.
 
-	bool debugMedianFilter = false;
 	if (debugMedianFilter)
 		tsf::print("------------------------------------------------------------------------------------\n");
 
@@ -486,7 +566,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 
 	// This seems to be a bad idea
 	bool doGlobalFit  = false;
-	bool useGlobalFit = false;
+	bool useGlobalFit = true;
 	if (doGlobalFit) {
 		int       dyMin = minVSearch;
 		int       dyMax = maxVSearch;
@@ -506,15 +586,19 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 					r2.Offset(dx, dy);
 					if (r2.x1 < 0 || r2.y1 < 0 || r2.x2 > stableImgG.Width || r2.y2 > stableImgG.Height) {
 						// skip invalid rectangle which is outside of stableImg
+						IMQS_ASSERT(false); // WarpScore brute force algo assumes all delta positions are populated.
 						continue;
 					}
-					scores.At(c.x - warpMeshValidRect.x1, c.y - warpMeshValidRect.y1, dx - dxMin, dy - dyMin) = DiffSum(warpImgG, stableImgG, rect1, r2);
+					int32_t sum = DiffSum(warpImgG, stableImgG, rect1, r2);
+					IMQS_ASSERT(sum >= 0);
+					scores.At(c.x - warpMeshValidRect.x1, c.y - warpMeshValidRect.y1, dx - dxMin, dy - dyMin) = sum;
 				}
 			}
 		}
-		if (debugMedianFilter)
-			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
+		//if (debugMedianFilter)
+		//	warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
 
+		/*
 		Point32 bestGlobal;
 		scores.BestGlobalDelta(bestGlobal.x, bestGlobal.y);
 		bestGlobal.x += dxMin;
@@ -530,11 +614,33 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 			minHSearch = max(minHSearch, -20);
 			maxHSearch = min(maxHSearch, 20);
 		}
-
 		tsf::print("Best Global: %v, %v\n", bestGlobal.x, bestGlobal.y);
-		if (debugMedianFilter) {
-			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
+		*/
+
+		if (useGlobalFit) {
+			// actual divergence is 2x what we give here, because it is searched for left and right
+			scores.BruteForceBestFit(2, 2);
+
+			for (int y = 0; y < mH; y++) {
+				for (int x = 0; x < mW; x++) {
+					Point32 delta = scores.ResultAt(x, y) + Point32(dxMin, dyMin);
+					warpMesh.At(x + warpMeshValidRect.x1, y + warpMeshValidRect.y1).Pos += Vec2f(delta.x, delta.y);
+				}
+			}
+
+			minVSearch = max(minVSearch, -1);
+			maxVSearch = min(maxVSearch, 1);
+			minHSearch = max(minHSearch, -1);
+			maxHSearch = min(maxHSearch, 1);
+
+			if (debugMedianFilter)
+				warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
 		}
+	}
+
+	if (drawDebugImages) {
+		DrawMesh("mesh-prefilter-0.png", stableImg, warpMesh, true);
+		DrawMesh("mesh-prefilter-1.png", warpImg, warpMesh, false);
 	}
 
 	bool hasMassiveOutliers = true;
@@ -554,6 +660,8 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 			dxMin          = -fineAdjust;
 			dxMax          = fineAdjust;
 		}
+		int   searchWindowSize = (dxMax - dxMin) * (dyMax - dyMin);
+		float allDiffSum       = 0;
 		for (auto& c : validCells) {
 			//Vec2f  cSrc    = warpMesh.UVimg(warpImg.Width, warpImg.Height, c.x, c.y);
 			Vec2f  cSrc    = warpMesh.At(c.x, c.y).UV;
@@ -563,6 +671,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 			int    bestSum = INT32_MAX;
 			int    bestDx  = 0;
 			int    bestDy  = 0;
+			//int64_t avgSum  = 0;
 			for (int dy = dyMin; dy <= dyMax; dy++) {
 				for (int dx = dxMin; dx <= dxMax; dx++) {
 					Rect32 r2 = rect2;
@@ -572,6 +681,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 						continue;
 					}
 					int32_t sum = DiffSum(warpImgG, stableImgG, rect1, r2);
+					//avgSum += sum;
 					if (sum < bestSum) {
 						bestSum = sum;
 						bestDx  = dx;
@@ -579,10 +689,17 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 					}
 				}
 			}
+			allDiffSum += (float) bestSum;
+			// I thought this would work well, indicating patches that have good detail for matching, but it doesn't work. No idea why not.
+			//warpMesh.At(c.x, c.y).DeltaStrength = float((double) avgSum / (double) searchWindowSize) / ((float) bestSum + 0.1f);
 			warpMesh.At(c.x, c.y).Pos += Vec2f(bestDx, bestDy);
 		}
-		if (debugMedianFilter)
+		if (debugMedianFilter) {
 			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
+			//warpMesh.PrintDeltaStrength(warpMeshValidRect);
+		}
+
+		result.Diff = allDiffSum / (float) validCells.size();
 
 		//if (debugMedianFilter)
 		//	warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
@@ -609,6 +726,12 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
 	}
 
+	//UpdateHistoryMesh(warpMesh);
+
+	if (drawDebugImages) {
+		DrawMesh("mesh-postfilter-0.png", stableImg, warpMesh, true);
+		DrawMesh("mesh-postfilter-1.png", warpImg, warpMesh, false);
+	}
 	//warpMesh.DrawFlowImage(warpMeshValidRect, "flow-diagram.png");
 
 	// Fill the remaining invalid cells
@@ -688,7 +811,7 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	// via optical flow. Right now I want to avoid doing that alignment, because
 	// of the expensive cost of reading a MUCH larger portion of the framebuffer
 	// on which to perform alignment. I will be even more expensive once we do rotation.
-	if (true) {
+	if (haveFrustum) {
 		for (int y = 0; y < warpMesh.Height; y++) {
 			for (int x = 0; x < warpMesh.Width; x++) {
 				Vec2f p = warpMesh.At(x, y).UV;
@@ -710,55 +833,88 @@ void OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpIm
 	//	for (auto& c : remain) {
 	//	}
 	//}
-} // namespace roadproc
-
-// 0: x
-// 1: y
-// 2: x y
-void OpticalFlow2::PrintGrid(int dim) {
-	for (int y = 0; y < GridH; y++) {
-		for (int x = 0; x < GridW; x++) {
-			if (dim == 0 || dim == 2)
-				tsf::print("%3.0f ", LastGridEl(x, y).x);
-			else
-				tsf::print("%4.0f ", LastGridEl(x, y).y);
-		}
-		if (dim == 2) {
-			tsf::print(" | ");
-			for (int x = 0; x < GridW; x++)
-				tsf::print("%4.0f ", LastGridEl(x, y).y);
-		}
-		tsf::print("\n");
-	}
+	return result;
 }
 
-void OpticalFlow2::DrawGrid(Image& img1) {
-	Canvas c;
-	float  gridSpaceX = (GridCenterAt(GridW - 1, 0).x - GridCenterAt(0, 0).x) / GridW;
-	float  gridSpaceY = (GridCenterAt(0, GridH - 1).y - GridCenterAt(0, 0).y) / GridH;
-	c.Alloc((GridW + 1.5) * gridSpaceX, (GridH + 1.5) * gridSpaceY, Color8(255, 255, 255, 255));
-
-	Vec2d avgD(0, 0);
-	for (int x = 0; x < GridW; x++) {
-		for (int y = 0; y < GridH; y++) {
-			avgD += LastGridEl(x, y) / (double) (GridW * GridH);
+void OpticalFlow2::DrawMesh(std::string filename, const gfx::Image& img, const Mesh& mesh, bool isStable) {
+	Canvas c(img.Width, img.Height);
+	*c.GetImage() = img;
+	for (int y = 0; y < mesh.Height; y++) {
+		for (int x = 0; x < mesh.Width; x++) {
+			auto& v = mesh.At(x, y);
+			if (!v.IsValid)
+				continue;
+			RectF box = RectF::Inverted();
+			if (isStable)
+				box.ExpandToFit(v.Pos.x, v.Pos.y);
+			else
+				box.ExpandToFit(v.UV.x, v.UV.y);
+			box.Expand(MatchRadius, MatchRadius);
+			c.Rect(box, Color8(255, 0, 0, 255), 1.0);
 		}
 	}
+	c.GetImage()->SaveFile(filename);
+}
 
-	Point32 topG = GridCenterAt(0, 0);
-
-	for (int x = 0; x < GridW; x++) {
-		for (int y = 0; y < GridH; y++) {
-			auto p = GridCenterAt(x, y) - topG;
-			p.x += (int) (gridSpaceX / 1.5);
-			p.y += (int) (gridSpaceY / 1.5);
-			auto d = LastGridEl(x, y);
-			d.y -= avgD.y;
-			c.FillCircle(p.x, p.y, 1.2, Color8(150, 0, 0, 255));
-			c.Line(p.x, p.y, p.x + d.x, p.y + d.y, Color8(150, 0, 0, 255), 1.0f);
+// Compute sum of absolute differences
+static int32_t DiffSum(const Image& img1, const Image& img2, Rect32 rect1, Rect32 rect2) {
+	IMQS_ASSERT(img1.Format == ImageFormat::Gray);
+	IMQS_ASSERT(img2.Format == ImageFormat::Gray);
+	IMQS_ASSERT(rect1.Width() == rect2.Width());
+	IMQS_ASSERT(rect1.Height() == rect2.Height());
+	int     w   = rect1.Width();
+	int     h   = rect1.Height();
+	int32_t sum = 0;
+	for (int y = 0; y < h; y++) {
+		const uint8_t* p1 = img1.At(rect1.x1, rect1.y1 + y);
+		const uint8_t* p2 = img2.At(rect2.x1, rect2.y1 + y);
+		for (int x = 0; x < w; x++) {
+			int d = (int) p1[x] - (int) p2[x];
+			sum += abs(d);
 		}
 	}
-	c.GetImage()->SavePng("flow-grid.png");
+	return sum;
+}
+
+static double ImageStdDev(const Image& img, Rect32 crop) {
+	uint32_t sum = 0;
+	for (int y = crop.y1; y < crop.y2; y++) {
+		const uint8_t* p = img.At(crop.x1, y);
+		for (int x = crop.x1; x < crop.x2; x++, p++)
+			sum += *p;
+	}
+	sum /= crop.Width() * crop.Height();
+	uint32_t var = 0;
+	for (int y = crop.y1; y < crop.y2; y++) {
+		const uint8_t* p = img.At(crop.x1, y);
+		for (int x = crop.x1; x < crop.x2; x++, p++) {
+			var += ((uint32_t) *p - sum) * ((uint32_t) *p - sum);
+		}
+	}
+	double dvar = (double) var;
+	dvar        = sqrt(dvar / (double) (crop.Width() * crop.Height()));
+	return dvar;
+}
+
+static void LocalContrast(Image& img, int size, int iterations) {
+	Image blur = img;
+	blur.BoxBlur(size, iterations);
+	for (int y = 0; y < img.Height; y++) {
+		uint8_t* src = blur.Line(y);
+		uint8_t* dst = img.Line(y);
+		for (int x = 0; x < img.Width; x++) {
+			int diff = (int) *dst - (int) *src;
+			diff *= 2; // this is just to make things easier to see, but results are identical. we actually want 1x scale to best get rid of clipping
+			diff += 127;
+			if (diff < 0)
+				diff = 0;
+			if (diff > 255)
+				diff = 255;
+			*dst = diff;
+			src++;
+			dst++;
+		}
+	}
 }
 
 } // namespace roadproc

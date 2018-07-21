@@ -10,12 +10,23 @@ namespace roadproc {
 Mesh::Mesh() {
 }
 
+Mesh::Mesh(const Mesh& m) {
+	*this = m;
+}
+
 Mesh::Mesh(int width, int height) {
 	Initialize(width, height);
 }
 
 Mesh::~Mesh() {
 	delete[] Vertices;
+}
+
+Mesh& Mesh::operator=(const Mesh& m) {
+	if (Width != m.Width || Height != m.Height)
+		Initialize(m.Width, m.Height);
+	memcpy(Vertices, m.Vertices, Count * sizeof(Vertices[0]));
+	return *this;
 }
 
 void Mesh::Initialize(int width, int height) {
@@ -49,11 +60,12 @@ void Mesh::ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius
 	// This is for the typical case, where we're generating a warp mesh from a flattened camera frame.
 	for (int y = 0; y < Height; y++) {
 		for (int x = 0; x < Width; x++) {
-			float xf         = ((float) x / (float) (Width - 1));
-			float yf         = ((float) y / (float) (Height - 1));
-			At(x, y).Pos     = Vec2f(xf * (float) imgWidth, yf * (float) imgHeight);
-			At(x, y).UV      = Vec2f(xf * (float) imgWidth, yf * (float) imgHeight);
-			At(x, y).IsValid = true;
+			float xf = ((float) x / (float) (Width - 1));
+			float yf = ((float) y / (float) (Height - 1));
+			VX    vx;
+			vx.Pos   = Vec2f(xf * (float) imgWidth, yf * (float) imgHeight);
+			vx.UV    = Vec2f(xf * (float) imgWidth, yf * (float) imgHeight);
+			At(x, y) = vx;
 		}
 	}
 
@@ -81,6 +93,93 @@ void Mesh::TransformTargets(gfx::Vec2f translate) {
 			At(x, y).Pos += translate;
 		}
 	}
+}
+
+static float CompactMeshMaxDelta = 1000.0f;
+static float CompactMeshScale    = 32766.0f / CompactMeshMaxDelta;
+static float CompactMeshScaleInv = CompactMeshMaxDelta / 32766.0f;
+
+struct CompactMeshHead {
+	gfx::Vec2f Bias;
+};
+static_assert(sizeof(CompactMeshHead) == 8, "CompactMeshHead size");
+
+// We compress our mesh here, so that a typical mesh takes 30 KB instead of 117 KB
+// We could compress the color further, to perhaps just alpha, and we could quite
+// likely also compress the deltas to int8, with quarter pixel precision.. -64..+64 range
+// should be fine for any correct scene.
+Error Mesh::SaveCompact(std::string filename) {
+	Vec2f     bias  = At(0, 0).Pos - At(0, 0).UV;
+	int16_t*  pos   = (int16_t*) malloc(Count * 2 * sizeof(int16_t));
+	uint32_t* color = (uint32_t*) malloc(Count * sizeof(uint32_t));
+	for (size_t i = 0; i < Count; i++) {
+		const auto& v      = Vertices[i];
+		Vec2f       scaled = CompactMeshScale * (v.Pos - v.UV - bias);
+		if (fabs(scaled.x) > 32767 || fabs(scaled.y) > 32767)
+			return Error("Mesh offset exceeds int16 limits. The mesh is probably ill-formed");
+		pos[i * 2]     = (int16_t) scaled.x;
+		pos[i * 2 + 1] = (int16_t) scaled.y;
+		color[i]       = v.Color.u;
+	}
+	os::File f;
+	auto     err = f.Create(filename);
+	if (err.OK()) {
+		CompactMeshHead head;
+		head.Bias = bias;
+
+		err = f.Write(&head, sizeof(head));
+		err |= f.Write(pos, Count * 2 * sizeof(int16_t));
+		err |= f.Write(color, Count * sizeof(uint32_t));
+	}
+	free(pos);
+	free(color);
+	f.Close();
+	return err;
+}
+
+Error Mesh::LoadCompact(std::string filename) {
+	os::File f;
+	auto     err = f.Open(filename);
+	if (!err.OK())
+		return err;
+
+	CompactMeshHead head;
+	err = f.ReadExactly(&head, sizeof(head));
+	if (!err.OK())
+		return err;
+
+	int16_t*  pos   = (int16_t*) malloc(Count * 2 * sizeof(int16_t));
+	uint32_t* color = (uint32_t*) malloc(Count * sizeof(uint32_t));
+
+	err = f.ReadExactly(pos, Count * 2 * sizeof(int16_t));
+	if (err.OK())
+		err = f.ReadExactly(color, Count * sizeof(uint32_t));
+
+	if (err.OK()) {
+		for (size_t i = 0; i < Count; i++) {
+			auto& v   = Vertices[i];
+			float x   = (float) pos[i * 2] * CompactMeshScaleInv;
+			float y   = (float) pos[i * 2 + 1] * CompactMeshScaleInv;
+			v.Pos     = v.UV + head.Bias + Vec2f(x, y);
+			v.Color.u = color[i];
+		}
+	}
+	free(pos);
+	free(color);
+	return Error();
+}
+
+gfx::Vec2f Mesh::AvgValidDisplacement() const {
+	Vec2d  avg(0, 0);
+	double n = 0;
+	for (int i = 0; i < Count; i++) {
+		if (Vertices[i].IsValid) {
+			n++;
+			avg += Vec2fTod(Vertices[i].Pos - Vertices[i].UV);
+		}
+	}
+	avg = (1.0 / n) * avg;
+	return Vec2dTof(avg);
 }
 
 //void Mesh::SnapToPixelEdges(int imgWidth, int imgHeight) {
@@ -160,6 +259,19 @@ void Mesh::PrintDeltaPos(gfx::Rect32 rect, gfx::Vec2f norm) const {
 	}
 	tsf::print("\n");
 }
+
+/*
+void Mesh::PrintDeltaStrength(gfx::Rect32 rect) const {
+	tsf::print("Delta Strength:\n");
+	for (int y = rect.y1; y < rect.y2; y++) {
+		for (int x = rect.x1; x < rect.x2; x++) {
+			tsf::print("%4.2f ", At(x, y).DeltaStrength);
+		}
+		tsf::print("\n");
+	}
+	tsf::print("\n");
+}
+*/
 
 void Mesh::DrawFlowImage(std::string filename) const {
 	DrawFlowImage(Rect32(0, 0, Width, Height), filename);

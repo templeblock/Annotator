@@ -408,6 +408,15 @@ local lz4 = ExternalLibrary {
 	}
 }
 
+local proj4 = ExternalLibrary {
+	Name = "proj4",
+	Propagate = {
+		Libs = {
+			{ "proj"; Config = linuxFilter },
+		}
+	}
+}
+
 local opencv = ExternalLibrary {
 	Name = "opencv",
 	Depends = {
@@ -899,7 +908,7 @@ local Labeler = Program {
 local RoadProcessor = Program {
 	Name = "RoadProcessor",
 	Depends = {
-		winCrt, Video, gfx, opencv, ffmpeg, pal, libjpeg_turbo, png, stb, tsf, agg, glfw, lz4
+		winCrt, Video, gfx, opencv, ffmpeg, pal, libjpeg_turbo, png, stb, tsf, agg, glfw, lz4, proj4
 	},
 	Env = {
 		--PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },

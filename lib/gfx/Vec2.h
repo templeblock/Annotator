@@ -113,7 +113,7 @@ typedef Vec2<double> Vec2d;
 typedef Vec2<float>  Vec2f;
 
 inline Vec2f Vec2dTof(const Vec2d& v) { return Vec2f((float) v.x, (float) v.y); }
-inline Vec2d Vec2fTod(const Vec2d& v) { return Vec2d((double) v.x, (double) v.y); }
+inline Vec2d Vec2fTod(const Vec2f& v) { return Vec2d((double) v.x, (double) v.y); }
 
 } // namespace gfx
 } // namespace imqs

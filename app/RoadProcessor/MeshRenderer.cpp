@@ -16,12 +16,14 @@ static void myErrorCallback(int error, const char* description) {
 struct VxGen {
 	gfx::Vec3f  Pos;
 	gfx::Vec2f  UV;
+	gfx::Vec4f  Extra;
 	gfx::Color8 Color;
 
-	static VxGen Make(const gfx::Vec3f& pos, const gfx::Vec2f& uv, gfx::Color8 color = gfx::Color8(255, 255, 255, 255)) {
+	static VxGen Make(const gfx::Vec3f& pos, const gfx::Vec2f& uv, gfx::Color8 color = gfx::Color8(255, 255, 255, 255), gfx::Vec4f extra = gfx::Vec4f(0, 0, 0, 0)) {
 		VxGen v;
 		v.Pos   = pos;
 		v.UV    = uv;
+		v.Extra = extra;
 		v.Color = color;
 		return v;
 	}
@@ -123,6 +125,45 @@ void main()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+static const char* RemovePerspectiveShaderVertex = R"(
+uniform mat4 MVP;
+attribute vec3 vPos;
+attribute vec2 vUV;
+attribute vec4 vExtra;
+attribute vec4 vColor;
+varying vec2 uv;
+varying vec4 color;
+varying vec4 extra;
+void main()
+{
+    gl_Position = MVP * vec4(vPos, 1.0);
+	color = vColor;
+	extra = vExtra;
+	uv = vUV;
+}
+)";
+
+static const char* RemovePerspectiveShaderFrag = R"(
+uniform sampler2D tex;
+varying vec2 uv;
+varying vec4 extra;
+varying vec4 color;
+void main()
+{
+	// float z  = z1 + zx * x + zy * y;
+	// float fx = x / z;
+	// float fy = y / z;
+	vec4 c = color;
+	vec2 uvnorm = uv - vec2(0.5, 0.5);
+	float z = extra.x * uvnorm.x + extra.y * uvnorm.y + extra.w;
+	uvnorm = (1.0 / z) * uvnorm;
+	vec2 uvr = uvnorm + vec2(0.5, 0.5);
+    gl_FragColor = texture2D(tex, uvr) * c;
+}
+)";
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 MeshRenderer::~MeshRenderer() {
 	Destroy();
 }
@@ -175,6 +216,9 @@ Error MeshRenderer::Initialize(int fbWidth, int fbHeight) {
 	auto err = CompileShader(CopyShaderVertex, CopyShaderFrag, CopyShader);
 	if (!err.OK())
 		return err;
+	err = CompileShader(RemovePerspectiveShaderVertex, RemovePerspectiveShaderFrag, RemovePerspectiveShader);
+	if (!err.OK())
+		return err;
 
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 
@@ -220,29 +264,39 @@ void MeshRenderer::CopyImageToDevice(const gfx::Image& img, int dstX, int dstY) 
 }
 
 void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect) {
+	DrawMeshWithShader(CopyShader, m, img, meshRenderRect);
+}
+
+void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect) {
 	if (meshRenderRect.IsInverted())
 		meshRenderRect = Rect32(0, 0, m.Width, m.Height);
 	auto mr = meshRenderRect;
 
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 
-	glUseProgram(CopyShader);
+	glUseProgram(shader);
 
-	auto locMVP    = glGetUniformLocation(CopyShader, "MVP");
-	auto locvPos   = glGetAttribLocation(CopyShader, "vPos");
-	auto locvUV    = glGetAttribLocation(CopyShader, "vUV");
-	auto locvColor = glGetAttribLocation(CopyShader, "vColor");
-	auto locTex    = glGetUniformLocation(CopyShader, "tex");
+	// mandatory attribs
+	auto locMVP    = glGetUniformLocation(shader, "MVP");
+	auto locvPos   = glGetAttribLocation(shader, "vPos");
+	auto locvUV    = glGetAttribLocation(shader, "vUV");
+	auto locvColor = glGetAttribLocation(shader, "vColor");
+	auto locTex    = glGetUniformLocation(shader, "tex");
 	IMQS_ASSERT(locMVP != -1 && locvPos != -1 && locvUV != -1 && locTex != -1 && locvColor != -1);
 	//IMQS_ASSERT(locMVP != -1 && locvPos != -1 && locvColor != -1);
+
+	// optional attribs
+	auto locvExtra = glGetAttribLocation(shader, "vExtra");
+	if (shader == RemovePerspectiveShader)
+		IMQS_ASSERT(locvExtra != -1);
 
 	GLuint tex = -1;
 	glGenTextures(1, &tex);
 	glBindTexture(GL_TEXTURE_2D, tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, img.Width, img.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.Data);
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
@@ -259,7 +313,7 @@ void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 me
 			Vec2f       uv = mv.UV;
 			uv.x           = uv.x / (float) img.Width;
 			uv.y           = uv.y / (float) img.Height;
-			*vxout++       = VxGen::Make(Vec3f(mv.Pos, 0), uv, mv.Color);
+			*vxout++       = VxGen::Make(Vec3f(mv.Pos, 0), uv, mv.Color, mv.Extra);
 		}
 	}
 
@@ -293,6 +347,10 @@ void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 me
 	glVertexAttribPointer(locvUV, 2, GL_FLOAT, GL_FALSE, sizeof(VxGen), vptr + offsetof(VxGen, UV));
 	glEnableVertexAttribArray(locvColor);
 	glVertexAttribPointer(locvColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(VxGen), vptr + offsetof(VxGen, Color));
+	if (locvExtra != -1) {
+		glEnableVertexAttribArray(locvExtra);
+		glVertexAttribPointer(locvExtra, 4, GL_FLOAT, GL_FALSE, sizeof(VxGen), vptr + offsetof(VxGen, Extra));
+	}
 
 	Mat4f mvp;
 	mvp.MakeIdentity();
@@ -309,10 +367,41 @@ void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 me
 	glDisableVertexAttribArray(locvPos);
 	glDisableVertexAttribArray(locvUV);
 	glDisableVertexAttribArray(locvColor);
+	if (locvExtra != -1)
+		glDisableVertexAttribArray(locvExtra);
 	//glDeleteBuffers(1, &vxBuf);
 	glDeleteTextures(1, &tex);
 
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
+}
+
+void MeshRenderer::RemovePerspective(const gfx::Image& camera, PerspectiveParams pp) {
+	auto frustum = ComputeFrustum(camera.Width, camera.Height, pp);
+	Mesh m;
+	m.Initialize(2, 2);
+
+	m.At(0, 0).Pos = Vec2f(0, 0);
+	m.At(1, 0).Pos = Vec2f(frustum.Width, 0);
+
+	m.At(0, 1).Pos = Vec2f(0, frustum.Height);
+	m.At(1, 1).Pos = Vec2f(frustum.Width, frustum.Height);
+
+	float scale = (float) camera.Width / (float) frustum.Width;
+
+	auto ppNorm = pp;
+	ppNorm.Z1 *= scale;
+	ppNorm.ZX *= camera.Width;
+	ppNorm.ZY *= camera.Height;
+
+	// We don't need the 'flatOrigin' parameter that the CPU version does, because our pixel shader operates on normalized
+	// position coordinates.
+
+	for (int i = 0; i < m.Count; i++) {
+		m.Vertices[i].UV    = scale * m.Vertices[i].Pos;
+		m.Vertices[i].Extra = Vec4f(ppNorm.ZX, ppNorm.ZY, 0, ppNorm.Z1);
+	}
+
+	DrawMeshWithShader(RemovePerspectiveShader, m, camera);
 }
 
 void MeshRenderer::SaveToFile(std::string filename) {

@@ -17,6 +17,7 @@ public:
 };
 
 typedef Point<int32_t> Point32;
+typedef Point<int64_t> Point64;
 
 } // namespace gfx
 } // namespace imqs

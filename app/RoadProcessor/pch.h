@@ -23,3 +23,6 @@
 
 #include <glfw/deps/glad/glad.h>
 #include <glfw/include/GLFW/glfw3.h>
+
+// proj4
+#include <proj_api.h>

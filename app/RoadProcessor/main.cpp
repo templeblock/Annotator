@@ -6,6 +6,7 @@
 namespace imqs {
 namespace roadproc {
 int Speed(argparse::Args& args);
+int Speed2(argparse::Args& args);
 int Stitch(argparse::Args& args);
 int Stitch2(argparse::Args& args);
 int WebTiles(argparse::Args& args);
@@ -77,11 +78,19 @@ int main(int argc, char** argv) {
 	speed->AddSwitch("", "csv", "Write CSV output (otherwise JSON)");
 	speed->AddValue("o", "outfile", "Write output to file", "stdout");
 
+	auto speed2 = args.AddCommand("speed2 <video[,video2][...]>",
+	                              "Compute car speed from interframe differences\nOne or more videos can be specified."
+	                              " Separate multiple videos with commas. This version uses optical flow on flattened images",
+	                              Speed2);
+	speed2->AddSwitch("", "csv", "Write CSV output (otherwise JSON)");
+	speed2->AddValue("o", "outfile", "Write output to file", "stdout");
+
 	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
 	auto stitch      = args.AddCommand("stitch <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
-	auto stitch2     = args.AddCommand("stitch2 <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch2);
+	auto stitch2     = args.AddCommand("stitch2 <video> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch2);
 	stitch->AddValue("n", "number", "Number of frames", "2");
 	stitch->AddValue("s", "start", "Start time in seconds", "0");
+	stitch2->AddValue("", "phase", "phase", "1");
 	stitch2->AddValue("n", "number", "Number of frames", "2");
 	stitch2->AddValue("s", "start", "Start time in seconds", "0");
 
@@ -89,6 +98,12 @@ int main(int argc, char** argv) {
 
 	if (!args.Parse(argc, (const char**) argv))
 		return 1;
+
+	auto err = global::Initialize();
+	if (!err.OK()) {
+		tsf::print("Program initialization failed: %v\n", err.Message());
+		return 1;
+	}
 
 	if (args.Get("lens") != "") {
 		global::Lens = new LensCorrector();
@@ -106,7 +121,10 @@ int main(int argc, char** argv) {
 
 	int ret = args.ExecCommand();
 
+	free(global::LensFixedtoRaw);
 	delete global::Lens;
+
+	global::Shutdown();
 
 	return ret;
 }
