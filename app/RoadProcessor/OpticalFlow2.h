@@ -44,9 +44,11 @@ public:
 	int StableHSearchRange = 10; // Max horizontal diversion, frame to frame - needs to be more than V, because of camera pointing left/right away from straight ahead
 	int StableVSearchRange = 10; // Max vertical diversion, frame to frame
 
+	bool UseRGB = true; // If false, then convert images to gray before performing optical flow
+
 	OpticalFlow2();
 
-	FlowResult Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpImg, gfx::Image& stableImg, gfx::Vec2f& bias);
+	FlowResult Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Image& warpImg, const gfx::Image& stableImg, gfx::Vec2f& bias);
 
 private:
 	int HistorySize = 0;

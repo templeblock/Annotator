@@ -33,7 +33,14 @@ public:
 	union {
 		struct
 		{
-			uint8_t r, g, b, a;
+#ifdef IMQS_ENDIAN_LITTLE
+			uint8_t r : 8;
+			uint8_t g : 8;
+			uint8_t b : 8;
+			uint8_t a : 8;
+#else
+			uint8_t a, b, g, r;
+#endif
 		};
 		uint32_t u;
 	};

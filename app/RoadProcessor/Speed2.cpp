@@ -18,6 +18,8 @@ enum class SpeedOutputMode {
 	JSON,
 };
 
+const double RAD2DEG = 180.0 / IMQS_PI;
+
 static void SetupMesh(int srcWidth, int srcHeight, int matchHeight, int pixelsPerMeshCell, int flowMatchRadius, Mesh& m) {
 	// matchHeight is something like 200, and srcHeight is something like 500
 	// We are only interested in matching the bottom 200 pixels, to the "previous" frame, which
@@ -145,13 +147,18 @@ static Error DoSpeed2(vector<string> videoFiles, SpeedOutputMode outputMode, str
 		// 50 is easy, and 50.5
 		// 152 is tricky
 		// 215 is very tricky
-		video.SeekToSecond(10);
+		//video.SeekToSecond(150);
+		//video.SeekToSecond(215);
+		//video.SeekToSecond(220);
+		//video.SeekToSecond(49);
 
-		int    iFrame     = 0;
-		double frameTime  = 0;
-		float  avgImgDiff = 0;
+		float  expectedAngleRange = 7; // expect 7 degrees left or right, of "crab walk".. ie camera not facing forwards
+		int    iFrame             = 0;
+		double frameTime          = 0;
+		float  avgImgDiff         = 0;
 		Image  frame(ImageFormat::RGBA, videoWidth, videoHeight);
 		Vec2f  flowBias(0, 0);
+		Vec2f  avgDir(0, 0);
 		enum class syncModes {
 			fine,
 			alert,
@@ -213,14 +220,14 @@ static Error DoSpeed2(vector<string> videoFiles, SpeedOutputMode outputMode, str
 					SetupMesh(flat.Width, flat.Height, matchHeight, pixelsPerMeshCell, flow.MatchRadius, mesh);
 					Vec2f        bias(0, 0);
 					OpticalFlow2 flowAbs;
-					absFlowResult = flowAbs.Frame(mesh, Frustum(), flat, flatPrev, bias);
-					auto  disp    = mesh.AvgValidDisplacement();
-					float absErr  = (disp - flowBias).size();
-					if (absErr > 30 && syncMode == syncModes::fine) {
+					absFlowResult       = flowAbs.Frame(mesh, Frustum(), flat, flatPrev, bias);
+					auto  disp          = mesh.AvgValidDisplacement();
+					float absDivergence = (disp - flowBias).size();
+					if (absDivergence > 30 && syncMode == syncModes::fine && absFlowResult.Diff < avgImgDiff) {
 						syncMode = syncModes::alert;
 					}
 					if (syncMode != syncModes::fine) {
-						bool good = true;
+						bool good = absFlowResult.Diff < avgImgDiff;
 						for (auto d : flowBiasAbs) {
 							if (d.distance(disp) > 20)
 								good = false;
@@ -243,21 +250,33 @@ static Error DoSpeed2(vector<string> videoFiles, SpeedOutputMode outputMode, str
 				}
 				Mesh mesh;
 				SetupMesh(flat.Width, flat.Height, matchHeight, pixelsPerMeshCell, flow.MatchRadius, mesh);
-				auto flowResult = flow.Frame(mesh, Frustum(), flat, flatPrev, flowBias);
-				auto disp       = mesh.AvgValidDisplacement();
+				auto  flowResult = flow.Frame(mesh, Frustum(), flat, flatPrev, flowBias);
+				auto  disp       = mesh.AvgValidDisplacement();
+				float angle      = RAD2DEG * atan2(disp.y, disp.x);
+				float angleNorm  = RAD2DEG * atan2(avgDir.y, avgDir.x);
 				if (iFrame == 1) {
+					avgDir     = disp.normalized();
 					flowBias   = disp;
-					avgImgDiff = flowResult.Diff * 2; // *3 to give some initial grace
+					avgImgDiff = flowResult.Diff;
 				} else {
+					float angleFromExpected = RAD2DEG * disp.angle(avgDir);
+					if (fabs(angleFromExpected) > 5.0f) {
+						// make sure we get a restart check soon, if our angle deviates substantially from the norm
+						absRestart = min(absRestart, 15);
+					}
+
+					if (fabs(angle >= -90 - expectedAngleRange && angle <= -90 + expectedAngleRange)) {
+						avgDir += 0.002f * (disp.normalized() - avgDir);
+					}
 					// Bad locks that I've seen go from a diff of 2426.7 to 17710.6. Wondering if that's not an overflow bug...... yeah.. probably overflow.
-					if (flowResult.Diff < avgImgDiff * 3) {
-						flowBias += 0.1f * (disp - flowBias);
+					if (flowResult.Diff < avgImgDiff * 2) {
+						flowBias += 0.15f * (disp - flowBias);
 						avgImgDiff += 0.05f * (flowResult.Diff - avgImgDiff);
 						//if (fabs(flowBias.x) > 15.0f)
 						//	flowBias.x *= 0.9f;
 					}
 				}
-				tsf::print("%4.1f: %6.1f, %6.1f (%6.1f, %6.1f) [%.1f] %v\n", frameTime, disp.x, disp.y, flowBias.x, flowBias.y, flowResult.Diff, didReset ? "RESET" : "");
+				tsf::print("%4.1f: %6.1f, %6.1f (%4.0f, %4.0f) (%6.1f, %6.1f) [%7.1f, %7.1f, %7.1f] %v\n", frameTime, disp.x, disp.y, angle, angleNorm, flowBias.x, flowBias.y, flowResult.Diff, avgImgDiff, absFlowResult.Diff, didReset ? "RESET" : "");
 				//tsf::print("%6.1f, %6.1f (%6.1f) [%6.1f] %6.1f, %6.1f (%6.1f)\n", flowBias.x, flowBias.y, flowResult.Diff, absErr, absDisp.x, absDisp.y, absFlowResult.Diff);
 				//tsf::print("%4.1f: %6.1f, %6.1f (%6.1f) [%6.1f] %6.1f, %6.1f (%6.1f) %s\n", frameTime, disp.x, disp.y, flowResult.Diff, absErr, absDisp.x, absDisp.y, absFlowResult.Diff, didReset ? "RESET" : "");
 

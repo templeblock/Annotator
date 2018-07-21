@@ -77,6 +77,16 @@ public:
 	T dot(Vec2Base b) const {
 		return x * b.x + y * b.y;
 	}
+
+	// angle between two vectors (which need not be normalized)
+	T angle(Vec2Base b) const {
+		return acos(dot(b) / (size() * b.size()));
+	}
+
+	// angle between two normalized vectors
+	T angleNormalized(Vec2Base b) const {
+		return acos(dot(b));
+	}
 };
 
 template <typename T>

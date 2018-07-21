@@ -227,6 +227,7 @@ Image Image::HalfSizeCheap() const {
 	return half;
 }
 
+// This is crazy slow. It needs to be vectorized.
 Image Image::HalfSizeLinear() const {
 	Image half;
 	half.Alloc(Format, Width / 2, Height / 2);
@@ -268,6 +269,41 @@ Image Image::HalfSizeLinear() const {
 	return half;
 }
 
+struct Color16 {
+	union {
+		struct
+		{
+#if ENDIANLITTLE
+			uint16_t a, b, g, r;
+#else
+			uint16_t r : 16;
+			uint16_t g : 16;
+			uint16_t b : 16;
+			uint16_t a : 16;
+#endif
+		};
+		uint64_t u;
+	};
+	Color16() {}
+	Color16(Color8 x) : r(x.r), g(x.g), b(x.b), a(x.a) {}
+	Color16(uint16_t r, uint16_t g, uint16_t b, uint16_t a) : r(r), g(g), b(b), a(a) {}
+
+	Color8 ToColor8() const { return Color8(r, g, b, a); }
+	operator Color8() const { return Color8(r, g, b, a); }
+};
+
+inline Color16 operator/(Color16 x, uint16_t div) {
+	return Color16(x.r / div, x.g / div, x.b / div, x.a / div);
+}
+
+inline Color16 operator+(Color16 x, Color16 y) {
+	return Color16(x.r + y.r, x.g + y.g, x.b + y.b, x.a + y.a);
+}
+
+inline Color16 operator-(Color16 x, Color16 y) {
+	return Color16(x.r - y.r, x.g - y.g, x.b - y.b, x.a - y.a);
+}
+
 static void BoxBlurGray(uint8_t* src, uint8_t* dst, int width, int blurSize, int iterations) {
 	for (int iter = 0; iter < iterations; iter++) {
 		unsigned sum = 0;
@@ -290,45 +326,94 @@ static void BoxBlurGray(uint8_t* src, uint8_t* dst, int width, int blurSize, int
 	}
 }
 
+static void BoxBlurRGBA(Color8* src, Color8* dst, int width, int blurSize, int iterations) {
+	for (int iter = 0; iter < iterations; iter++) {
+		Color16 sum(0, 0, 0, 0);
+		if (blurSize == 1) {
+			dst[0] = (Color16(src[0]) + Color16(src[1])) / 2;
+			dst[1] = (Color16(src[0]) + Color16(src[1]) + Color16(src[2])) / 3;
+			sum    = Color16(src[0]) + Color16(src[1]) + Color16(src[2]);
+		}
+		size_t x = blurSize + 1;
+		size_t w = width - blurSize;
+		for (; x < w; x++) {
+			sum = sum - Color16(src[x - 2]) + Color16(src[x + 1]);
+			//sum.r = sum.r - src[x - 2].r + src[x + 1].r;
+			//sum.g = sum.g - src[x - 2].g + src[x + 1].g;
+			//sum.b = sum.b - src[x - 2].b + src[x + 1].b;
+			//sum.a = sum.a - src[x - 2].a + src[x + 1].a;
+			dst[x] = sum / 3;
+		}
+		if (blurSize == 1) {
+			sum    = sum - src[x - 2] + src[w - 1];
+			dst[x] = sum / 3;
+		}
+		std::swap(src, dst);
+	}
+}
+
 void Image::BoxBlur(int size, int iterations) {
-	IMQS_ASSERT(Format == ImageFormat::Gray);
+	IMQS_ASSERT(NumChannels() == 1 || NumChannels() == 4);
 	IMQS_ASSERT(Width >= size * 2 + 1);
 	IMQS_ASSERT(Height >= size * 2 + 1);
-	IMQS_ASSERT(size == 1); // just haven't bothered to code up other sizes
+	IMQS_ASSERT(size == 1); // just haven't bothered to code up other sizes, and it's only a hassle because of the left/right edge cases
+	bool isRGBA = NumChannels() == 4;
 
-	uint8_t* buf1            = (uint8_t*) imqs_malloc_or_die(max(Width, Height) + 1);
-	uint8_t* buf2            = (uint8_t*) imqs_malloc_or_die(Height + 1);
-	buf1[max(Width, Height)] = 255;
-	buf2[Height]             = 255;
+	uint8_t* buf1 = (uint8_t*) imqs_malloc_or_die((max(Width, Height) + 1) * NumChannels());
+	uint8_t* buf2 = (uint8_t*) imqs_malloc_or_die((Height + 1) * NumChannels());
+
+	// these are just sentinels to make sure we're not overwriting memory
+	buf1[max(Width, Height) * NumChannels()] = 254;
+	buf2[Height * NumChannels()]             = 254;
 
 	bool evenIterations = (unsigned) iterations % 2 == 0;
 
 	for (int y = 0; y < Height; y++) {
 		uint8_t* src = Line(y);
-		BoxBlurGray(src, buf1, Width, size, iterations);
+		if (isRGBA)
+			BoxBlurRGBA((Color8*) src, (Color8*) buf1, Width, size, iterations);
+		else
+			BoxBlurGray(src, buf1, Width, size, iterations);
 		if (!evenIterations)
-			memcpy(src, buf1, Width);
+			memcpy(src, buf1, Width * NumChannels());
 	}
 
 	for (int x = 0; x < Width; x++) {
 		// For the verticals, first copy each line into a buffer, so that we can run multiple iterations fast
-		uint8_t* src    = At(x, 0);
-		size_t   h      = Height;
-		int      stride = Stride;
-		for (size_t y = 0; y < h; y++, src += Stride)
-			buf1[y] = *src;
+		size_t h      = Height;
+		int    stride = Stride;
+		if (isRGBA) {
+			uint32_t* src = At32(x, 0);
+			uint32_t* buf = (uint32_t*) buf1;
+			for (size_t y = 0; y < h; y++, (char*&) src += Stride)
+				buf[y] = *src;
+		} else {
+			uint8_t* src = At(x, 0);
+			for (size_t y = 0; y < h; y++, src += Stride)
+				buf1[y] = *src;
+		}
 
-		BoxBlurGray(buf1, buf2, Height, size, iterations);
+		if (isRGBA)
+			BoxBlurRGBA((Color8*) buf1, (Color8*) buf2, Height, size, iterations);
+		else
+			BoxBlurGray(buf1, buf2, Height, size, iterations);
 
 		// copy back out
-		src            = At(x, 0);
-		uint8_t* final = evenIterations ? buf1 : buf2;
-		for (size_t y = 0; y < h; y++, src += Stride)
-			*src = final[y];
+		if (isRGBA) {
+			uint32_t* src   = At32(x, 0);
+			uint32_t* final = evenIterations ? (uint32_t*) buf1 : (uint32_t*) buf2;
+			for (size_t y = 0; y < h; y++, (char*&) src += Stride)
+				*src = final[y];
+		} else {
+			uint8_t* src   = At(x, 0);
+			uint8_t* final = evenIterations ? buf1 : buf2;
+			for (size_t y = 0; y < h; y++, src += Stride)
+				*src = final[y];
+		}
 	}
 
-	IMQS_ASSERT(buf1[max(Width, Height)] == 255);
-	IMQS_ASSERT(buf2[Height] == 255);
+	IMQS_ASSERT(buf1[max(Width, Height) * NumChannels()] == 254); // sentils to make sure we haven't overwritten memory
+	IMQS_ASSERT(buf2[Height * NumChannels()] == 254);
 
 	free(buf1);
 	free(buf2);

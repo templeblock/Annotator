@@ -79,7 +79,11 @@ Color8 ColorHSVA::ToRGBA() const {
 	uint8_t q8 = (uint8_t)(q * 255.0f);
 	uint8_t t8 = (uint8_t)(t * 255.0f);
 
-	hsv2rgb((int) i, v, p8, q8, t8, out.r, out.g, out.b);
+	uint8_t r, g, b;
+	hsv2rgb((int) i, v, p8, q8, t8, r, g, b);
+	out.r = r;
+	out.g = g;
+	out.b = b;
 
 	return out;
 }

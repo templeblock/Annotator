@@ -7,6 +7,9 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
+// this is just to make things easier to see when debugging images, but results are identical. we actually want 1x scale to minimize clipping
+const int DebugBrightenLocalContrast = 1;
+
 static void    LocalContrast(Image& img, int size, int iterations);
 static int32_t DiffSum(const Image& img1, const Image& img2, Rect32 rect1, Rect32 rect2);
 static double  ImageStdDev(const Image& img, Rect32 crop);
@@ -446,7 +449,7 @@ int FixElementsTooFarFromGlobalBest(Mesh& warpMesh, Rect32 warpMeshValidRect, Ve
 // All pixels in stableImg are expected to be defined, but we allow blank (zero alpha) pixels
 // in warpImg, and we make sure that we don't try to align any grid cells that have
 // one or more blank pixels inside them.
-FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& warpImg, gfx::Image& stableImg, gfx::Vec2f& bias) {
+FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Image& _warpImg, const gfx::Image& _stableImg, gfx::Vec2f& bias) {
 	FlowResult result;
 	int        frameNumber = HistorySize++;
 
@@ -454,7 +457,7 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& 
 	Vec2f warpFrustumPoly[4];
 
 	if (haveFrustum) {
-		IMQS_ASSERT(warpImg.Width == warpFrustum.Width); // just sanity check
+		IMQS_ASSERT(_warpImg.Width == warpFrustum.Width); // just sanity check
 		// subtle things:
 		// shrink X by 1, to ensure we don't touch any black pixels outside the frustum
 		// expand Y by 0.1, so that our bottom-most vertices, which are built to butt up
@@ -465,17 +468,31 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& 
 	bool drawDebugImages   = false;
 	bool debugMedianFilter = false;
 
-	Image warpImgG   = warpImg.AsType(ImageFormat::Gray);
-	Image stableImgG = stableImg.AsType(ImageFormat::Gray);
+	Image  warpImgCopy;
+	Image  stableImgCopy;
+	Image* warpImg   = nullptr;
+	Image* stableImg = nullptr;
 
-	LocalContrast(warpImgG, 1, 1);
-	LocalContrast(stableImgG, 1, 1);
+	if (!UseRGB) {
+		warpImgCopy   = _warpImg.AsType(ImageFormat::Gray);
+		stableImgCopy = _stableImg.AsType(ImageFormat::Gray);
+		warpImg       = &warpImgCopy;
+		stableImg     = &stableImgCopy;
+	} else {
+		warpImgCopy   = _warpImg;
+		stableImgCopy = _stableImg;
+		warpImg       = &warpImgCopy;
+		stableImg     = &stableImgCopy;
+	}
+
+	LocalContrast(*warpImg, 1, 5);
+	LocalContrast(*stableImg, 1, 5);
 
 	if (drawDebugImages) {
-		//warpImg.SaveFile("warpImgColor.png");
-		//stableImg.SaveFile("stableImgColor.png");
-		warpImgG.SaveFile("warpImgG.png");
-		stableImgG.SaveFile("stableImgG.png");
+		_warpImg.SaveFile("rawWarpImg.png");
+		_stableImg.SaveFile("rawStableImg.png");
+		warpImg->SaveFile("warpImg.png");
+		stableImg->SaveFile("stableImg.png");
 	}
 
 	int minHSearch = -StableHSearchRange;
@@ -490,9 +507,9 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& 
 		// stableImg is a small extract from the bottom middle of the first flat image.
 		// We assume that stableImg lies in the center of warpImg, and at the bottom.
 		// Also, we assume zero motion.
-		bias.x = (warpImg.Width - stableImg.Width) / 2;
+		bias.x = (warpImg->Width - stableImg->Width) / 2;
 		//bias.y     = warpImg.Height - stableImg.Height + AbsMaxVSearch;
-		bias.y     = warpImg.Height - stableImg.Height;
+		bias.y     = warpImg->Height - stableImg->Height;
 		bias       = -bias; // get it from warp -> stable
 		minHSearch = AbsMinHSearch;
 		maxHSearch = AbsMaxHSearch;
@@ -518,7 +535,7 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& 
 			Vec2f p  = warpMesh.At(x, y).Pos;
 			Vec2f p1 = p - Vec2f(MatchRadius, MatchRadius) + Vec2f(minHSearch, minVSearch);
 			Vec2f p2 = p + Vec2f(MatchRadius, MatchRadius) + Vec2f(maxHSearch, maxVSearch);
-			if (p1.x < 0 || p1.y < 0 || p2.x > (float) stableImg.Width || p2.y > (float) stableImg.Height) {
+			if (p1.x < 0 || p1.y < 0 || p2.x > (float) stableImg->Width || p2.y > (float) stableImg->Height) {
 				// search for matching cell would reach outside of stable image
 				warpMesh.At(x, y).IsValid = false;
 				continue;
@@ -526,6 +543,11 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& 
 			p  = warpMesh.At(x, y).UV;
 			p1 = p - Vec2f(MatchRadius, MatchRadius);
 			p2 = p + Vec2f(MatchRadius, MatchRadius);
+			if (p1.x < 0 || p1.y < 0 || p2.x > (float) warpImg->Width || p2.y > (float) warpImg->Height) {
+				// search for matching cell would reach outside of warp image
+				warpMesh.At(x, y).IsValid = false;
+				continue;
+			}
 			if (haveFrustum) {
 				if (!geom2d::PtInsidePoly(p1.x, p1.y, 4, &warpFrustumPoly[0].x, 2) || !geom2d::PtInsidePoly(p2.x, p2.y, 4, &warpFrustumPoly[0].x, 2)) {
 					// warp cell has pixels that are outside of the frustum (ie inside the triangular black regions on the bottom left/right of the flattened image)
@@ -584,12 +606,12 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& 
 				for (int dx = dxMin; dx <= dxMax; dx++) {
 					Rect32 r2 = rect2;
 					r2.Offset(dx, dy);
-					if (r2.x1 < 0 || r2.y1 < 0 || r2.x2 > stableImgG.Width || r2.y2 > stableImgG.Height) {
+					if (r2.x1 < 0 || r2.y1 < 0 || r2.x2 > stableImg->Width || r2.y2 > stableImg->Height) {
 						// skip invalid rectangle which is outside of stableImg
 						IMQS_ASSERT(false); // WarpScore brute force algo assumes all delta positions are populated.
 						continue;
 					}
-					int32_t sum = DiffSum(warpImgG, stableImgG, rect1, r2);
+					int32_t sum = DiffSum(*warpImg, *stableImg, rect1, r2);
 					IMQS_ASSERT(sum >= 0);
 					scores.At(c.x - warpMeshValidRect.x1, c.y - warpMeshValidRect.y1, dx - dxMin, dy - dyMin) = sum;
 				}
@@ -639,8 +661,8 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& 
 	}
 
 	if (drawDebugImages) {
-		DrawMesh("mesh-prefilter-0.png", stableImg, warpMesh, true);
-		DrawMesh("mesh-prefilter-1.png", warpImg, warpMesh, false);
+		DrawMesh("mesh-prefilter-0.png", *stableImg, warpMesh, true);
+		DrawMesh("mesh-prefilter-1.png", *warpImg, warpMesh, false);
 	}
 
 	bool hasMassiveOutliers = true;
@@ -676,11 +698,11 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& 
 				for (int dx = dxMin; dx <= dxMax; dx++) {
 					Rect32 r2 = rect2;
 					r2.Offset(dx, dy);
-					if (r2.x1 < 0 || r2.y1 < 0 || r2.x2 > stableImgG.Width || r2.y2 > stableImgG.Height) {
+					if (r2.x1 < 0 || r2.y1 < 0 || r2.x2 > stableImg->Width || r2.y2 > stableImg->Height) {
 						// skip invalid rectangle which is outside of stableImg
 						continue;
 					}
-					int32_t sum = DiffSum(warpImgG, stableImgG, rect1, r2);
+					int32_t sum = DiffSum(*warpImg, *stableImg, rect1, r2);
 					//avgSum += sum;
 					if (sum < bestSum) {
 						bestSum = sum;
@@ -729,8 +751,8 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, gfx::Image& 
 	//UpdateHistoryMesh(warpMesh);
 
 	if (drawDebugImages) {
-		DrawMesh("mesh-postfilter-0.png", stableImg, warpMesh, true);
-		DrawMesh("mesh-postfilter-1.png", warpImg, warpMesh, false);
+		DrawMesh("mesh-postfilter-0.png", *stableImg, warpMesh, true);
+		DrawMesh("mesh-postfilter-1.png", *warpImg, warpMesh, false);
 	}
 	//warpMesh.DrawFlowImage(warpMeshValidRect, "flow-diagram.png");
 
@@ -858,19 +880,30 @@ void OpticalFlow2::DrawMesh(std::string filename, const gfx::Image& img, const M
 
 // Compute sum of absolute differences
 static int32_t DiffSum(const Image& img1, const Image& img2, Rect32 rect1, Rect32 rect2) {
-	IMQS_ASSERT(img1.Format == ImageFormat::Gray);
-	IMQS_ASSERT(img2.Format == ImageFormat::Gray);
+	IMQS_ASSERT(img1.Format == img2.Format);
+	IMQS_ASSERT(img1.NumChannels() == 1 || img1.NumChannels() == 4);
 	IMQS_ASSERT(rect1.Width() == rect2.Width());
 	IMQS_ASSERT(rect1.Height() == rect2.Height());
 	int     w   = rect1.Width();
 	int     h   = rect1.Height();
 	int32_t sum = 0;
 	for (int y = 0; y < h; y++) {
-		const uint8_t* p1 = img1.At(rect1.x1, rect1.y1 + y);
-		const uint8_t* p2 = img2.At(rect2.x1, rect2.y1 + y);
-		for (int x = 0; x < w; x++) {
-			int d = (int) p1[x] - (int) p2[x];
-			sum += abs(d);
+		if (img1.NumChannels() == 1) {
+			const uint8_t* p1 = img1.At(rect1.x1, rect1.y1 + y);
+			const uint8_t* p2 = img2.At(rect2.x1, rect2.y1 + y);
+			for (int x = 0; x < w; x++) {
+				int d = (int) p1[x] - (int) p2[x];
+				sum += abs(d);
+			}
+		} else {
+			const Color8* p1 = (const Color8*) img1.At(rect1.x1, rect1.y1 + y);
+			const Color8* p2 = (const Color8*) img2.At(rect2.x1, rect2.y1 + y);
+			for (int x = 0; x < w; x++) {
+				int r = abs((int) p1[x].r - (int) p2[x].r);
+				int g = abs((int) p1[x].g - (int) p2[x].g);
+				int b = abs((int) p1[x].b - (int) p2[x].b);
+				sum += r + g + b;
+			}
 		}
 	}
 	return sum;
@@ -899,20 +932,32 @@ static double ImageStdDev(const Image& img, Rect32 crop) {
 static void LocalContrast(Image& img, int size, int iterations) {
 	Image blur = img;
 	blur.BoxBlur(size, iterations);
+	//blur.SaveFile("blur.png");
 	for (int y = 0; y < img.Height; y++) {
 		uint8_t* src = blur.Line(y);
 		uint8_t* dst = img.Line(y);
-		for (int x = 0; x < img.Width; x++) {
-			int diff = (int) *dst - (int) *src;
-			diff *= 2; // this is just to make things easier to see, but results are identical. we actually want 1x scale to best get rid of clipping
-			diff += 127;
-			if (diff < 0)
-				diff = 0;
-			if (diff > 255)
-				diff = 255;
-			*dst = diff;
-			src++;
-			dst++;
+		if (img.NumChannels() == 1) {
+			for (int x = 0; x < img.Width; x++) {
+				int diff = (int) *dst - (int) *src;
+				*dst     = (uint8_t) math::Clamp<int>(diff * DebugBrightenLocalContrast + 127, 0, 255);
+				src++;
+				dst++;
+			}
+		} else {
+			IMQS_ASSERT(img.NumChannels() == 4);
+			for (int x = 0; x < img.Width; x++) {
+				int diffR = (int) dst[0] - (int) src[0];
+				int diffG = (int) dst[1] - (int) src[1];
+				int diffB = (int) dst[2] - (int) src[2];
+				diffR     = math::Clamp<int>(diffR * DebugBrightenLocalContrast + 127, 0, 255);
+				diffG     = math::Clamp<int>(diffG * DebugBrightenLocalContrast + 127, 0, 255);
+				diffB     = math::Clamp<int>(diffB * DebugBrightenLocalContrast + 127, 0, 255);
+				dst[0]    = (uint8_t) diffR;
+				dst[1]    = (uint8_t) diffG;
+				dst[2]    = (uint8_t) diffB;
+				src += 4;
+				dst += 4;
+			}
 		}
 	}
 }

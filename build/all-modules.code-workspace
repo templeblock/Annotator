@@ -28,7 +28,8 @@
 			"algorithm": "cpp",
 			"*.ipp": "cpp",
 			"array": "cpp",
-			"vector": "cpp"
+			"vector": "cpp",
+			"*.cuh": "cpp"
 		}
 	}
 }
