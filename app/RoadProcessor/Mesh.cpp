@@ -56,7 +56,7 @@ void Mesh::ResetUniformRectangular(gfx::Vec2f topLeft, gfx::Vec2f topRight, gfx:
 // implement vignetting for lensfun, then this might become relevant again. It might give us
 // slightly improved resolution. The reason it "might", is because the camera could be focused
 // a little bit away from the nearest point (aka the bottom of the sensor).
-void Mesh::ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius) {
+void Mesh::ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius, bool moveBottomRowToBottomOfImage) {
 	// This is for the typical case, where we're generating a warp mesh from a flattened camera frame.
 	for (int y = 0; y < Height; y++) {
 		for (int x = 0; x < Width; x++) {
@@ -77,14 +77,14 @@ void Mesh::ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius
 	// vertices for optical flow, because they lie in the highest resolution area of the camera, where
 	// we care about the image the most.
 	// SEE COMMENT ABOVE FUNCTION
-	/*
-	int y = Height - 2;
-	for (int x = 0; x < Width; x++) {
-		auto& p = At(x, y);
-		p.Pos.y = imgHeight - matchRadius;
-		p.UV.y  = imgHeight - matchRadius;
+	if (moveBottomRowToBottomOfImage) {
+		int y = Height - 2;
+		for (int x = 0; x < Width; x++) {
+			auto& p = At(x, y);
+			p.Pos.y = imgHeight - matchRadius;
+			p.UV.y  = imgHeight - matchRadius;
+		}
 	}
-	*/
 }
 
 void Mesh::TransformTargets(gfx::Vec2f translate) {

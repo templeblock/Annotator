@@ -7,6 +7,7 @@ namespace imqs {
 namespace roadproc {
 int Speed(argparse::Args& args);
 int Speed2(argparse::Args& args);
+int Speed3(argparse::Args& args);
 int Stitch(argparse::Args& args);
 int Stitch2(argparse::Args& args);
 int WebTiles(argparse::Args& args);
@@ -84,6 +85,13 @@ int main(int argc, char** argv) {
 	                              Speed2);
 	speed2->AddSwitch("", "csv", "Write CSV output (otherwise JSON)");
 	speed2->AddValue("o", "outfile", "Write output to file", "stdout");
+
+	auto speed3 = args.AddCommand("speed3 <zy> <video[,video2][...]>",
+	                              "Compute car speed from interframe differences\nOne or more videos can be specified."
+	                              " Separate multiple videos with commas. This version uses optical flow on flattened images",
+	                              Speed3);
+	speed3->AddSwitch("", "csv", "Write CSV output (otherwise JSON)");
+	speed3->AddValue("o", "outfile", "Write output to file", "stdout");
 
 	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
 	auto stitch      = args.AddCommand("stitch <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);

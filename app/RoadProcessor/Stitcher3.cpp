@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Stitcher2.h"
+#include "Stitcher3.h"
 #include "FeatureTracking.h"
 #include "Globals.h"
 #include "Perspective.h"
@@ -27,29 +27,18 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
-Stitcher2::Stitcher2() {
+Stitcher3::Stitcher3() {
 	//ClearColor = Color8(0, 150, 0, 60);
 	ClearColor = Color8(0, 0, 0, 0);
 }
 
-Error Stitcher2::Initialize(string bitmapDir, string videoFile, float zx, float zy, double seconds, PerspectiveParams& pp, Frustum& frustum, gfx::Vec2f& flatOrigin) {
+Error Stitcher3::Initialize(string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds, PerspectiveParams& pp, Frustum& frustum, gfx::Vec2f& flatOrigin) {
 	auto err = InfBmp.Initialize(bitmapDir);
 	if (!err.OK())
 		return err;
 
-	err = Video.OpenFile(videoFile);
-	if (!err.OK())
-		return err;
-
-	err = Video.SeekToSecond(seconds, video::Seek::Any);
-	if (!err.OK())
-		return err;
-
-	if (global::Lens != nullptr) {
-		err = global::Lens->InitializeDistortionCorrect(Video.Width(), Video.Height());
-		if (!err.OK())
-			return err;
-	}
+	VidStitcher.DebugStartVideoAt = seconds;
+	VidStitcher.Start(videoFiles, zy);
 
 	//err = Rend.Initialize(4096, 3072);
 	//err = Rend.Initialize(5120, 4096);
@@ -74,7 +63,7 @@ Error Stitcher2::Initialize(string bitmapDir, string videoFile, float zx, float 
 	return Error();
 }
 
-Error Stitcher2::DoStitch(Phases phase, string tempDir, string bitmapDir, string videoFile, std::string trackFile, float zx, float zy, double seconds, int count) {
+Error Stitcher3::DoStitch(Phases phase, string tempDir, string bitmapDir, string videoFile, std::string trackFile, float zx, float zy, double seconds, int count) {
 	TempDir = tempDir;
 
 	string localBitmapDir = bitmapDir;
@@ -108,7 +97,7 @@ Error Stitcher2::DoStitch(Phases phase, string tempDir, string bitmapDir, string
 	return Error();
 }
 
-Error Stitcher2::DoStitchInitial(PerspectiveParams pp, Frustum frustum, gfx::Vec2f flatOrigin, double seconds, int count) {
+Error Stitcher3::DoStitchInitial(PerspectiveParams pp, Frustum frustum, gfx::Vec2f flatOrigin, double seconds, int count) {
 	Image flat;
 	flat.Alloc(gfx::ImageFormat::RGBAP, frustum.Width, frustum.Height);
 	flat.Fill(0);
@@ -248,7 +237,7 @@ Error Stitcher2::DoStitchInitial(PerspectiveParams pp, Frustum frustum, gfx::Vec
 	return Error();
 }
 
-Error Stitcher2::DoGeoReference(PerspectiveParams pp, Frustum frustum, gfx::Vec2f flatOrigin, double seconds, int count) {
+Error Stitcher3::DoGeoReference(PerspectiveParams pp, Frustum frustum, gfx::Vec2f flatOrigin, double seconds, int count) {
 	Image flat;
 	flat.Alloc(gfx::ImageFormat::RGBAP, frustum.Width, frustum.Height);
 	flat.Fill(0);
@@ -268,7 +257,7 @@ Error Stitcher2::DoGeoReference(PerspectiveParams pp, Frustum frustum, gfx::Vec2
 	return Error();
 }
 
-Error Stitcher2::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirection) {
+Error Stitcher3::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirection) {
 	auto isInside = [&](Vec2f p) {
 		return p.x >= 0 && p.y >= 0 && p.x < Rend.FBWidth && p.y < Rend.FBHeight;
 	};
@@ -338,7 +327,7 @@ Error Stitcher2::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirect
 	return Error();
 }
 
-float Stitcher2::AverageBrightness(const gfx::Image& img) {
+float Stitcher3::AverageBrightness(const gfx::Image& img) {
 	int64_t b = 0;
 	for (int y = 0; y < img.Height; y++) {
 		const uint8_t* src = img.Line(y);
@@ -352,7 +341,7 @@ float Stitcher2::AverageBrightness(const gfx::Image& img) {
 	return (float) ((double) b / double(img.Width * img.Height));
 }
 
-void Stitcher2::SetupMesh(int srcWidth, int srcHeight, int flowMatchRadius, Mesh& m) {
+void Stitcher3::SetupMesh(int srcWidth, int srcHeight, int flowMatchRadius, Mesh& m) {
 	int pixelsPerAlignCell = flowMatchRadius;
 	int mWidth             = (srcWidth + pixelsPerAlignCell - 1) / PixelsPerMeshCell;
 	int mHeight            = (srcHeight + pixelsPerAlignCell - 1) / PixelsPerMeshCell;
@@ -391,15 +380,15 @@ int Stitch2(argparse::Args& args) {
 	int    iphase    = args.GetInt("phase");
 	double seek      = atof(args.Get("start").c_str());
 
-	Stitcher2::Phases phase;
+	Stitcher3::Phases phase;
 	if (iphase == 1)
-		phase = Stitcher2::Phases::InitialStitch;
+		phase = Stitcher3::Phases::InitialStitch;
 	else if (iphase == 2)
-		phase = Stitcher2::Phases::GeoReference;
+		phase = Stitcher3::Phases::GeoReference;
 
 	string    tmpDir = "/home/ben/stitch-temp";
 	string    bmpDir = "/home/ben/inf";
-	Stitcher2 s;
+	Stitcher3 s;
 	auto      err = s.DoStitch(phase, tmpDir, bmpDir, videoFile, trackFile, zx, zy, seek, count);
 	if (!err.OK()) {
 		tsf::print("Error: %v\n", err.Message());

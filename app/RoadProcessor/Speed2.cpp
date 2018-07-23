@@ -30,7 +30,7 @@ static void SetupMesh(int srcWidth, int srcHeight, int matchHeight, int pixelsPe
 	int mWidth             = (srcWidth + pixelsPerAlignCell - 1) / pixelsPerMeshCell;
 	int mHeight            = (matchHeight + pixelsPerAlignCell - 1) / pixelsPerMeshCell;
 	m.Initialize(mWidth, mHeight);
-	m.ResetIdentityForWarpMesh(srcWidth, matchHeight, flowMatchRadius);
+	m.ResetIdentityForWarpMesh(srcWidth, matchHeight, flowMatchRadius, false);
 	// move the mesh to the bottom of the image
 	for (int i = 0; i < m.Count; i++) {
 		m.Vertices[i].Pos.y += srcHeight - matchHeight;
@@ -317,7 +317,7 @@ static Error DoSpeed2(vector<string> videoFiles, SpeedOutputMode outputMode, str
 	fclose(outf);
 
 	return Error();
-} // namespace roadproc
+}
 
 int Speed2(argparse::Args& args) {
 	auto videoFiles = strings::Split(args.Params[0], ',');

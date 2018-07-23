@@ -7,6 +7,9 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
+// NOTE: If we end up struggling with the shadow of the car, then we should try using linear light,
+// during the LocalContrast step.
+
 // this is just to make things easier to see when debugging images, but results are identical. we actually want 1x scale to minimize clipping
 const int DebugBrightenLocalContrast = 1;
 
@@ -485,16 +488,6 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 		stableImg     = &stableImgCopy;
 	}
 
-	LocalContrast(*warpImg, 1, 5);
-	LocalContrast(*stableImg, 1, 5);
-
-	if (drawDebugImages) {
-		_warpImg.SaveFile("rawWarpImg.png");
-		_stableImg.SaveFile("rawStableImg.png");
-		warpImg->SaveFile("warpImg.png");
-		stableImg->SaveFile("stableImg.png");
-	}
-
 	int minHSearch = -StableHSearchRange;
 	int maxHSearch = StableHSearchRange;
 	int minVSearch = -StableVSearchRange;
@@ -515,10 +508,6 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 		maxHSearch = AbsMaxHSearch;
 		minVSearch = AbsMinVSearch;
 		maxVSearch = AbsMaxVSearch;
-	}
-
-	if (frameNumber == 1) {
-		int abc = 123;
 	}
 
 	// We're aligning on whole pixels here
@@ -560,12 +549,20 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 
 	// compute a box around all of the warp grid cells that are valid
 	vector<Point32> validCells;
-	Rect32          warpMeshValidRect = Rect32::Inverted();
+	Rect32          warpMeshValidRect  = Rect32::Inverted();
+	Rect32          warpImgValidRect   = Rect32::Inverted();
+	Rect32          stableImgValidRect = Rect32::Inverted();
 	for (int y = 0; y < warpMesh.Height; y++) {
 		for (int x = 0; x < warpMesh.Width; x++) {
 			if (warpMesh.At(x, y).IsValid) {
 				validCells.emplace_back(x, y);
 				warpMeshValidRect.ExpandToFit(x, y);
+				auto uv  = warpMesh.At(x, y).UV;
+				auto pos = warpMesh.At(x, y).Pos;
+				warpImgValidRect.ExpandToFit(uv.x - MatchRadius, uv.y - MatchRadius);
+				warpImgValidRect.ExpandToFit(uv.x + MatchRadius, uv.y + MatchRadius);
+				stableImgValidRect.ExpandToFit(pos.x - MatchRadius + minHSearch, pos.y - MatchRadius + minVSearch);
+				stableImgValidRect.ExpandToFit(pos.x + MatchRadius + maxHSearch, pos.y + MatchRadius + maxVSearch);
 			}
 		}
 	}
@@ -577,6 +574,29 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 	IMQS_ASSERT(warpMeshValidRect.y2 <= warpMesh.Height);
 
 	//warpMesh.PrintValid();
+
+	// It is pointless applying our transformations to areas of the image that won't be read, so we ensure
+	// that we're only doing this on relevant parts of the image.
+	// Because we're doing a blur, we make sure that we buffer the rectangle a little.
+	auto stableRectBuffer = stableImgValidRect;
+	auto warpRectBuffer   = warpImgValidRect;
+	stableRectBuffer.Expand(10, 10);
+	warpRectBuffer.Expand(10, 10);
+	stableRectBuffer.CropTo(Rect32(0, 0, stableImg->Width, stableImg->Height));
+	warpRectBuffer.CropTo(Rect32(0, 0, warpImg->Width, warpImg->Height));
+	auto stableImgValid = stableImg->Window(stableRectBuffer);
+	auto warpImgValid   = warpImg->Window(warpRectBuffer);
+	LocalContrast(warpImgValid, 1, 5);
+	LocalContrast(stableImgValid, 1, 5);
+
+	if (drawDebugImages) {
+		_warpImg.SaveFile("imgRawWarp.png");
+		_stableImg.SaveFile("imgRawStable.png");
+		warpImg->SaveFile("imgModWarp.png");
+		stableImg->SaveFile("imgModStable.png");
+		warpImgValid.SaveFile("imgValidWarp.png");
+		stableImgValid.SaveFile("imgValidStable.png");
+	}
 
 	// Run multiple passes, where at the end of each pass, we perform maximum likelihood filtering, and then
 	// on the subsequent pass, restrict the search window to a much smaller region.
@@ -658,11 +678,10 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 			if (debugMedianFilter)
 				warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
 		}
-	}
-
-	if (drawDebugImages) {
-		DrawMesh("mesh-prefilter-0.png", *stableImg, warpMesh, true);
-		DrawMesh("mesh-prefilter-1.png", *warpImg, warpMesh, false);
+		if (drawDebugImages) {
+			DrawMesh("mesh-prefilter-0.png", *stableImg, warpMesh, true);
+			DrawMesh("mesh-prefilter-1.png", *warpImg, warpMesh, false);
+		}
 	}
 
 	bool hasMassiveOutliers = true;
@@ -725,6 +744,10 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 
 		//if (debugMedianFilter)
 		//	warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
+		if (pass == 0 && drawDebugImages) {
+			DrawMesh("mesh-prefilter-0.png", *stableImg, warpMesh, true);
+			DrawMesh("mesh-prefilter-1.png", *warpImg, warpMesh, false);
+		}
 
 		int maxFilterPasses = 10;
 		//int       maxFilterPasses = 0;

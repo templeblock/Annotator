@@ -24,8 +24,8 @@ def write_geojson_sections():
 	}
 	first = None
 	pts = []
-	#for i in range(len(j)):
-	for i in range(500):
+	for i in range(len(j)):
+	#for i in range(500):
 		if first is None:
 			first = j[0]['time']
 		if i != 0 and (i % 20 == 0 or i == len(j) - 1):
@@ -54,5 +54,6 @@ def write_csv_points():
 	for p in j:
 		print("{},{},{},{}".format(p['time'], p['speed'], p['lat'], p['lon']))
 
-write_csv_points()
+write_geojson_sections()
+#write_csv_points()
 

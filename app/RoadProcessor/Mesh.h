@@ -29,7 +29,7 @@ public:
 
 	void       Initialize(int width, int height);
 	void       ResetUniformRectangular(gfx::Vec2f topLeft, gfx::Vec2f topRight, gfx::Vec2f bottomLeft, int imgWidth, int imgHeight);
-	void       ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius);
+	void       ResetIdentityForWarpMesh(int imgWidth, int imgHeight, int matchRadius, bool moveBottomRowToBottomOfImage);
 	void       TransformTargets(gfx::Vec2f translate);
 	Error      SaveCompact(std::string filename);
 	Error      LoadCompact(std::string filename);

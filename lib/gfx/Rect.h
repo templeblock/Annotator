@@ -56,6 +56,15 @@ public:
 		ExpandToFit(r.x1, r.y1);
 		ExpandToFit(r.x2, r.y2);
 	}
+
+	void CropTo(const Rect& r) {
+		if (r.IsInverted())
+			return;
+		x1 = std::max(x1, r.x1);
+		y1 = std::max(y1, r.y1);
+		x2 = std::min(x2, r.x2);
+		y2 = std::min(y2, r.y2);
+	}
 };
 
 typedef Rect<int32_t> Rect32;
