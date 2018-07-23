@@ -127,6 +127,13 @@ Error VideoStitcher::Next() {
 	return Error();
 }
 
+Rect32 VideoStitcher::CropRectFromFullFlat() {
+	Rect32 crop((Frustum.Width - FlatWidth) / 2, Frustum.Height - FlatHeight, 0, 0);
+	crop.x2 = crop.x1 + FlatWidth;
+	crop.y2 = crop.y1 + FlatHeight;
+	return crop;
+}
+
 Error VideoStitcher::LoadNextFrame() {
 	auto err = Video.DecodeFrameRGBA(Frame.Width, Frame.Height, Frame.Data, Frame.Stride);
 	if (err == ErrEOF) {
@@ -170,9 +177,7 @@ void VideoStitcher::RemovePerspective() {
 	// GPU with copyback to CPU:	6:00     -- the culprit is glReadPixels/GPU latency.
 	// Only decode video:			2:40
 
-	Rect32 cropRect((Frustum.Width - FlatWidth) / 2, Frustum.Height - FlatHeight, 0, 0);
-	cropRect.x2 = cropRect.x1 + FlatWidth;
-	cropRect.y2 = cropRect.y1 + FlatHeight;
+	Rect32 cropRect = CropRectFromFullFlat();
 
 	if (EnableCPUPerspectiveRemoval) {
 		// CPU
@@ -191,10 +196,13 @@ void VideoStitcher::RemovePerspective() {
 		Rend.RemovePerspective(Frame, PP);
 		//rend.CopyDeviceToImage(Rect32(0, 0, frustum.Width, frustum.Height), 0, 0, flat);
 		//flat.SaveJpeg("speed2-flat-GPU.jpeg");
-		Rend.CopyDeviceToImage(cropRect, 0, 0, Flat);
 		//exit(1);
-		if (EnableFullFlatOutput)
+		if (EnableFullFlatOutput) {
 			Rend.CopyDeviceToImage(Rect32(0, 0, FullFlat.Width, FullFlat.Height), 0, 0, FullFlat);
+			Flat.CopyFrom(FullFlat, cropRect, 0, 0);
+		} else {
+			Rend.CopyDeviceToImage(cropRect, 0, 0, Flat);
+		}
 	}
 
 	//flat.SaveFile(tsf::fmt("flat-%d.png", iFrame));
@@ -207,10 +215,9 @@ Error VideoStitcher::ComputeStitch() {
 	bool       didReset = false;
 	CheckSyncRestart(absFlowResult, didReset);
 
-	Mesh mesh;
-	SetupMesh(Flat.Width, Flat.Height, MatchHeight, PixelsPerMeshCell, Flow.MatchRadius, mesh);
-	auto flowResult = Flow.Frame(mesh, roadproc::Frustum(), Flat, FlatPrev, FlowBias);
-	auto disp       = mesh.AvgValidDisplacement();
+	SetupMesh(Mesh);
+	auto flowResult = Flow.Frame(Mesh, roadproc::Frustum(), Flat, FlatPrev, FlowBias);
+	auto disp       = Mesh.AvgValidDisplacement();
 	if (disp.size() == 0) {
 		// do this to avoid any infinities
 		disp = Vec2f(0, -0.01f);
@@ -257,8 +264,8 @@ void VideoStitcher::CheckSyncRestart(FlowResult& absFlowResult, bool& didReset) 
 	absFlowResult = FlowResult();
 	didReset      = false;
 	if (AbsRestart <= 0 || NeedResync) {
-		Mesh mesh;
-		SetupMesh(Flat.Width, Flat.Height, MatchHeight, PixelsPerMeshCell, Flow.MatchRadius, mesh);
+		roadproc::Mesh mesh;
+		SetupMesh(mesh);
 		Vec2f        bias(0, 0);
 		OpticalFlow2 flowAbs;
 		absFlowResult       = flowAbs.Frame(mesh, roadproc::Frustum(), Flat, FlatPrev, bias);
@@ -297,7 +304,11 @@ void VideoStitcher::PrintRemainingTime() {
 	fflush(stdout);
 }
 
-void VideoStitcher::SetupMesh(int srcWidth, int srcHeight, int matchHeight, int pixelsPerMeshCell, int flowMatchRadius, Mesh& m) {
+void VideoStitcher::SetupMesh(roadproc::Mesh& m) {
+	SetupMesh(Flat.Width, Flat.Height, MatchHeight, PixelsPerMeshCell, Flow.MatchRadius, m);
+}
+
+void VideoStitcher::SetupMesh(int srcWidth, int srcHeight, int matchHeight, int pixelsPerMeshCell, int flowMatchRadius, roadproc::Mesh& m) {
 	// matchHeight is something like 200, and srcHeight is something like 500
 	// We are only interested in matching the bottom 200 pixels, to the "previous" frame, which
 	// is something like 500 pixels big (all frames are the same size).

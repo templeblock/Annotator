@@ -158,6 +158,9 @@ void main()
 	float z = extra.x * uvnorm.x + extra.y * uvnorm.y + extra.w;
 	uvnorm = (1.0 / z) * uvnorm;
 	vec2 uvr = uvnorm + vec2(0.5, 0.5);
+	if (uvr.x < 0.0 || uvr.x > 1.0) {
+		c *= 0.0;
+	}
     gl_FragColor = texture2D(tex, uvr) * c;
 }
 )";
@@ -228,8 +231,10 @@ Error MeshRenderer::Initialize(int fbWidth, int fbHeight) {
 }
 
 void MeshRenderer::Destroy() {
-	if (Window)
+	if (Window) {
+		//MakeCurrent();
 		glfwDestroyWindow(Window);
+	}
 	if (IsInitialized) {
 		glfwTerminate();
 		IsInitialized = false;
@@ -237,11 +242,13 @@ void MeshRenderer::Destroy() {
 }
 
 void MeshRenderer::Clear(gfx::Color8 color) {
+	MakeCurrent();
 	glClearColor(color.RLinear(), color.GLinear(), color.BLinear(), color.Af());
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
 void MeshRenderer::CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, Image& img) {
+	MakeCurrent();
 	if (img.Width == 0) {
 		img.Alloc(ImageFormat::RGBAP, srcRect.Width(), srcRect.Height());
 	} else {
@@ -255,6 +262,7 @@ void MeshRenderer::CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, Im
 }
 
 void MeshRenderer::CopyImageToDevice(const gfx::Image& img, int dstX, int dstY) {
+	MakeCurrent();
 	Vec2f topLeft  = Vec2f((float) dstX, (float) dstY);
 	Vec2f topRight = topLeft + Vec2f(img.Width, 0);
 	Vec2f botLeft  = topLeft + Vec2f(0, img.Height);
@@ -264,10 +272,12 @@ void MeshRenderer::CopyImageToDevice(const gfx::Image& img, int dstX, int dstY) 
 }
 
 void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect) {
+	MakeCurrent();
 	DrawMeshWithShader(CopyShader, m, img, meshRenderRect);
 }
 
 void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect) {
+	MakeCurrent();
 	if (meshRenderRect.IsInverted())
 		meshRenderRect = Rect32(0, 0, m.Width, m.Height);
 	auto mr = meshRenderRect;
@@ -376,6 +386,7 @@ void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::I
 }
 
 void MeshRenderer::RemovePerspective(const gfx::Image& camera, PerspectiveParams pp) {
+	MakeCurrent();
 	auto frustum = ComputeFrustum(camera.Width, camera.Height, pp);
 	Mesh m;
 	m.Initialize(2, 2);
@@ -405,12 +416,14 @@ void MeshRenderer::RemovePerspective(const gfx::Image& camera, PerspectiveParams
 }
 
 void MeshRenderer::SaveToFile(std::string filename) {
+	MakeCurrent();
 	Image img;
 	CopyDeviceToImage(Rect32(0, 0, FBWidth, FBHeight), 0, 0, img);
 	img.SaveFile(filename);
 }
 
 Error MeshRenderer::DrawHelloWorldTriangle() {
+	MakeCurrent();
 	GLuint vertex_buffer, vertex_shader, fragment_shader, program;
 	GLint  mvp_location, vpos_location, vcol_location;
 	float  ratio;
@@ -503,6 +516,10 @@ static Error CheckShaderCompilation(const std::string& shaderSrc, GLuint shader)
 	if (compileStat == 0)
 		return Error::Fmt("Shader failed to compile\nShader: %.50s\nError: %v", shaderSrc, ibuff);
 	return Error();
+}
+
+void MeshRenderer::MakeCurrent() {
+	glfwMakeContextCurrent(Window);
 }
 
 Error MeshRenderer::CompileShader(std::string vertexSrc, std::string fragSrc, GLuint& shader) {

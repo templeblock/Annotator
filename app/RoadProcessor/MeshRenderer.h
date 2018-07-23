@@ -38,6 +38,7 @@ private:
 	GLuint      FBO           = -1;
 	GLuint      FBTex         = -1;
 
+	void  MakeCurrent();
 	Error CompileShader(std::string vertexSrc, std::string fragSrc, GLuint& shader);
 };
 

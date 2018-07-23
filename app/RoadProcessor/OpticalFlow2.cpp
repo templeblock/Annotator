@@ -779,105 +779,101 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 	}
 	//warpMesh.DrawFlowImage(warpMeshValidRect, "flow-diagram.png");
 
-	// Fill the remaining invalid cells
+	if (ExtrapolateInvalidCells) {
+		// Fill the remaining invalid cells
 
-	// Start by setting all invalid cells to the average displacement
-	Vec2f avgDisp(0, 0);
-	float avgScale = 1.0f / (float) validCells.size();
-	for (auto& c : validCells)
-		avgDisp += avgScale * (warpMesh.At(c.x, c.y).Pos - warpMesh.At(c.x, c.y).UV);
+		// Start by setting all invalid cells to the average displacement
+		Vec2f avgDisp(0, 0);
+		float avgScale = 1.0f / (float) validCells.size();
+		for (auto& c : validCells)
+			avgDisp += avgScale * (warpMesh.At(c.x, c.y).Pos - warpMesh.At(c.x, c.y).UV);
 
-	vector<Point32> remain;
-	for (int y = 0; y < warpMesh.Height; y++) {
-		for (int x = 0; x < warpMesh.Width; x++) {
-			if (!warpMesh.At(x, y).IsValid) {
-				warpMesh.At(x, y).Pos = warpMesh.At(x, y).UV + avgDisp;
-				remain.emplace_back(x, y);
-			}
-		}
-	}
-
-	// For cells higher up, make their horizontal drift = 0, so that we force the system to always move forward in a straight line
-	// UPDATE: make them homogenous in X and Y
-	if (true) {
-		//warpMesh.DrawFlowImage("flow-diagram-all.png");
-		//for (int y = 0; y < warpMeshValidRect.y1; y++) {
-		//	for (int x = 0; x < warpMesh.Width; x++) {
-		//		warpMesh.At(x, y).Pos.x = warpMesh.At(x, y).UV.x + bias.x;
-		//	}
-		//}
-		// This limit here.. the "-4", is intimately tied to the mesh rect that we stitch inside Stitcher2,
-		// right before it calls Rend.DrawMesh().
-		for (int y = 0; y < warpMesh.Height - 5; y++) {
-			for (int x = 0; x < warpMesh.Width; x++) {
-				//warpMesh.At(x, y).Pos.x   = warpMesh.At(x, y).UV.x + bias.x; // lock horizontal drift (bad hack)
-				warpMesh.At(x, y).Pos.x   = warpMesh.At(x, y).UV.x + avgDisp.x;
-				warpMesh.At(x, y).Pos.y   = warpMesh.At(x, y).UV.y + avgDisp.y;
-				warpMesh.At(x, y).IsValid = false;
-			}
-		}
-		//warpMesh.DrawFlowImage("flow-diagram-all.png");
-	}
-
-	// smooth the invalid cells (but not too high up, since they aren't aligned at all, so that's just computation wasted)
-	{
-		DeltaGrid dg;
-		int       y1 = warpMesh.Height / 2;
-		CopyMeshToDelta(warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height), dg, bias);
-		BlurInvalid(dg, 3);
-		CopyDeltaToMesh(dg, warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height), bias);
-		//warpMesh.DrawFlowImage("flow-diagram-all.png");
-	}
-
-	// For the cells at the bottom, clone from vertex above
-	for (int x = 0; x < warpMesh.Width; x++) {
-		auto delta                              = warpMesh.At(x, warpMesh.Height - 2).Pos - warpMesh.At(x, warpMesh.Height - 2).UV;
-		warpMesh.At(x, warpMesh.Height - 1).Pos = warpMesh.At(x, warpMesh.Height - 1).UV + delta;
-	}
-
-	// lower the opacity of the invalid cells on the bottom
-	for (int y = warpMesh.Height - 2; y < warpMesh.Height; y++) {
-		for (int x = 0; x < warpMesh.Width; x++) {
-			if (!warpMesh.At(x, y).IsValid)
-				warpMesh.At(x, y).Color.a = 0;
-		}
-	}
-
-	// lower the opacity of ALL cells on the bottom
-	// Why? Because the outer edges of the frame are darker, because of the cheap lens
-	//for (int y = warpMesh.Height - 2; y < warpMesh.Height; y++) {
-	//	for (int x = 0; x < warpMesh.Width; x++) {
-	//		warpMesh.At(x, y).Color.a = 0;
-	//	}
-	//}
-
-	// lower the opacity of all cells outside of the frustum
-	// NOTE: This is a poor substitute for aligning the outer triangular edges
-	// via optical flow. Right now I want to avoid doing that alignment, because
-	// of the expensive cost of reading a MUCH larger portion of the framebuffer
-	// on which to perform alignment. I will be even more expensive once we do rotation.
-	if (haveFrustum) {
+		vector<Point32> remain;
 		for (int y = 0; y < warpMesh.Height; y++) {
 			for (int x = 0; x < warpMesh.Width; x++) {
-				Vec2f p = warpMesh.At(x, y).UV;
-				// a larger buffer generally improves the quality of the stitching, in the absence of doing any optical flow
-				// on the periphery.
-				int buffer = 200;
-				if (!geom2d::PtInsidePoly(p.x - buffer, p.y, 4, &warpFrustumPoly[0].x, 2) || !geom2d::PtInsidePoly(p.x + buffer, p.y, 4, &warpFrustumPoly[0].x, 2))
+				if (!warpMesh.At(x, y).IsValid) {
+					warpMesh.At(x, y).Pos = warpMesh.At(x, y).UV + avgDisp;
+					remain.emplace_back(x, y);
+				}
+			}
+		}
+
+		// For cells higher up, make their horizontal drift = 0, so that we force the system to always move forward in a straight line
+		// UPDATE: make them homogenous in X and Y
+		if (true) {
+			//warpMesh.DrawFlowImage("flow-diagram-all.png");
+			//for (int y = 0; y < warpMeshValidRect.y1; y++) {
+			//	for (int x = 0; x < warpMesh.Width; x++) {
+			//		warpMesh.At(x, y).Pos.x = warpMesh.At(x, y).UV.x + bias.x;
+			//	}
+			//}
+			// This limit here.. the "-4", is intimately tied to the mesh rect that we stitch inside Stitcher2,
+			// right before it calls Rend.DrawMesh().
+			for (int y = 0; y < warpMesh.Height - 5; y++) {
+				for (int x = 0; x < warpMesh.Width; x++) {
+					//warpMesh.At(x, y).Pos.x   = warpMesh.At(x, y).UV.x + bias.x; // lock horizontal drift (bad hack)
+					warpMesh.At(x, y).Pos.x   = warpMesh.At(x, y).UV.x + avgDisp.x;
+					warpMesh.At(x, y).Pos.y   = warpMesh.At(x, y).UV.y + avgDisp.y;
+					warpMesh.At(x, y).IsValid = false;
+				}
+			}
+			//warpMesh.DrawFlowImage("flow-diagram-all.png");
+		}
+
+		// smooth the invalid cells (but not too high up, since they aren't aligned at all, so that's just computation wasted)
+		{
+			DeltaGrid dg;
+			int       y1 = warpMesh.Height / 2;
+			CopyMeshToDelta(warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height), dg, bias);
+			BlurInvalid(dg, 3);
+			CopyDeltaToMesh(dg, warpMesh, Rect32(0, y1, warpMesh.Width, warpMesh.Height), bias);
+			//warpMesh.DrawFlowImage("flow-diagram-all.png");
+		}
+
+		// For the cells at the bottom, clone from vertex above
+		for (int x = 0; x < warpMesh.Width; x++) {
+			auto delta                              = warpMesh.At(x, warpMesh.Height - 2).Pos - warpMesh.At(x, warpMesh.Height - 2).UV;
+			warpMesh.At(x, warpMesh.Height - 1).Pos = warpMesh.At(x, warpMesh.Height - 1).UV + delta;
+		}
+
+		// lower the opacity of the invalid cells on the bottom
+		for (int y = warpMesh.Height - 2; y < warpMesh.Height; y++) {
+			for (int x = 0; x < warpMesh.Width; x++) {
+				if (!warpMesh.At(x, y).IsValid)
 					warpMesh.At(x, y).Color.a = 0;
 			}
 		}
+
+		// lower the opacity of ALL cells on the bottom
+		// Why? Because the outer edges of the frame are darker, because of the cheap lens
+		//for (int y = warpMesh.Height - 2; y < warpMesh.Height; y++) {
+		//	for (int x = 0; x < warpMesh.Width; x++) {
+		//		warpMesh.At(x, y).Color.a = 0;
+		//	}
+		//}
+
+		// lower the opacity of all cells outside of the frustum
+		// NOTE: This is a poor substitute for aligning the outer triangular edges
+		// via optical flow. Right now I want to avoid doing that alignment, because
+		// of the expensive cost of reading a MUCH larger portion of the framebuffer
+		// on which to perform alignment. I will be even more expensive once we do rotation.
+		if (haveFrustum) {
+			for (int y = 0; y < warpMesh.Height; y++) {
+				for (int x = 0; x < warpMesh.Width; x++) {
+					Vec2f p = warpMesh.At(x, y).UV;
+					// a larger buffer generally improves the quality of the stitching, in the absence of doing any optical flow
+					// on the periphery.
+					int buffer = 200;
+					if (!geom2d::PtInsidePoly(p.x - buffer, p.y, 4, &warpFrustumPoly[0].x, 2) || !geom2d::PtInsidePoly(p.x + buffer, p.y, 4, &warpFrustumPoly[0].x, 2))
+						warpMesh.At(x, y).Color.a = 0;
+				}
+			}
+		}
+
+		//warpMesh.DrawFlowImage(tsf::fmt("flow-diagram-all-%d.png", frameNumber));
+		//warpMesh.PrintSample(warpMesh.Width / 2, warpMesh.Height - 1);
 	}
 
-	//warpMesh.DrawFlowImage(tsf::fmt("flow-diagram-all-%d.png", frameNumber));
-
-	//warpMesh.PrintSample(warpMesh.Width / 2, warpMesh.Height - 1);
-
-	//while (remain.size() != 0) {
-	//	vector<Point32> newRemain;
-	//	for (auto& c : remain) {
-	//	}
-	//}
 	return result;
 }
 

@@ -40,6 +40,7 @@ public:
 	int               MatchHeight       = 150; // Only perform matching from the bottom matchHeight pixels of the 'next' flattened frame
 	int               PixelsPerMeshCell = 60;  // Stride between each matching grid cell
 	time::Duration    RemainingTime;
+	size_t            FrameNumber                 = 0;
 	double            DebugStartVideoAt           = 0;     // Used during debugging/development. Seeks first frame of video to X seconds of first video.
 	bool              EnableFullFlatOutput        = false; // If true, then FullFlat contains the full flat image output
 	bool              EnableCPUPerspectiveRemoval = false; // CPU path supports lens correction, but it's slower
@@ -49,10 +50,12 @@ public:
 	double                                     TotalVideoSeconds = 0;  // total length of all video files
 	time::Time                                 FirstVideoCreationTime; // Metadata extract from first video
 	std::vector<std::pair<double, gfx::Vec2f>> Velocities;             // Velocities for every frame as [time,velocity]. Velocity of frame zero is copied from frame 1. Velocity is in flattened pixels.
+	roadproc::Mesh                             Mesh;                   // The most recently stitched mesh
 
-	Error Start(std::vector<std::string> videoFiles, float perspectiveZY);
-	Error Next(); // Process the next frame
-	void  PrintRemainingTime();
+	Error       Start(std::vector<std::string> videoFiles, float perspectiveZY);
+	Error       Next();                 // Process the next frame
+	gfx::Rect32 CropRectFromFullFlat(); // Returns the crop rectangle (out of the full flattened frustum image) that is used for alignment.
+	void        PrintRemainingTime();
 
 private:
 	std::vector<std::string> VideoFiles;
@@ -60,7 +63,6 @@ private:
 	double                   VideoTimeOffset = 0; // Accumulating time counter, so that we can merge multiple videos into one timelime
 	time::Time               ProcessingStartTime;
 	size_t                   CurrentVideo = -1;
-	size_t                   FrameNumber  = 0;
 	double                   FrameTime    = 0; // Absolute video time in seconds, of most recently decoded frame
 
 	// Tracking parameters
@@ -80,7 +82,8 @@ private:
 	void        RemovePerspective();
 	Error       ComputeStitch();
 	void        CheckSyncRestart(FlowResult& absFlowResult, bool& didReset);
-	static void SetupMesh(int srcWidth, int srcHeight, int matchHeight, int pixelsPerMeshCell, int flowMatchRadius, Mesh& m);
+	void        SetupMesh(roadproc::Mesh& m);
+	static void SetupMesh(int srcWidth, int srcHeight, int matchHeight, int pixelsPerMeshCell, int flowMatchRadius, roadproc::Mesh& m);
 };
 
 } // namespace roadproc

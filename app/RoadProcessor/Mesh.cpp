@@ -182,6 +182,46 @@ gfx::Vec2f Mesh::AvgValidDisplacement() const {
 	return Vec2dTof(avg);
 }
 
+Vec2f Mesh::PosAtFractionalUV(float u, float v) const {
+	// assume UV is mostly uniform
+	Vec2f interval = At(Width - 1, Height - 1).UV - At(0, 0).UV;
+	interval /= Vec2f(Width - 1, Height - 1);
+	int   uI = (int) floor(u / interval.x);
+	int   vI = (int) floor(v / interval.y);
+	float uF = fmod(u, interval.x) / interval.x;
+	float vF = fmod(v, interval.y) / interval.y;
+	if (uI < 0) {
+		uI = 0;
+		uF = 0;
+	} else if (uI >= Width - 1) {
+		uI = Width - 2;
+		uF = 1;
+	}
+	if (vI < 0) {
+		vI = 0;
+		vF = 0;
+	} else if (vI >= Height - 1) {
+		vI = Height - 2;
+		vF = 1;
+	}
+	auto a = At(uI, vI).Pos;
+	auto b = At(uI + 1, vI + 1).Pos;
+	return a + Vec2f(uF, vF) * (b - a);
+}
+
+bool Mesh::FirstValid(int& x, int& y) const {
+	for (int my = 0; my < Height; my++) {
+		for (int mx = 0; mx < Width; mx++) {
+			if (At(mx, my).IsValid) {
+				x = mx;
+				y = my;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 //void Mesh::SnapToPixelEdges(int imgWidth, int imgHeight) {
 void Mesh::SnapToUVPixelEdges() {
 	//float imgW = (float) imgWidth;

@@ -6,20 +6,14 @@
 #include "OpticalFlow2.h"
 #include "Mesh.h"
 
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 1 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 40 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 40 --start 0.7 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 -n 30 --start 260 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -n 1 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -n 40 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -n 40 --start 0.7 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -n 30 --start 260 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
 
 // second video
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 --phase 1 -n 30 --start 0 /home/ben/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch2 --phase 2 -n 200 --start 14 /home/ben/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
-
-// TODO: Align the warp mesh so that on the bottom, it has cells which touch right up against the bottom of the image.
-// This should help substantially with the alignment in the most visible, highly detailed region - ie the middle of the road.
-
-// Size of 1000 frames (33.3 seconds): 2.7 GB, which is 83 MB/s !!!
-// After compressing to JPEG, and 3 levels of tiles, we have 294 MB, which is 8.8 MB/s. How can this be larger than the video??
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 --phase 1 -n 30 --start 0 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 --phase 2 -n 200 --start 14 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
 
 using namespace std;
 using namespace imqs::gfx;
@@ -28,17 +22,20 @@ namespace imqs {
 namespace roadproc {
 
 Stitcher3::Stitcher3() {
-	//ClearColor = Color8(0, 150, 0, 60);
-	ClearColor = Color8(0, 0, 0, 0);
+	ClearColor = Color8(0, 150, 0, 60);
+	//ClearColor = Color8(0, 0, 0, 0);
 }
 
-Error Stitcher3::Initialize(string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds, PerspectiveParams& pp, Frustum& frustum, gfx::Vec2f& flatOrigin) {
+Error Stitcher3::Initialize(string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds) {
 	auto err = InfBmp.Initialize(bitmapDir);
 	if (!err.OK())
 		return err;
 
-	VidStitcher.DebugStartVideoAt = seconds;
-	VidStitcher.Start(videoFiles, zy);
+	VidStitcher.EnableFullFlatOutput = true;
+	VidStitcher.DebugStartVideoAt    = seconds;
+	err                              = VidStitcher.Start(videoFiles, zy);
+	if (!err.OK())
+		return err;
 
 	//err = Rend.Initialize(4096, 3072);
 	//err = Rend.Initialize(5120, 4096);
@@ -54,16 +51,12 @@ Error Stitcher3::Initialize(string bitmapDir, std::vector<std::string> videoFile
 	InfBmpView = Rect64(0, 0, Rend.FBWidth, Rend.FBHeight);
 	Rend.Clear(ClearColor);
 
-	pp.ZX      = zx;
-	pp.ZY      = zy;
-	pp.Z1      = FindZ1ForIdentityScaleAtBottom(Video.Width(), Video.Height(), pp.ZX, pp.ZY);
-	frustum    = ComputeFrustum(Video.Width(), Video.Height(), pp.Z1, pp.ZX, pp.ZY);
-	flatOrigin = CameraToFlat(Video.Width(), Video.Height(), Vec2f(0, 0), pp.Z1, pp.ZX, pp.ZY);
+	PrevDir = Vec2f(0, -1);
 
 	return Error();
 }
 
-Error Stitcher3::DoStitch(Phases phase, string tempDir, string bitmapDir, string videoFile, std::string trackFile, float zx, float zy, double seconds, int count) {
+Error Stitcher3::DoStitch(Phases phase, string tempDir, string bitmapDir, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count) {
 	TempDir = tempDir;
 
 	string localBitmapDir = bitmapDir;
@@ -82,177 +75,230 @@ Error Stitcher3::DoStitch(Phases phase, string tempDir, string bitmapDir, string
 		exit(1);
 	}
 
-	PerspectiveParams pp;
-	Frustum           frustum;
-	Vec2f             flatOrigin;
-	auto              err = Initialize(localBitmapDir, videoFile, zx, zy, seconds, pp, frustum, flatOrigin);
+	auto err = Initialize(localBitmapDir, videoFiles, zx, zy, seconds);
 	if (!err.OK())
 		return err;
 
 	switch (phase) {
-	case Phases::InitialStitch: return DoStitchInitial(pp, frustum, flatOrigin, seconds, count);
-	case Phases::GeoReference: return DoGeoReference(pp, frustum, flatOrigin, seconds, count);
+	case Phases::InitialStitch: return DoStitchInitial(count);
+	case Phases::GeoReference: return DoGeoReference(count);
 	}
 	// unreachable
 	return Error();
 }
 
-Error Stitcher3::DoStitchInitial(PerspectiveParams pp, Frustum frustum, gfx::Vec2f flatOrigin, double seconds, int count) {
-	Image flat;
-	flat.Alloc(gfx::ImageFormat::RGBAP, frustum.Width, frustum.Height);
-	flat.Fill(0);
-
-	Image frame;
-	frame.Alloc(gfx::ImageFormat::RGBAP, Video.Width(), Video.Height());
-
-	OpticalFlow2 flow;
-	Vec2f        flatToAlignBias(0, 0);
-
+Error Stitcher3::DoStitchInitial(int count) {
 	for (int i = 0; i < count || count == -1; i++) {
-		auto err = Video.DecodeFrameRGBA(frame.Width, frame.Height, frame.Data, frame.Stride);
-		if (err == ErrEOF)
-			break;
+		auto err = VidStitcher.Next();
 		if (!err.OK())
 			return err;
 
-		RemovePerspective(frame, flat, pp.Z1, pp.ZX, pp.ZY, (int) flatOrigin.x, (int) flatOrigin.y);
+		err = StitchFrame();
+		if (!err.OK())
+			return err;
 
-		//flat.SaveJpeg(tsf::fmt("flat-%d.jpeg", i));
-		//tsf::print("Frame %d: AvgBright: %5.1f\n", i, AverageBrightness(flat));
-
-		StitchWindowWidth      = floor(frustum.X2 - frustum.X1);
-		int maxInitialVelocity = 300;
-
-		if (i == 0) {
-			Vec2f topLeft  = Vec2f((Rend.FBWidth - flat.Width) / 2, Rend.FBHeight - flat.Height);
-			Vec2f topRight = topLeft + Vec2f(flat.Width, 0);
-			Vec2f botLeft  = topLeft + Vec2f(0, flat.Height);
-			Mesh  m(2, 2);
-			m.ResetUniformRectangular(topLeft, topRight, botLeft, flat.Width, flat.Height);
-			Rend.DrawMesh(m, flat);
-			//Image out;
-			//Rend.CopyDeviceToImage(Rect32(0, 0, Rend.FBWidth, Rend.FBHeight), 0, 0, out);
-			//out.Alloc(ImageFormat::RGBAP, 5120, 4096);
-			//out.Fill(0xddaa88cc);
-			//Rend.CopyDeviceToImage(Rect32(0, 2000, 4120, 3500), 0, 2000, out); // testing glReadPixels
-			//out.SavePng("giant.png", true, 1);
-			//Rend.SaveToFile("giant.jpeg");
-			StitchTopLeft = Vec2f(ceil(Rend.FBWidth / 2 + frustum.X1), Rend.FBHeight - StitchWindowHeight - maxInitialVelocity);
-			//StitchVelocity          = Vec2f(0, -StitchWindowHeight - MaxVelocityPx);
-			//StitchVelocity          = Vec2f(0, -StitchWindowHeight - MaxVelocityPx);
-			PrevBottomMidAlignPoint = botLeft + 0.5f * (topRight - topLeft);
-			//StitchTopLeft += StitchVelocity;
+		if (i % 15 == 0 || count < 15)
 			Rend.SaveToFile("giant2.jpeg");
-		}
-		if (i != 0) {
-			Mesh m;
-			SetupMesh(flat.Width, flat.Height, flow.MatchRadius, m);
 
-			// Extract the potential alignment region out of the splat image, and align 'flat' onto it.
-			//StitchTopLeft += StitchVelocity;
-
-			// We don't ever adjust flatToAlignBias, unless we drift our stitch alignment point downward, to pick out higher quality pixels (closer to lens)
-			//flatToAlignBias += StitchVelocity;
-
-			Image alignTargetImg;
-			//int    alignHeight = i == 1 ? StitchWindowHeight + MaxVelocityPx : StitchWindowHeight;
-			int    alignHeight = i == 1 ? StitchWindowHeight + maxInitialVelocity : StitchWindowHeight;
-			Rect32 alignTargetRect(StitchTopLeft.x, StitchTopLeft.y, StitchTopLeft.x + StitchWindowWidth, StitchTopLeft.y + alignHeight);
-			Rend.CopyDeviceToImage(alignTargetRect, 0, 0, alignTargetImg);
-			//alignTargetImg.SaveFile("alignTarget.jpeg");
-
-			flow.Frame(m, frustum, flat, alignTargetImg, flatToAlignBias);
-
-			// The mesh target positions are in the coordinate frame of alignTargetImg. Before rendering the mesh,
-			// we must convert those coordinates into the coordinate frame of the giant splat image.
-			//m.PrintSample(m.Width / 2, m.Height - 1);
-			m.TransformTargets(StitchTopLeft);
-			//m.PrintSample(m.Width / 2, m.Height / 2);
-			//m.PrintSample(m.Width / 2, m.Height - 1);
-			Vec2f bottomMidAlignPoint    = m.At(m.Width / 2, m.Height - 1).Pos;
-			Vec2f bottomMidAlignPointSrc = m.At(m.Width / 2, m.Height - 1).UV;
-			Vec2f delta                  = bottomMidAlignPoint - PrevBottomMidAlignPoint;
-			if (i == 1)
-				CurrentVelocity = delta;
-			else
-				CurrentVelocity += 0.1f * (delta - CurrentVelocity);
-			//StitchVelocity   = bottomMidAlignPoint - PrevBottomMidAlignPoint;
-			//delta.x = 0; // HACK.. uncertain how to handle this
-			// We want the BOTTOM of our alignment window to line up with the BOTTOM of this most recent frame, BUT offset by the
-			// current velocity. And AFTER that, add some padding, to account for vehicle velocity changes. But hang on.. the vehicle
-			// could slow down OR speed up, so we can't pad it out here. The padding must come from StitchWindowHeight alone.
-
-			// Our goal now, is to predict where the bottom of the next frame will land. This is pretty simple: We take the bottom
-			// of the most recent frame, and add the current velocity.
-			//Vec2f stitchBotLeft = Vec2f(bottomMidAlignPoint.x - StitchWindowWidth / 2, bottomMidAlignPoint.y) + delta;
-			Vec2f stitchBotLeft = Vec2f(bottomMidAlignPoint.x - StitchWindowWidth / 2, bottomMidAlignPoint.y) + CurrentVelocity;
-			// Then, we bring it down by the max incremental V search.
-			stitchBotLeft.y += flow.StableVSearchRange;
-			float prevLeft  = StitchTopLeft.x;
-			StitchTopLeft   = stitchBotLeft - Vec2f(0, StitchWindowHeight);
-			StitchTopLeft.x = StitchTopLeft.x;
-			//StitchTopLeft.x = prevLeft + 0.8 * (StitchTopLeft.x - prevLeft); // necessary hack to minimize the amount of horizontal drift
-			//StitchTopLeft.x   = prevLeft; // HACK to prevent horizontal drift
-			flatToAlignBias.y = -(flat.Height - StitchWindowHeight + flow.StableVSearchRange);
-			tsf::print("Alignment delta at %.1f: %5.1f, %5.1f. AvgB: %3.0f. Vel: %5.1f, %5.1f. Next bias: %5.1f, %5.1f\n", Video.LastFrameTimeSeconds(), delta.x, delta.y,
-			           AverageBrightness(frame), CurrentVelocity.x, CurrentVelocity.y, flatToAlignBias.x, flatToAlignBias.y);
-
-			//StitchTopLeft     = Vec2f(bottomMidAlignPoint.x - StitchWindowWidth / 2, bottomMidAlignPoint.y - StitchWindowHeight) + delta;
-			//flatToAlignBias.y = -(flat.Height - StitchWindowHeight + delta.y);
-
-			//Rend.SaveToFile("giant1.jpeg");
-			// Discard the final 3 rows of the warp mesh, so that we avoid using areas of the lens where there's substantial vignetting.
-			// We *could* use lensfun to remove the vignetting, but then we need to perform that processing on the GPU, because the color
-			// corrections need to happen in linear space. Actually.. now that I write this, I haven't measured the speed of doing it in CPU.
-			// It could be acceptable. This constant here is intimately related to the constant in OpticalFlow2.cpp - search for "Rend.DrawMesh" there.
-			Rect32 mrect(0, 0, m.Width, m.Height - 3);
-
-			// This is very useful to see where the stitch lines are
-			//for (int x = 0; x < m.Width; x++)
-			//	m.At(x, m.Height - 4).Color.r = 0;
-
-			Rend.DrawMesh(m, flat, mrect);
-			if (i % 8 == 0 || count < 8 || i < 8)
-				Rend.SaveToFile("giant2.jpeg");
-
-			err = m.SaveCompact(path::Join(TempDir, "mesh", tsf::fmt("%08d", i)));
-			if (!err.OK())
-				return err;
-
-			PrevBottomMidAlignPoint = bottomMidAlignPoint;
-
-			AdjustInfiniteBitmapView(m, delta);
-		}
-
-		if (false) {
-			err = flat.SaveFile(tsf::fmt("flat-%04d.jpeg", i));
+		if (VidStitcher.FrameNumber != 0) {
+			err = VidStitcher.Mesh.SaveCompact(path::Join(TempDir, "mesh", tsf::fmt("%08d", VidStitcher.FrameNumber)));
 			if (!err.OK())
 				return err;
 		}
-		//tsf::print("%v/%v\r", i + 1, count);
-		fflush(stdout);
+
+		VidStitcher.PrintRemainingTime();
+
+		AdjustInfiniteBitmapView(PrevFullMesh, PrevDir);
 	}
-	//Giant.SaveJpeg("giant2.jpeg");
-	//tsf::print("\n");
 	return Error();
 }
 
-Error Stitcher3::DoGeoReference(PerspectiveParams pp, Frustum frustum, gfx::Vec2f flatOrigin, double seconds, int count) {
-	Image flat;
-	flat.Alloc(gfx::ImageFormat::RGBAP, frustum.Width, frustum.Height);
-	flat.Fill(0);
+Error Stitcher3::StitchFrame() {
+	// The alignment mesh is produced on a crop of the full flattened frame.
+	// Our job now is to turn that little alignment mesh into a full mesh that covers the entire
+	// flattened frame.
+	// In addition, we need to shift the coordinate frame from the previous flattened frame,
+	// to the coordinate frame of our 8192x8192 composite "splat" image.
+	auto cropRect = VidStitcher.CropRectFromFullFlat();
 
-	Image frame;
-	frame.Alloc(gfx::ImageFormat::RGBAP, Video.Width(), Video.Height());
+	Mesh  full;
+	Vec2f uvAtTopLeftOfImage;
+	Vec2f debugTopLeft;
+	if (VidStitcher.FrameNumber == 0) {
+		Vec2f topLeft((Rend.FBWidth - VidStitcher.FullFlat.Width) / 2, Rend.FBHeight - VidStitcher.FullFlat.Height);
+		Vec2f topRight = topLeft + Vec2f(VidStitcher.FullFlat.Width, 0);
+		Vec2f botLeft  = topLeft + Vec2f(0, VidStitcher.FullFlat.Height);
+		full.Initialize(2, 2);
+		full.ResetUniformRectangular(topLeft, topRight, botLeft, VidStitcher.FullFlat.Width, VidStitcher.FullFlat.Height);
+		uvAtTopLeftOfImage = Vec2f(0, 0);
+		debugTopLeft       = topLeft;
+	} else {
+		ExtrapolateMesh(VidStitcher.Mesh, full, uvAtTopLeftOfImage);
+		TransformMeshIntoRendCoords(full);
+	}
 
+	Rend.DrawMesh(full, VidStitcher.FullFlat);
+
+	Vec2f newTopLeft = full.PosAtFractionalUV(uvAtTopLeftOfImage);
+	Vec2f dir        = newTopLeft - PrevTopLeft;
+	if (dir.size() > 5 && VidStitcher.FrameNumber >= 1) {
+		// only update direction if we're actually moving
+		PrevDir = dir;
+	}
+	PrevTopLeft  = newTopLeft;
+	PrevFullMesh = full;
+
+	return Error();
+}
+
+void Stitcher3::ExtrapolateMesh(const Mesh& smallMesh, Mesh& fullMesh, gfx::Vec2f& uvAtTopLeftOfImage) {
+	Rect32 smallCropRect = VidStitcher.CropRectFromFullFlat();
+
+	// This is the position of the upper-left corner of the small alignment image, within the full flattened image
+	Vec2f smallPosInFullImg(smallCropRect.x1, smallCropRect.y1);
+
+	//Vec2f uvInterval = smallMesh.At(smallMesh.Width - 1, smallMesh.Height - 1).UV - smallMesh.At(0, 0).UV;
+	//uvInterval *= Vec2f(1.0f / (float) (smallMesh.Width - 1), 1.0f / (float) (smallMesh.Height - 1));
+	Vec2f uvInterval(VidStitcher.PixelsPerMeshCell, VidStitcher.PixelsPerMeshCell);
+
+	// Align to the first valid vertex of smallMesh
+	int  alignMX, alignMY;
+	bool ok = smallMesh.FirstValid(alignMX, alignMY);
+	IMQS_ASSERT(ok);
+
+	// This position of the (somewhat arbitrary) alignment vertex, inside the full flattened image
+	Vec2f alignPos = smallMesh.At(alignMX, alignMY).UV + smallPosInFullImg;
+
+	// If we were to compute a uniform full mesh right now, with the origin at (0,0), then
+	// what we would be the nearest vertex to alignPos?
+	Vec2f correction = Vec2f(fmod(alignPos.x, uvInterval.x), fmod(alignPos.y, uvInterval.y));
+
+	// We shift the origin of our full mesh, by the correction factor, so that we end up with
+	// vertices who's UV coordinates precisely match those of the small mesh
+	Vec2f fullOrigin = -uvInterval + correction;
+
+	// compute full mesh width/height, now that we know the correction factor
+	int fullImgWidth  = VidStitcher.FullFlat.Width;
+	int fullImgHeight = VidStitcher.FullFlat.Height;
+	int mWidth        = (int) ((fullImgWidth - fullOrigin.x + uvInterval.x - 1) / uvInterval.x);
+	int mHeight       = (int) ((fullImgHeight - fullOrigin.y + uvInterval.y - 1) / uvInterval.y);
+
+	// delta in mesh coordinates, from small to full
+	int smallToFullDX = 0;
+	int smallToFullDY = 0;
+
+	uvAtTopLeftOfImage = -fullOrigin;
+
+	fullMesh.Initialize(mWidth, mHeight);
+	for (int y = 0; y < mHeight; y++) {
+		for (int x = 0; x < mWidth; x++) {
+			Vec2f p = fullOrigin + Vec2f((float) x, (float) y) * uvInterval;
+			if (p.distanceSQ(alignPos) < 1.0f) {
+				smallToFullDX = x - alignMX;
+				smallToFullDY = y - alignMY;
+			}
+			fullMesh.At(x, y).UV      = p;
+			fullMesh.At(x, y).Pos     = p;
+			fullMesh.At(x, y).IsValid = false;
+		}
+	}
+	IMQS_ASSERT(smallToFullDX != 0 && smallToFullDY != 0);
+
+	Rect32 validRectFull = Rect32::Inverted();
+
+	// Copy the vertices from the small mesh
+	for (int y = 0; y < smallMesh.Height; y++) {
+		for (int x = 0; x < smallMesh.Width; x++) {
+			if (smallMesh.At(x, y).IsValid) {
+				int fx                      = x + smallToFullDX;
+				int fy                      = y + smallToFullDY;
+				fullMesh.At(fx, fy).IsValid = true;
+				// The UV coordinates in the source will have been twiddled so that they fall precisely
+				// in between a quad of pixels, so here we bring over that twiddling too. We expect
+				// the UV coordinates here to change by at most 1 pixel in X and Y.
+				// The Pos coordinates, on the other hand, are the alignment positions, so those we
+				// expect to have changed a lot.
+				fullMesh.At(fx, fy).UV  = smallMesh.At(x, y).UV + smallPosInFullImg;
+				fullMesh.At(fx, fy).Pos = smallMesh.At(x, y).Pos + smallPosInFullImg;
+				validRectFull.ExpandToFit(fx, fy);
+			}
+		}
+	}
+
+	// fill in all non-valid values with the average displacement
+	Vec2f avgDisp = smallMesh.AvgValidDisplacement();
+	for (int i = 0; i < fullMesh.Count; i++) {
+		if (!fullMesh.Vertices[i].IsValid) {
+			fullMesh.Vertices[i].Pos = fullMesh.Vertices[i].UV + avgDisp;
+		}
+	}
+
+	/*
+	// We create a 'full' mesh that is slightly larger than our flattened image.
+	// The vertices of this mesh will not coincide 100% with the vertices of the small mesh,
+	// so that is why we make the mesh too big. Then, we move the mesh so that it fits 100%
+	// with the small mesh.
+	int widthPlus          = VidStitcher.FullFlat.Width + VidStitcher.PixelsPerMeshCell * 2;
+	int heightPlus         = VidStitcher.FullFlat.Height + VidStitcher.PixelsPerMeshCell * 2;
+	int pixelsPerAlignCell = VidStitcher.Flow.MatchRadius;
+	int mWidth             = (widthPlus + pixelsPerAlignCell - 1) / VidStitcher.PixelsPerMeshCell;
+	int mHeight            = (heightPlus + pixelsPerAlignCell - 1) / VidStitcher.PixelsPerMeshCell;
+	fullMesh.Initialize(mWidth, mHeight);
+	fullMesh.ResetIdentityForWarpMesh(widthPlus, heightPlus, VidStitcher.Flow.MatchRadius, false);
+
+	// shift the mesh so that it is centered over the flattened image
+	Vec2f offset(VidStitcher.PixelsPerMeshCell, VidStitcher.PixelsPerMeshCell);
+	for (int i = 0; i < fullMesh.Count; i++) {
+		fullMesh.Vertices[i].Pos -= offset;
+		fullMesh.Vertices[i].UV -= offset;
+	}
+
+	Rect32 smallCropRect = VidStitcher.CropRectFromFullFlat();
+
+	// This is the position of the upper-left corner of the small alignment image, within the full flattened image
+	Vec2f smallPosInFullImg(smallCropRect.x1, smallCropRect.y1);
+
+	// Align to the first valid vertex of smallMesh
+	int  alignMX, alignMY;
+	bool ok = smallMesh.FirstValid(alignMX, alignMY);
+	IMQS_ASSERT(ok);
+
+	Vec2f firstValidPos = smallMesh.At(alignMX, alignMY).UV;
+	firstValidPos += smallPosInFullImg; // Bring into the coordinate frame of the full image
+
+	// brute force to find the closest vertex in fullMesh
+    float bestDistSQ = FLT_MAX;
+	for (int y = 0; y < fullMesh.Height; y++) {
+		for (int x = 0; x < fullMesh.Width; x++) {
+			float distSQ = fullMesh.At(x, y).UV.distanceSQ(firstValidPos);
+            if (dstSQ < bestDistSQ) {
+                bestDistSQ
+            }
+		}
+	}
+    */
+}
+
+void Stitcher3::TransformMeshIntoRendCoords(Mesh& mesh) {
+	// thinking.. we want to rotate by current bearing, not by this number here
+	// also.. need to do rotation before alignment..
+	float angle = -PrevDir.angle(Vec2f(0, -1));
+	angle       = 0;
+	Vec2f r0(cos(angle), -sin(angle));
+	Vec2f r1(sin(angle), cos(angle));
+	for (int i = 0; i < mesh.Count; i++) {
+		Vec2f p;
+		// rotate about the origin
+		p.x = mesh.Vertices[i].Pos.dot(r0);
+		p.y = mesh.Vertices[i].Pos.dot(r1);
+		// translate to the top-left of the previous frame
+		p += PrevTopLeft;
+		mesh.Vertices[i].Pos = p;
+	}
+}
+
+Error Stitcher3::DoGeoReference(int count) {
 	for (int i = 0; i < count || count == -1; i++) {
-		auto err = Video.DecodeFrameRGBA(frame.Width, frame.Height, frame.Data, frame.Stride);
-		if (err == ErrEOF)
-			break;
-		if (!err.OK())
-			return err;
-
-		RemovePerspective(frame, flat, pp.Z1, pp.ZX, pp.ZY, (int) flatOrigin.x, (int) flatOrigin.y);
 	}
 	return Error();
 }
@@ -265,16 +311,20 @@ Error Stitcher3::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirect
 	if (isInside(m.At(0, 0).Pos) && isInside(m.At(m.Width - 1, 0).Pos))
 		return Error();
 
+	bool persistToInfBmp = Phase == Phases::GeoReference;
+
 	// Persist current framebuffer
 	Image img;
-	Rend.CopyDeviceToImage(Rect32(0, 0, Rend.FBWidth, Rend.FBHeight), 0, 0, img);
-	auto err = InfBmp.Save(InfBmpView, img);
-	if (!err.OK())
-		return err;
+	if (persistToInfBmp) {
+		Rend.CopyDeviceToImage(Rect32(0, 0, Rend.FBWidth, Rend.FBHeight), 0, 0, img);
+		auto err = InfBmp.Save(InfBmpView, img);
+		if (!err.OK())
+			return err;
+	}
 
 	if (false) {
 		Image test;
-		err = InfBmp.Load(InfBmpView, test);
+		auto  err = InfBmp.Load(InfBmpView, test);
 		test.SaveFile("test-inf-view-1.jpeg");
 	}
 
@@ -305,12 +355,16 @@ Error Stitcher3::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirect
 		newView.y1 = newView.y2 - Rend.FBHeight;
 	}
 
-	img.Fill(0);
-	err = InfBmp.Load(newView, img);
-	if (!err.OK())
-		return err;
-	Rend.Clear(ClearColor);
-	Rend.CopyImageToDevice(img, 0, 0);
+	if (persistToInfBmp) {
+		img.Fill(0);
+		auto err = InfBmp.Load(newView, img);
+		if (!err.OK())
+			return err;
+		Rend.Clear(ClearColor);
+		Rend.CopyImageToDevice(img, 0, 0);
+	} else {
+		Rend.Clear(ClearColor);
+	}
 
 	if (false) {
 		img.SaveFile("test-inf-view-load.jpeg");
@@ -320,45 +374,15 @@ Error Stitcher3::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirect
 	}
 
 	Vec2f adjust = Vec2f(float(InfBmpView.x1 - newView.x1), float(InfBmpView.y1 - newView.y1));
-	StitchTopLeft += adjust;
-	PrevBottomMidAlignPoint += adjust;
+	PrevTopLeft += adjust;
+	//StitchTopLeft += adjust;
+	//PrevBottomMidAlignPoint += adjust;
 	InfBmpView = newView;
 
 	return Error();
 }
 
-float Stitcher3::AverageBrightness(const gfx::Image& img) {
-	int64_t b = 0;
-	for (int y = 0; y < img.Height; y++) {
-		const uint8_t* src = img.Line(y);
-		int            w   = img.Width;
-		for (int x = 0; x < w; x++) {
-			if (src[3] != 0)
-				b += (int) src[0] + (int) src[1] + (int) src[2]; // crude RGB -> lightness, which is hopefully OK for this purpose
-			src += 4;
-		}
-	}
-	return (float) ((double) b / double(img.Width * img.Height));
-}
-
-void Stitcher3::SetupMesh(int srcWidth, int srcHeight, int flowMatchRadius, Mesh& m) {
-	int pixelsPerAlignCell = flowMatchRadius;
-	int mWidth             = (srcWidth + pixelsPerAlignCell - 1) / PixelsPerMeshCell;
-	int mHeight            = (srcHeight + pixelsPerAlignCell - 1) / PixelsPerMeshCell;
-	if (mWidth % 2 == 0) {
-		// Ensure that the grid has an odd number of cells, which guarantees that there is
-		// a mesh line running through the horizontal center of the grid (from top to bottom),
-		// which is perfectly in the center of the grid. We use this center point to compute
-		// horizontal drift, so that's why it's vital that we have it perfectly in the center
-		// of the image. See bottomMidAlignPoint and PrevBottomMidAlignPoint.
-		mWidth++;
-	}
-	m.Initialize(mWidth, mHeight);
-	m.ResetIdentityForWarpMesh(srcWidth, srcHeight, flowMatchRadius, true);
-	m.SnapToUVPixelEdges();
-}
-
-int WebTiles(argparse::Args& args) {
+int WebTiles3(argparse::Args& args) {
 	string         bmpDir = args.Params[0];
 	InfiniteBitmap bmp;
 	auto           err = bmp.Initialize(bmpDir);
@@ -371,14 +395,14 @@ int WebTiles(argparse::Args& args) {
 	return 0;
 }
 
-int Stitch2(argparse::Args& args) {
-	auto   videoFile = args.Params[0];
-	auto   trackFile = args.Params[1];
-	float  zx        = atof(args.Params[2].c_str());
-	float  zy        = atof(args.Params[3].c_str());
-	int    count     = args.GetInt("number");
-	int    iphase    = args.GetInt("phase");
-	double seek      = atof(args.Get("start").c_str());
+int Stitch3(argparse::Args& args) {
+	auto   videoFiles = strings::Split(args.Params[0], ',');
+	auto   trackFile  = args.Params[1];
+	float  zx         = atof(args.Params[2].c_str());
+	float  zy         = atof(args.Params[3].c_str());
+	int    count      = args.GetInt("number");
+	int    iphase     = args.GetInt("phase");
+	double seek       = atof(args.Get("start").c_str());
 
 	Stitcher3::Phases phase;
 	if (iphase == 1)
@@ -389,7 +413,7 @@ int Stitch2(argparse::Args& args) {
 	string    tmpDir = "/home/ben/stitch-temp";
 	string    bmpDir = "/home/ben/inf";
 	Stitcher3 s;
-	auto      err = s.DoStitch(phase, tmpDir, bmpDir, videoFile, trackFile, zx, zy, seek, count);
+	auto      err = s.DoStitch(phase, tmpDir, bmpDir, videoFiles, trackFile, zx, zy, seek, count);
 	if (!err.OK()) {
 		tsf::print("Error: %v\n", err.Message());
 		return 1;

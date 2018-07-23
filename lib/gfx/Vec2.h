@@ -27,6 +27,18 @@ public:
 		return *this;
 	}
 
+	Vec2Base& operator*=(Vec2Base b) {
+		x *= b.x;
+		y *= b.y;
+		return *this;
+	}
+
+	Vec2Base& operator/=(Vec2Base b) {
+		x /= b.x;
+		y /= b.y;
+		return *this;
+	}
+
 	Vec2Base& operator+=(Vec2Base b) {
 		x += b.x;
 		y += b.y;
@@ -70,6 +82,10 @@ public:
 		return (*this - b).size();
 	}
 
+	T distanceSQ(Vec2Base b) const {
+		return (*this - b).dot(*this - b);
+	}
+
 	T distance2D(Vec2Base b) const {
 		return distance(b);
 	}
@@ -94,6 +110,12 @@ Vec2Base<T> operator*(Vec2Base<T> v, T s) { return {v.x * s, v.y * s}; }
 
 template <typename T>
 Vec2Base<T> operator*(T s, Vec2Base<T> v) { return {v.x * s, v.y * s}; }
+
+template <typename T>
+Vec2Base<T> operator*(Vec2Base<T> a, Vec2Base<T> b) { return {a.x * b.x, a.y * b.y}; }
+
+template <typename T>
+Vec2Base<T> operator/(Vec2Base<T> a, Vec2Base<T> b) { return {a.x / b.x, a.y / b.y}; }
 
 template <typename T>
 Vec2Base<T> operator/(Vec2Base<T> v, T s) { return {v.x / s, v.y / s}; }

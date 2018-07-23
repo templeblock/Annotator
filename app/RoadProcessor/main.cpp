@@ -10,6 +10,7 @@ int Speed2(argparse::Args& args);
 int Speed3(argparse::Args& args);
 int Stitch(argparse::Args& args);
 int Stitch2(argparse::Args& args);
+int Stitch3(argparse::Args& args);
 int WebTiles(argparse::Args& args);
 } // namespace roadproc
 } // namespace imqs
@@ -96,11 +97,17 @@ int main(int argc, char** argv) {
 	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
 	auto stitch      = args.AddCommand("stitch <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
 	auto stitch2     = args.AddCommand("stitch2 <video> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch2);
+	auto stitch3     = args.AddCommand("stitch3 <video> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch3);
 	stitch->AddValue("n", "number", "Number of frames", "2");
 	stitch->AddValue("s", "start", "Start time in seconds", "0");
+
 	stitch2->AddValue("", "phase", "phase", "1");
-	stitch2->AddValue("n", "number", "Number of frames", "2");
+	stitch2->AddValue("n", "number", "Number of frames", "-1");
 	stitch2->AddValue("s", "start", "Start time in seconds", "0");
+
+	stitch3->AddValue("", "phase", "phase", "1");
+	stitch3->AddValue("n", "number", "Number of frames", "-1");
+	stitch3->AddValue("s", "start", "Start time in seconds", "0");
 
 	auto webtiles = args.AddCommand("webtiles <infinite bitmap>", "Create web tiles from infinite bitmap", WebTiles);
 

@@ -31,11 +31,18 @@ private:
 	gfx::Rect64    InfBmpView; // Where in InfBmp's world is Rend pointed at
 	MeshRenderer   Rend;
 	PositionTrack  Track;
+	gfx::Vec2f     PrevTopLeft;
+	gfx::Vec2f     PrevDir; // Direction of the top of the flattened frame. (0, -1) is straight ahead.
+	Mesh           PrevFullMesh;
 
-	Error Initialize(std::string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds, PerspectiveParams& pp, Frustum& frustum, gfx::Vec2f& flatOrigin);
+	Error Initialize(std::string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds);
 	Error AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirection);
-	Error DoStitchInitial(PerspectiveParams pp, Frustum frustum, gfx::Vec2f flatOrigin, double seconds, int count);
-	Error DoGeoReference(PerspectiveParams pp, Frustum frustum, gfx::Vec2f flatOrigin, double seconds, int count);
+	Error DoStitchInitial(int count);
+	Error StitchFrame();
+	void  ExtrapolateMesh(const Mesh& smallMesh, Mesh& fullMesh, gfx::Vec2f& uvAtTopLeftOfImage);
+	void  TransformMeshIntoRendCoords(Mesh& mesh);
+
+	Error DoGeoReference(int count);
 };
 
 } // namespace roadproc

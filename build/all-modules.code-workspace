@@ -29,7 +29,30 @@
 			"*.ipp": "cpp",
 			"array": "cpp",
 			"vector": "cpp",
-			"*.cuh": "cpp"
+			"*.cuh": "cpp",
+			"cctype": "cpp",
+			"clocale": "cpp",
+			"cmath": "cpp",
+			"cstdarg": "cpp",
+			"cstddef": "cpp",
+			"cstdio": "cpp",
+			"cstdlib": "cpp",
+			"cstring": "cpp",
+			"ctime": "cpp",
+			"cwchar": "cpp",
+			"cwctype": "cpp",
+			"atomic": "cpp",
+			"*.tcc": "cpp",
+			"codecvt": "cpp",
+			"cstdint": "cpp",
+			"forward_list": "cpp",
+			"filesystem": "cpp",
+			"iosfwd": "cpp",
+			"mutex": "cpp",
+			"ratio": "cpp",
+			"system_error": "cpp",
+			"thread": "cpp",
+			"cinttypes": "cpp"
 		}
 	}
 }

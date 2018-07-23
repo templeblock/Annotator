@@ -44,7 +44,8 @@ public:
 	int StableHSearchRange = 10; // Max horizontal diversion, frame to frame - needs to be more than V, because of camera pointing left/right away from straight ahead
 	int StableVSearchRange = 10; // Max vertical diversion, frame to frame
 
-	bool UseRGB = true; // If false, then convert images to gray before performing optical flow
+	bool UseRGB                  = true;  // If false, then convert images to gray before performing optical flow
+	bool ExtrapolateInvalidCells = false; // If true, then extrapolate valid cells to all of the other cells which were not aligned
 
 	OpticalFlow2();
 

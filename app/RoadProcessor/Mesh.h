@@ -34,6 +34,7 @@ public:
 	Error      SaveCompact(std::string filename);
 	Error      LoadCompact(std::string filename);
 	gfx::Vec2f AvgValidDisplacement() const;
+	bool       FirstValid(int& x, int& y) const; // Returns false if there are no valid vertices
 
 	// Snap each mesh vertex so that it lies in the crack between the four nearest pixels (or on the
 	// edge, if it is an edge vertex). We do this so that when we run the optional flow algorithm,
@@ -56,6 +57,10 @@ public:
 		At(x, y).Pos = pos;
 		At(x, y).UV  = uv;
 	}
+
+	// Return interpolated Pos
+	gfx::Vec2f PosAtFractionalUV(float u, float v) const;
+	gfx::Vec2f PosAtFractionalUV(gfx::Vec2f uv) const { return PosAtFractionalUV(uv.x, uv.y); }
 
 	//gfx::Vec2f UVimg(int imgWidth, int imgHeight, int x, int y) const {
 	//	const auto& p = At(x, y);
