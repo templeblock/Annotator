@@ -4,7 +4,7 @@ from PIL import Image
 
 
 def is_layer_png(level):
-    return level <= 19
+    return level <= 22
 
 
 def downsample(root, in_level):
