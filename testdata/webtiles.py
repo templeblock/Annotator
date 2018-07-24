@@ -4,7 +4,7 @@ from PIL import Image
 
 
 def is_layer_png(level):
-    return level <= 11
+    return level <= 19
 
 
 def downsample(root, in_level):
@@ -43,6 +43,6 @@ def downsample(root, in_level):
             out.save(str(out_root / str(dst_x) / str(dst_y)) + '.jpeg', quality=90)
 
 
-for level in range(15, 1, -1):
+for level in range(25, 1, -1):
     print("Downsampling level {}".format(level))
     downsample('/home/ben/inf/webtiles', level)

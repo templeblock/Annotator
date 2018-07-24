@@ -12,6 +12,7 @@ int Stitch(argparse::Args& args);
 int Stitch2(argparse::Args& args);
 int Stitch3(argparse::Args& args);
 int WebTiles(argparse::Args& args);
+int WebTiles3(argparse::Args& args);
 } // namespace roadproc
 } // namespace imqs
 
@@ -105,11 +106,10 @@ int main(int argc, char** argv) {
 	stitch2->AddValue("n", "number", "Number of frames", "-1");
 	stitch2->AddValue("s", "start", "Start time in seconds", "0");
 
-	stitch3->AddValue("", "phase", "phase", "1");
 	stitch3->AddValue("n", "number", "Number of frames", "-1");
 	stitch3->AddValue("s", "start", "Start time in seconds", "0");
 
-	auto webtiles = args.AddCommand("webtiles <infinite bitmap>", "Create web tiles from infinite bitmap", WebTiles);
+	auto webtiles = args.AddCommand("webtiles <infinite bitmap>", "Create web tiles from infinite bitmap", WebTiles3);
 
 	if (!args.Parse(argc, (const char**) argv))
 		return 1;

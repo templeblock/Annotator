@@ -127,13 +127,15 @@ Error InfiniteBitmap::CreateWebTiles() {
 	int webTileSize = 256;
 
 	// first zoom level
-	int firstLevel = 15;
+	int firstLevel = 25;
 
 	int jpegQuality = 90;
 
 	// at level 10 this puts us somewhere in east africa
-	int64_t xOffset = 18000;
-	int64_t yOffset = 19000;
+	//int64_t xOffset = 18000;
+	//int64_t yOffset = 19000;
+	int64_t xOffset = 0;
+	int64_t yOffset = 0;
 
 	tsf::print("Processing...\n");
 

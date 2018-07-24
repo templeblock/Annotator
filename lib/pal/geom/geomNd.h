@@ -72,9 +72,9 @@ typename TVec::FT SnapPointToLine(bool isClosed, size_t nVertex, const TVec* lin
 	size_t bestsegI = 1;
 	FT     bestMu   = 0;
 	for (; i < top; h = i++) {
-		double localMu;
-		auto   closest  = ClosestPtOnLineT(pt, line[h], line[i], true, &localMu);
-		auto   distance = closest.distance(pt);
+		FT   localMu;
+		auto closest  = ClosestPtOnLineT(pt, line[h], line[i], true, &localMu);
+		auto distance = closest.distance(pt);
 		if (distance < bestDistance) {
 			bestPt       = closest;
 			bestDistance = distance;

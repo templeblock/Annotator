@@ -40,6 +40,7 @@ public:
 	int               MatchHeight       = 150; // Only perform matching from the bottom matchHeight pixels of the 'next' flattened frame
 	int               PixelsPerMeshCell = 60;  // Stride between each matching grid cell
 	time::Duration    RemainingTime;
+	double            FrameTime                   = 0; // Absolute video time in seconds, of most recently decoded frame
 	size_t            FrameNumber                 = 0;
 	double            DebugStartVideoAt           = 0;     // Used during debugging/development. Seeks first frame of video to X seconds of first video.
 	bool              EnableFullFlatOutput        = false; // If true, then FullFlat contains the full flat image output
@@ -53,6 +54,7 @@ public:
 	roadproc::Mesh                             Mesh;                   // The most recently stitched mesh
 
 	Error       Start(std::vector<std::string> videoFiles, float perspectiveZY);
+	Error       Rewind();               // Rewind to start of first video
 	Error       Next();                 // Process the next frame
 	gfx::Rect32 CropRectFromFullFlat(); // Returns the crop rectangle (out of the full flattened frustum image) that is used for alignment.
 	void        PrintRemainingTime();
@@ -63,7 +65,6 @@ private:
 	double                   VideoTimeOffset = 0; // Accumulating time counter, so that we can merge multiple videos into one timelime
 	time::Time               ProcessingStartTime;
 	size_t                   CurrentVideo = -1;
-	double                   FrameTime    = 0; // Absolute video time in seconds, of most recently decoded frame
 
 	// Tracking parameters
 	float                   AngleDeadAhead         = -90; // -90 is when the camera is facing straight forward from the car, and driving straight

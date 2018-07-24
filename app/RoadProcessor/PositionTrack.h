@@ -6,7 +6,7 @@ namespace imqs {
 namespace roadproc {
 
 struct TimePos {
-	double     Time;
+	double     FrameTime;
 	gfx::Vec3d Pos;
 };
 
@@ -18,7 +18,7 @@ public:
 	PositionTrack();
 	~PositionTrack();
 	Error LoadFile(std::string filename);
-	bool  GetPositionAndVelocity(double time, gfx::Vec3d& pos, gfx::Vec2d& vel2D) const;
+	bool  GetPositionAndVelocity(double time, gfx::Vec3d& pos, gfx::Vec2d& vel2D) const; // Returns position in meters, velocity in meters/second
 	void  Dump(double start, double end, double interval) const;
 
 private:

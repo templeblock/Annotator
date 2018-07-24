@@ -24,8 +24,10 @@ public:
 	Mesh();
 	Mesh(int width, int height);
 	Mesh(const Mesh& m);
+	Mesh(Mesh&& m);
 	~Mesh();
 	Mesh& operator=(const Mesh& m);
+	Mesh& operator=(Mesh&& m);
 
 	void       Initialize(int width, int height);
 	void       ResetUniformRectangular(gfx::Vec2f topLeft, gfx::Vec2f topRight, gfx::Vec2f bottomLeft, int imgWidth, int imgHeight);
@@ -35,6 +37,7 @@ public:
 	Error      LoadCompact(std::string filename);
 	gfx::Vec2f AvgValidDisplacement() const;
 	bool       FirstValid(int& x, int& y) const; // Returns false if there are no valid vertices
+	gfx::RectF PosBounds() const;
 
 	// Snap each mesh vertex so that it lies in the crack between the four nearest pixels (or on the
 	// edge, if it is an edge vertex). We do this so that when we run the optional flow algorithm,

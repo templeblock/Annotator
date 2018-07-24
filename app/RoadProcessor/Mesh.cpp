@@ -14,6 +14,10 @@ Mesh::Mesh(const Mesh& m) {
 	*this = m;
 }
 
+Mesh::Mesh(Mesh&& m) {
+	*this = std::move(m);
+}
+
 Mesh::Mesh(int width, int height) {
 	Initialize(width, height);
 }
@@ -26,6 +30,21 @@ Mesh& Mesh::operator=(const Mesh& m) {
 	if (Width != m.Width || Height != m.Height)
 		Initialize(m.Width, m.Height);
 	memcpy(Vertices, m.Vertices, Count * sizeof(Vertices[0]));
+	return *this;
+}
+
+Mesh& Mesh::operator=(Mesh&& m) {
+	if (this != &m) {
+		delete[] Vertices;
+		Width      = m.Width;
+		Height     = m.Height;
+		Count      = m.Count;
+		Vertices   = m.Vertices;
+		m.Width    = 0;
+		m.Height   = 0;
+		m.Count    = 0;
+		m.Vertices = nullptr;
+	}
 	return *this;
 }
 
@@ -220,6 +239,13 @@ bool Mesh::FirstValid(int& x, int& y) const {
 		}
 	}
 	return false;
+}
+
+gfx::RectF Mesh::PosBounds() const {
+	RectF b = RectF::Inverted();
+	for (int i = 0; i < Count; i++)
+		b.ExpandToFit(Vertices[i].Pos.x, Vertices[i].Pos.y);
+	return b;
 }
 
 //void Mesh::SnapToPixelEdges(int imgWidth, int imgHeight) {

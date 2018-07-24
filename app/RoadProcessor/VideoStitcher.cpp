@@ -86,9 +86,18 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiv
 	Flow.StableHSearchRange = 10;
 	Flow.StableVSearchRange = 10;
 
+	auto err = Rewind();
+	if (!err.OK())
+		return err;
+
+	return Error();
+}
+
+Error VideoStitcher::Rewind() {
 	CurrentVideo  = 0;
 	FrameNumber   = -1;
 	RemainingTime = time::Duration(0);
+	Velocities.clear();
 
 	auto err = Video.OpenFile(VideoFiles[0]);
 	if (!err.OK())
@@ -105,6 +114,8 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiv
 	AvgDir   = Vec2f(0, -1);
 	for (int i = 0; i < 5; i++)
 		AbsFlowBias.push_back(Vec2f(0, 0));
+	AbsRestart = AbsRestartCheckInterval;
+	NeedResync = false;
 
 	return Error();
 }

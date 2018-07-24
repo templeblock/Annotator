@@ -51,6 +51,20 @@ public:
 	T distance2D(Vec3Base b) const {
 		return std::hypot(x - b.x, y - b.y);
 	}
+
+	Vec3Base& operator+=(Vec3Base b) {
+		x += b.x;
+		y += b.y;
+		z += b.z;
+		return *this;
+	}
+
+	Vec3Base& operator-=(Vec3Base b) {
+		x -= b.x;
+		y -= b.y;
+		z -= b.z;
+		return *this;
+	}
 };
 
 template <typename T>
@@ -92,6 +106,9 @@ public:
 
 typedef Vec3<double> Vec3d;
 typedef Vec3<float>  Vec3f;
+
+inline Vec3f Vec3dTof(const Vec3d& v) { return Vec3f((float) v.x, (float) v.y, (float) v.z); }
+inline Vec3d Vec3fTod(const Vec3f& v) { return Vec3d((double) v.x, (double) v.y, (double) v.z); }
 
 } // namespace gfx
 } // namespace imqs
