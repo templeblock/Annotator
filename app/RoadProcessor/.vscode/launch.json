@@ -40,6 +40,8 @@
                 "Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS",
                 "stitch3",
                 "-d",
+                "-s",
+                "39",
                 "~/mldata/DSCF3040.MOV",
                 "~/inf",
                 "~/dev/Annotator/pos.json",

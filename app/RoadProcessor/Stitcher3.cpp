@@ -283,16 +283,20 @@ Error Stitcher3::StitchFrame() {
 }
 
 Error Stitcher3::DrawGeoReferencedFrame() {
-	auto geoPos = Track.GetPosition(Frames[0].FrameTime);
-	if (geoPos.distance2D(PrevGeoFramePos) < 0.1) {
-		// We just produce noise if we output frames when standing still
-		return Error();
+	Vec3d geoPos;
+	Vec2d vel2D;
+	Track.GetPositionAndVelocity(Frames[0].FrameTime, geoPos, vel2D);
+	//tsf::print("%.2f: Velocity: %.3f m/s. Distance: %.1f m (img AvgDisp: %.1f %.1f px)\n", VidStitcher.FrameTime, vel2D.size(), geoPos.distance2D(PrevGeoFramePos), Frames[1].AvgDisp.x, Frames[1].AvgDisp.y);
+
+	// We just produce noise if we output frames when standing still, so when we come to a stop, then we cease outputting frames
+	if (geoPos.distance2D(PrevGeoFramePos) > 1.0 || vel2D.size() > 4.0) {
+		Vec3d geoOffset;
+		TransformFrameCoordsToGeo(geoOffset);
+		auto err        = DrawGeoMesh(geoOffset);
+		PrevGeoFramePos = geoPos;
+		return err;
 	}
-	Vec3d geoOffset;
-	TransformFrameCoordsToGeo(geoOffset);
-	auto err        = DrawGeoMesh(geoOffset);
-	PrevGeoFramePos = geoPos;
-	return err;
+	return Error();
 }
 
 void Stitcher3::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
@@ -338,7 +342,10 @@ void Stitcher3::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
 			//Vec2f snapped = vx.UV;
 			float snapMu = 0;
 			//float  pixelDistanceFromCenter = geom::SnapPointToLine(false, 2, centerLine, snapped, snapMu);
-			Vec2f  snapped                 = geom::ClosestPtOnLineT(vx.UV, center0, center1, false, &snapMu);
+			Vec2f snapped = geom::ClosestPtOnLineT(vx.UV, center0, center1, false, &snapMu);
+			// This clamp here is necessary for cases where the car is basically standing still. If we don't clamp this,
+			// then we can end up producing a gigantic mesh, that is too large to render into our framebuffer.
+			snapMu                         = math::Clamp<float>(snapMu, -5, 100);
 			float  pixelDistanceFromCenter = snapped.distance(vx.UV);
 			double sideOfCenter            = math::SignOrZero(geom2d::SideOfLine(center0.x, center0.y, center1.x, center1.y, vx.UV.x, vx.UV.y));
 			sideOfCenter                   = -sideOfCenter;
