@@ -4,10 +4,12 @@
 
 #include <cmath>
 #include <lib/pal/pal.h>
+#include "Algo.h"
 #include "Buffer.h"
 #include "Canvas.h"
 #include "Color8.h"
 #include "ColorHSV.h"
+#include "Curve.h"
 #include "ImageIO.h"
 #include "Mat3.h"
 #include "Mat4.h"

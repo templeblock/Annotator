@@ -30,7 +30,9 @@ public:
 	gfx::Image        Flat;
 	gfx::Image        FlatPrev;
 	gfx::Image        Splat;
-	gfx::Image        FullFlat; // If EnableFullFlatOutput is true, then FullFlat contains the entire frustum, with perspective removed
+	gfx::Image        FullFlat;           // If EnableFullFlatOutput is true, then FullFlat contains the entire frustum, with perspective removed
+	gfx::Image        BrightnessAdjuster; // This is dynamically adjusted
+	gfx::Image        VignetteAdjust;     // This is computed during initialization, and then held constant
 	video::VideoFile  Video;
 	PerspectiveParams PP;
 	OpticalFlow2      Flow;
@@ -45,6 +47,7 @@ public:
 	double            DebugStartVideoAt           = 0;     // Used during debugging/development. Seeks first frame of video to X seconds of first video.
 	bool              EnableFullFlatOutput        = false; // If true, then FullFlat contains the full flat image output
 	bool              EnableCPUPerspectiveRemoval = false; // CPU path supports lens correction, but it's slower
+	bool              EnableBrightnessAdjuster    = true;
 
 	// Output
 	bool                                       EnableDebugPrint  = false;
@@ -77,12 +80,14 @@ private:
 	const int               AbsRestartCheckInterval = 100;
 	int                     AbsRestart              = AbsRestartCheckInterval;
 	bool                    NeedResync              = false; // If true, then we're trying to regain lock from a series of good absolute locks
+	std::vector<float>      BrightnessDelta;
 
 	Error       LoadNextFrame();
 	void        ComputeTimeRemaining();
 	void        RemovePerspective();
 	Error       ComputeStitch();
 	void        CheckSyncRestart(FlowResult& absFlowResult, bool& didReset);
+	void        ComputeBrightnessAdjustment(gfx::Vec2f disp);
 	void        SetupMesh(roadproc::Mesh& m);
 	static void SetupMesh(int srcWidth, int srcHeight, int matchHeight, int pixelsPerMeshCell, int flowMatchRadius, roadproc::Mesh& m);
 };

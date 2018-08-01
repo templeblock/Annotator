@@ -16,11 +16,13 @@ struct PerspectiveParams {
 struct Frustum {
 	int   Width  = 0;
 	int   Height = 0;
-	float X1     = 0;
-	float X2     = 0;
+	float X1     = 0; // In normalized coordinates (ie X1 is typically negative)
+	float X2     = 0; // In normalized coordinates (ie X2 is typically positive)
 
 	void DebugPrintParams(float z1, float zx, float zy, int frameWidth, int frameHeight) const;
 	void Polygon(gfx::Vec2f poly[4], float expandX = 0, float expandY = 0);
+	int  X1FullFrame() const { return Width / 2 + X1; }
+	int  X2FullFrame() const { return Width / 2 + X2; }
 };
 
 float      FindZ1ForIdentityScaleAtBottom(int frameWidth, int frameHeight, float zx, float zy);

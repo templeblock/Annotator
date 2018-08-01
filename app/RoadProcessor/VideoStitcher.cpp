@@ -43,7 +43,10 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiv
 		return Error("Unable to extraction creation time metadata from video file");
 
 	if (global::Lens != nullptr) {
-		auto err = global::Lens->InitializeDistortionCorrect(VideoWidth, VideoHeight);
+		// 32/18 = 16/9
+		auto err           = global::Lens->ComputeVignetting(32, 18, VignetteAdjust);
+		BrightnessAdjuster = VignetteAdjust;
+		err                = global::Lens->InitializeDistortionCorrect(VideoWidth, VideoHeight);
 		if (!err.OK())
 			return err;
 	}
@@ -82,6 +85,19 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiv
 		if (!err.OK())
 			return err;
 	}
+
+	// This little formulation was just worked out by observation, but we really ought to measure this, and
+	// adjust dynamically, as we go.
+	/*
+	BrightnessAdjuster.Alloc(ImageFormat::RGBA, 8, 8);
+	BrightnessAdjuster.Fill(Color8(127, 127, 127, 127).u);
+	for (int x = 0; x < BrightnessAdjuster.Width; x++) {
+		int edge = abs(x - BrightnessAdjuster.Width / 2);
+		int b    = 141 + int(edge * 2.5);
+
+		*BrightnessAdjuster.At32(x, BrightnessAdjuster.Height - 1) = Color8(b, b, b, 127).u;
+	}
+	*/
 
 	Flow.StableHSearchRange = 10;
 	Flow.StableVSearchRange = 10;
@@ -204,7 +220,7 @@ void VideoStitcher::RemovePerspective() {
 	} else {
 		// GPU:
 		Rend.Clear(Color8(0, 0, 0, 0));
-		Rend.RemovePerspective(Frame, PP);
+		Rend.RemovePerspective(Frame, &BrightnessAdjuster, PP);
 		//rend.CopyDeviceToImage(Rect32(0, 0, frustum.Width, frustum.Height), 0, 0, flat);
 		//flat.SaveJpeg("speed2-flat-GPU.jpeg");
 		//exit(1);
@@ -216,7 +232,7 @@ void VideoStitcher::RemovePerspective() {
 		}
 	}
 
-	//flat.SaveFile(tsf::fmt("flat-%d.png", iFrame));
+	//Flat.SaveFile(tsf::fmt("flat-%d.png", FrameNumber));
 	//if (iFrame == 2)
 	//	exit(1);
 }
@@ -251,7 +267,7 @@ Error VideoStitcher::ComputeStitch() {
 		if (fabs(angle - AngleDeadAhead) < ExpectedAngleRange && !isStopped) {
 			AvgDir += 0.005f * (disp.normalized() - AvgDir);
 		}
-		// Bad locks that I've seen go from a diff of 2426.7 to 17710.6. Wondering if that's not an overflow bug...... yeah.. probably overflow.
+		// Bad locks that I've seen go from a diff of 2426.7 to 17710.6. Wondering if that's not an overflow bug...... yeah, was probably overflow.
 		if (flowResult.Diff < AvgImgDiff * 2) {
 			FlowBias += 0.15f * (disp - FlowBias);
 			AvgImgDiff += 0.05f * (flowResult.Diff - AvgImgDiff);
@@ -265,6 +281,8 @@ Error VideoStitcher::ComputeStitch() {
 		// frame 0 has no history, so we just make it identical to frame 1
 		Velocities[0].second = disp;
 	}
+
+	ComputeBrightnessAdjustment(disp);
 
 	return Error();
 }
@@ -306,6 +324,58 @@ void VideoStitcher::CheckSyncRestart(FlowResult& absFlowResult, bool& didReset) 
 	} else {
 		AbsRestart--;
 	}
+}
+
+void VideoStitcher::ComputeBrightnessAdjustment(gfx::Vec2f disp) {
+	if (disp.y > 0) {
+		// just ignore backward movement
+		return;
+	}
+	int    vrad = 5; // this must be small, because we only tweak the bottom few rows
+	int    hrad = 20;
+	Rect32 rFlat;
+	rFlat.x1         = Flat.Width / 2 - hrad;
+	rFlat.x2         = rFlat.x1 + hrad * 2;
+	rFlat.y2         = Flat.Height;
+	rFlat.y1         = rFlat.y2 - vrad * 2;
+	Rect32 rFlatPrev = rFlat;
+	rFlatPrev.Offset((int) disp.x, (int) disp.y);
+	float delta = 0;
+	for (int dy = 0; dy < vrad * 2; dy++) {
+		const Color8* pFlat     = (const Color8*) Flat.At(rFlat.x1, rFlat.y1 + dy);
+		const Color8* pFlatPrev = (const Color8*) Flat.At(rFlatPrev.x1, rFlatPrev.y1 + dy);
+		for (int dx = 0; dx < hrad * 2; dx++) {
+			float l1 = Color8::SRGBtoLinearU8(pFlat->Lum());
+			float l2 = Color8::SRGBtoLinearU8(pFlatPrev->Lum());
+			delta += l2 / l1;
+			pFlat++;
+			pFlatPrev++;
+		}
+	}
+	delta /= (float) (vrad * 2 * hrad * 2);
+
+	float filteredDelta = 1;
+	if (delta > 0.8f && delta < 1.2f) {
+		BrightnessDelta.push_back(delta);
+		if (BrightnessDelta.size() > 9)
+			BrightnessDelta.erase(BrightnessDelta.begin());
+		auto sorted = BrightnessDelta;
+		sort(sorted.begin(), sorted.end());
+		filteredDelta = sorted[sorted.size() / 2];
+	}
+
+	for (int y = VignetteAdjust.Height - 2; y < VignetteAdjust.Height; y++) {
+		uint8_t* pV = VignetteAdjust.At(0, y);
+		uint8_t* pB = BrightnessAdjuster.At(0, y);
+		for (int x = 0; x < VignetteAdjust.Width; x++) {
+			float v = (float) *pV * (1.0f / (float) LensCorrector::VignetteGrayMultiplier);
+			v *= filteredDelta;
+			*pB = (uint8_t) math::Clamp<float>(v * LensCorrector::VignetteGrayMultiplier, 0, 255);
+			pV++;
+			pB++;
+		}
+	}
+	//tsf::print("filtered BrightnessDelta: %5.2f (%5.2f)\n", filteredDelta, delta);
 }
 
 void VideoStitcher::PrintRemainingTime() {

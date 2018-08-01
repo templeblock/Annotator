@@ -14,6 +14,7 @@
 // second video
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 --phase 1 -n 30 --start 0 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 --phase 2 -n 200 --start 14 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -d ~/mldata/DSCF3040.MOV ~/inf ~/dev/Annotator/pos.json 0 -0.00095
 
 // build/run-roadprocessor -r webtiles ~/inf
 
@@ -26,6 +27,8 @@ namespace roadproc {
 Stitcher3::Stitcher3() {
 	//ClearColor = Color8(0, 150, 0, 60);
 	ClearColor = Color8(0, 0, 0, 0);
+	for (int i = 0; i < NVignette; i++)
+		Vignetting[i] = 1;
 }
 
 Error Stitcher3::Initialize(string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds) {
@@ -53,7 +56,8 @@ Error Stitcher3::Initialize(string bitmapDir, std::vector<std::string> videoFile
 	InfBmpView = Rect64(0, 0, Rend.FBWidth, Rend.FBHeight);
 	Rend.Clear(ClearColor);
 
-	PrevDir = Vec2f(0, -1);
+	PrevDir         = Vec2f(0, -1);
+	PrevGeoFramePos = Vec3d(0, 0, 0);
 
 	return Error();
 }
@@ -66,7 +70,11 @@ Error Stitcher3::DoStitch(string bitmapDir, std::vector<std::string> videoFiles,
 	auto err      = Track.LoadFile(trackFile);
 	if (!err.OK())
 		return err;
-	//Track.Dump(0, 20, 0.5);
+	Track.ConvertToWebMercator();
+	//Track.Simplify(0.001);
+	Track.Smooth(0.5, 0.1);
+	//Track.Dump(0, 20, 0.05);
+	//Track.SaveCSV("/home/ben/tracks.csv");
 	//exit(1);
 
 	err = Initialize(bitmapDir, videoFiles, zx, zy, seconds);
@@ -162,11 +170,14 @@ Error Stitcher3::Run(int count) {
 		if (!err.OK())
 			return err;
 
+		// For now we just use hardcoded values for vignetting
+		//MeasureVignetting();
+
 		err = StitchFrame();
 		if (!err.OK())
 			return err;
 
-		if ((EnableSimpleRender || EnableGeoRender) && (i % 15 == 0 || count < 15 || i < 15))
+		if ((EnableSimpleRender || EnableGeoRender) && (i % 30 == 0 || (i < 20 && i % 5 == 0)))
 			Rend.SaveToFile("giant2.jpeg");
 
 		//if (VidStitcher.FrameNumber != 0) {
@@ -175,13 +186,42 @@ Error Stitcher3::Run(int count) {
 		//		return err;
 		//}
 
-		tsf::print("%v\n", VidStitcher.FrameNumber);
+		//tsf::print("%v\n", VidStitcher.FrameNumber);
 		//VidStitcher.PrintRemainingTime();
 
 		if (EnableSimpleRender)
 			AdjustInfiniteBitmapView(PrevFullMesh, PrevDir);
 	}
 	return Error();
+}
+
+static float LineLuminance(const Image& img, int x1, int x2, int y) {
+	const Color8* c   = (const Color8*) img.At(x1, y);
+	int           lum = 0;
+	for (int x = x1; x < x2; x++) {
+		lum += c->Lum();
+		c++;
+	}
+	return (float) lum / (float) (x2 - x1);
+}
+
+void Stitcher3::MeasureVignetting() {
+	int xleft           = (int) VidStitcher.Frustum.X1FullFrame() + 20;
+	int xright          = (int) VidStitcher.Frustum.X2FullFrame() - 20;
+	int xloc[NVignette] = {xleft, (xleft + xright) / 2, xright};
+
+	int h  = 50;
+	int y1 = VidStitcher.FullFlat.Height - h - 1;
+	int y2 = VidStitcher.FullFlat.Height;
+	for (int loc = 0; loc < NVignette; loc++) {
+		int   x1     = xloc[loc] - 20;
+		int   x2     = xloc[loc] + 20;
+		float l1     = LineLuminance(VidStitcher.FullFlat, x1, x2, y1);
+		float l2     = LineLuminance(VidStitcher.FullFlat, x1, x2, y2);
+		float adjust = l2 / l1;
+		Vignetting[loc] += 0.5f * (adjust - Vignetting[loc]);
+	}
+	tsf::print("%5.2f %5.2f %5.2f\n", Vignetting[0], Vignetting[1], Vignetting[2]);
 }
 
 Error Stitcher3::StitchFrame() {
@@ -243,10 +283,16 @@ Error Stitcher3::StitchFrame() {
 }
 
 Error Stitcher3::DrawGeoReferencedFrame() {
-	FrameObject& f = Frames[0];
-	Vec3d        geoOffset;
+	auto geoPos = Track.GetPosition(Frames[0].FrameTime);
+	if (geoPos.distance2D(PrevGeoFramePos) < 0.1) {
+		// We just produce noise if we output frames when standing still
+		return Error();
+	}
+	Vec3d geoOffset;
 	TransformFrameCoordsToGeo(geoOffset);
-	return DrawGeoMesh(geoOffset);
+	auto err        = DrawGeoMesh(geoOffset);
+	PrevGeoFramePos = geoPos;
+	return err;
 }
 
 void Stitcher3::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
@@ -295,6 +341,7 @@ void Stitcher3::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
 			Vec2f  snapped                 = geom::ClosestPtOnLineT(vx.UV, center0, center1, false, &snapMu);
 			float  pixelDistanceFromCenter = snapped.distance(vx.UV);
 			double sideOfCenter            = math::SignOrZero(geom2d::SideOfLine(center0.x, center0.y, center1.x, center1.y, vx.UV.x, vx.UV.y));
+			sideOfCenter                   = -sideOfCenter;
 			double ptime                   = t0 + snapMu * (t1 - t0);
 			Vec3d  geoCenterPos;
 			Vec2d  geoVel;
@@ -466,7 +513,7 @@ Error Stitcher3::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
 
 	// Persist current framebuffer
 	Image img;
-	if (InfBmpView.Width() != 0) {
+	if (!DryRun && InfBmpView.Width() != 0) {
 		Rend.CopyDeviceToImage(Rect32(0, 0, Rend.FBWidth, Rend.FBHeight), 0, 0, img);
 		auto err = InfBmp.Save(InfBmpView, img);
 		if (!err.OK())
@@ -474,7 +521,7 @@ Error Stitcher3::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
 	}
 
 	Rect64 newView;
-	if (outRect.x1 < InfBmpView.x1) {
+	if (outRect.CenterX() < InfBmpView.CenterX()) {
 		newView.x2 = InfiniteBitmap::RoundUp64(outRect.x2, InfBmp.TileSize);
 		newView.x1 = newView.x2 - Rend.FBWidth;
 	} else {
@@ -482,7 +529,7 @@ Error Stitcher3::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
 		newView.x2 = newView.x1 + Rend.FBWidth;
 	}
 
-	if (outRect.y1 < InfBmpView.y1) {
+	if (outRect.CenterY() < InfBmpView.CenterY()) {
 		newView.y2 = InfiniteBitmap::RoundUp64(outRect.y2, InfBmp.TileSize);
 		newView.y1 = newView.y2 - Rend.FBHeight;
 	} else {
@@ -500,9 +547,11 @@ Error Stitcher3::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
 
 	img.Alloc(gfx::ImageFormat::RGBAP, Rend.FBWidth, Rend.FBHeight);
 	img.Fill(0);
-	auto err = InfBmp.Load(newView, img);
-	if (!err.OK())
-		return err;
+	if (!DryRun) {
+		auto err = InfBmp.Load(newView, img);
+		if (!err.OK())
+			return err;
+	}
 	Rend.Clear(ClearColor);
 	Rend.CopyImageToDevice(img, 0, 0);
 
@@ -605,15 +654,16 @@ int WebTiles3(argparse::Args& args) {
 
 int Stitch3(argparse::Args& args) {
 	auto   videoFiles = strings::Split(args.Params[0], ',');
-	auto   trackFile  = args.Params[1];
-	float  zx         = atof(args.Params[2].c_str());
-	float  zy         = atof(args.Params[3].c_str());
+	auto   bmpDir     = args.Params[1];
+	auto   trackFile  = args.Params[2];
+	float  zx         = atof(args.Params[3].c_str());
+	float  zy         = atof(args.Params[4].c_str());
 	int    count      = args.GetInt("number");
 	double seek       = atof(args.Get("start").c_str());
 
-	string    bmpDir = "/home/ben/inf";
 	Stitcher3 s;
-	auto      err = s.DoStitch(bmpDir, videoFiles, trackFile, zx, zy, seek, count);
+	s.DryRun = args.Has("dryrun");
+	auto err = s.DoStitch(bmpDir, videoFiles, trackFile, zx, zy, seek, count);
 	if (!err.OK()) {
 		tsf::print("Error: %v\n", err.Message());
 		return 1;

@@ -92,7 +92,7 @@ Error LensCorrector::InitializeDistortionCorrect(int width, int height) {
 	if (!Mod)
 		return Error("Unable to create lens modifier");
 
-	// If this is a zoom lense, then one would need to enter this information
+	// If this is a zoom lens, then one would need to enter this information
 	float focal = Lens->MinFocal;
 
 	int enabled = Mod->EnableDistortionCorrection(Lens, focal);
@@ -104,6 +104,76 @@ Error LensCorrector::InitializeDistortionCorrect(int width, int height) {
 	InterpPos  = (float*) malloc(width * 2 * 3 * sizeof(float));
 	ImageWidth = width;
 
+	return Error();
+}
+
+Error LensCorrector::ComputeVignetting(int width, int height, gfx::Image& img) {
+	// The Fuji X-T2 sensor is 23.6mm x 15.6 mm.
+	// Assuming LensFun emits values for the entire sensor, but we're doing 16x9 shooting (FHD),
+	// then we need to chop off some of the left/right results.
+	// 23.6 / 15.6 = 1.5128
+	// 16 / 9 = 1.7777
+	// Ooops - the sensor is actually more square than 16/9. So we should actually be throwing away
+	// bottom/top results.
+	// Anyway - if we divide 1.77777 / 1.5128, we get 1.17, which is precisely the quoted "crop factor"
+	// that the reviews talk about, when they mention FHD/4K recording. So it looks like we've got the
+	// right number here.
+	// I haven't checked whether LensFun has the camera sensor dimensions in it's DB.
+
+	// Make these larger, for a potential crop factor
+	int sensorWidth  = width;
+	int sensorHeight = height * 1.777 / 1.5128;
+
+	float crop = Camera->CropFactor;
+	auto  mod  = lf_modifier_create(crop, sensorWidth, sensorHeight, LF_PF_F32, false);
+	if (!mod)
+		return Error("Unable to create lens modifier");
+
+	float focal    = Lens->MinFocal;
+	float aperture = 5.6; // this is what we're recording on in August 2018, on the Fuji X-T2
+	float distance = 2.0; // 2 meters
+	int   enabled  = mod->EnableVignettingCorrection(Lens, focal, aperture, distance);
+	if (!(enabled & LF_MODIFY_VIGNETTING))
+		return Error("Failed to initialize vignetting correction");
+
+	float* px = new float[sensorWidth * sensorHeight];
+	for (int i = 0; i < sensorWidth * sensorHeight; i++)
+		px[i] = 1;
+	bool ok = mod->ApplyColorModification(px, 0.0, 0.0, sensorWidth, sensorHeight, LF_CR_1(INTENSITY), sensorWidth * sizeof(float));
+	IMQS_ASSERT(ok);
+
+	bool debugPrint = false;
+	if (debugPrint) {
+		for (int y = 0; y < sensorHeight; y++) {
+			for (int x = 0; x < sensorWidth; x++) {
+				tsf::print("%4.2f ", px[y * width + x]);
+			}
+			tsf::print("\n");
+		}
+	}
+
+	img.Alloc(gfx::ImageFormat::Gray, width, height);
+	int x1 = (sensorWidth - width) / 2;
+	int y1 = (sensorHeight - height) / 2;
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			int   sx      = x + x1;
+			int   sy      = y + y1;
+			float v       = px[sy * sensorWidth + sx];
+			*img.At(x, y) = (uint8_t) math::Clamp<float>(v * VignetteGrayMultiplier, 0, 255);
+		}
+	}
+
+	if (debugPrint) {
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				tsf::print("%3d ", (int) *img.At(x, y));
+			}
+			tsf::print("\n");
+		}
+	}
+
+	delete[] px;
 	return Error();
 }
 

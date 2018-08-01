@@ -199,7 +199,7 @@ static Error DoSpeed2(vector<string> videoFiles, SpeedOutputMode outputMode, str
 
 			// GPU:
 			rend.Clear(Color8(0, 0, 0, 0));
-			rend.RemovePerspective(frame, pp);
+			rend.RemovePerspective(frame, nullptr, pp);
 			//rend.CopyDeviceToImage(Rect32(0, 0, frustum.Width, frustum.Height), 0, 0, flat);
 			//flat.SaveJpeg("speed2-flat-GPU.jpeg");
 			rend.CopyDeviceToImage(cropRect, 0, 0, flat);

@@ -16,6 +16,7 @@ public:
 	gfx::Color8 ClearColor;         // In production we'll want this to be black, but during dev it's nice to have it some other color like green
 	float       MetersPerPixel = 0; // Computed scale. After computing this, we assume it is constant for the entire recording
 	int         BaseZoomLevel  = 0;
+	bool        DryRun         = false; // If true, then don't actually write anything to the infinite bitmap
 
 	Stitcher3();
 
@@ -37,10 +38,13 @@ private:
 	gfx::Vec2f               PrevDir;           // Direction of the top of the flattened frame. (0, -1) is straight ahead. Frozen when vehicle is stopped.
 	gfx::Vec2f               PrevDirUnfiltered; // Same as PrevDir, but this value is written to regardless of current velocity.
 	Mesh                     PrevFullMesh;
+	gfx::Vec3d               PrevGeoFramePos; // Position in Tracks, of the last geo-referenced frame that we rendered
 	std::vector<FrameObject> Frames;
 	bool                     EnableSimpleRender = false;
 	bool                     EnableGeoRender    = false;
 	bool                     HavePositions      = false;
+	const static int         NVignette          = 3;
+	float                    Vignetting[NVignette];
 
 	Error  Initialize(std::string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds);
 	Error  AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirection);
@@ -49,6 +53,7 @@ private:
 	void   SetupBaseMapScale();
 	double BaseMapMetersPerPixel();
 	Error  Run(int count);
+	void   MeasureVignetting();
 	Error  StitchFrame();
 	Error  DrawGeoReferencedFrame();
 	void   TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset);

@@ -145,6 +145,7 @@ void main()
 
 static const char* RemovePerspectiveShaderFrag = R"(
 uniform sampler2D tex;
+uniform sampler2D tex2;
 varying vec2 uv;
 varying vec4 extra;
 varying vec4 color;
@@ -161,7 +162,8 @@ void main()
 	if (uvr.x < 0.0 || uvr.x > 1.0) {
 		c *= 0.0;
 	}
-    gl_FragColor = texture2D(tex, uvr) * c;
+	vec4 adjust = (255.0/50.0) * texture2D(tex2, uvr).rrra;
+    gl_FragColor = texture2D(tex, uvr) * adjust * c;
 }
 )";
 
@@ -273,10 +275,10 @@ void MeshRenderer::CopyImageToDevice(const gfx::Image& img, int dstX, int dstY) 
 
 void MeshRenderer::DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect) {
 	MakeCurrent();
-	DrawMeshWithShader(CopyShader, m, img, meshRenderRect);
+	DrawMeshWithShader(CopyShader, m, img, nullptr, meshRenderRect);
 }
 
-void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect) {
+void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::Image& img1, const gfx::Image* img2, gfx::Rect32 meshRenderRect) {
 	MakeCurrent();
 	if (meshRenderRect.IsInverted())
 		meshRenderRect = Rect32(0, 0, m.Width, m.Height);
@@ -292,23 +294,34 @@ void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::I
 	auto locvUV    = glGetAttribLocation(shader, "vUV");
 	auto locvColor = glGetAttribLocation(shader, "vColor");
 	auto locTex    = glGetUniformLocation(shader, "tex");
-	IMQS_ASSERT(locMVP != -1 && locvPos != -1 && locvUV != -1 && locTex != -1 && locvColor != -1);
+	IMQS_ASSERT(locMVP != -1 && locvPos != -1 && locvUV != -1 && locvColor != -1 && locTex != -1);
 	//IMQS_ASSERT(locMVP != -1 && locvPos != -1 && locvColor != -1);
 
 	// optional attribs
 	auto locvExtra = glGetAttribLocation(shader, "vExtra");
-	if (shader == RemovePerspectiveShader)
-		IMQS_ASSERT(locvExtra != -1);
+	auto locTex2   = glGetUniformLocation(shader, "tex2");
+	//if (shader == RemovePerspectiveShader)
+	//	IMQS_ASSERT(locvExtra != -1 && locTex2 != -1);
 
-	GLuint tex = -1;
-	glGenTextures(1, &tex);
-	glBindTexture(GL_TEXTURE_2D, tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, img.Width, img.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.Data);
+	GLuint tex[2];
+	glGenTextures(2, tex);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex[0]);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, img1.Width, img1.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img1.Data);
+	SetTextureLinearFilter();
+
+	if (img2) {
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, tex[1]);
+		if (img2->NumChannels() == 4)
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img2->Width, img2->Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img2->Data);
+		else if (img2->Format == ImageFormat::Gray)
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, img2->Width, img2->Height, 0, GL_RED, GL_UNSIGNED_BYTE, img2->Data);
+		SetTextureLinearFilter();
+	}
+
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 	IMQS_ASSERT(mr.Width() * mr.Height() <= 65535); // If you blow this limit, then just switch to uint32 indices.
 
@@ -321,8 +334,8 @@ void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::I
 		for (int x = mr.x1; x < mr.x2; x++) {
 			const auto& mv = m.At(x, y);
 			Vec2f       uv = mv.UV;
-			uv.x           = uv.x / (float) img.Width;
-			uv.y           = uv.y / (float) img.Height;
+			uv.x           = uv.x / (float) img1.Width;
+			uv.y           = uv.y / (float) img1.Height;
 			*vxout++       = VxGen::Make(Vec3f(mv.Pos, 0), uv, mv.Color, mv.Extra);
 		}
 	}
@@ -343,11 +356,6 @@ void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::I
 		}
 	}
 	IMQS_ASSERT(indout == indices + nindices);
-
-	//GLuint vxBuf = -1;
-	//glGenBuffers(1, &vxBuf);
-	//glBindBuffer(GL_ARRAY_BUFFER, vxBuf);
-	//glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
 	const uint8_t* vptr = (const uint8_t*) vx;
 
@@ -371,6 +379,8 @@ void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::I
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 
 	glUniform1i(locTex, 0); // texture unit 0
+	if (locTex2 != -1)
+		glUniform1i(locTex2, 1); // texture unit 1
 
 	glDrawElements(GL_TRIANGLES, nindices, GL_UNSIGNED_SHORT, indices);
 
@@ -379,13 +389,19 @@ void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::I
 	glDisableVertexAttribArray(locvColor);
 	if (locvExtra != -1)
 		glDisableVertexAttribArray(locvExtra);
-	//glDeleteBuffers(1, &vxBuf);
-	glDeleteTextures(1, &tex);
+	glDeleteTextures(2, tex);
 
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 }
 
-void MeshRenderer::RemovePerspective(const gfx::Image& camera, PerspectiveParams pp) {
+void MeshRenderer::SetTextureLinearFilter() {
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+}
+
+void MeshRenderer::RemovePerspective(const gfx::Image& camera, const gfx::Image* adjuster, PerspectiveParams pp) {
 	MakeCurrent();
 	auto frustum = ComputeFrustum(camera.Width, camera.Height, pp);
 	Mesh m;
@@ -412,7 +428,14 @@ void MeshRenderer::RemovePerspective(const gfx::Image& camera, PerspectiveParams
 		m.Vertices[i].Extra = Vec4f(ppNorm.ZX, ppNorm.ZY, 0, ppNorm.Z1);
 	}
 
-	DrawMeshWithShader(RemovePerspectiveShader, m, camera);
+	Image nullAdjuster;
+	if (!adjuster) {
+		nullAdjuster.Alloc(ImageFormat::RGBA, 2, 2);
+		nullAdjuster.Fill(0x7f7f7f7f);
+		adjuster = &nullAdjuster;
+	}
+
+	DrawMeshWithShader(RemovePerspectiveShader, m, camera, adjuster);
 }
 
 void MeshRenderer::SaveToFile(std::string filename) {

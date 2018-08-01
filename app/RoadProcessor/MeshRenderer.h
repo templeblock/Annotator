@@ -26,8 +26,8 @@ public:
 	void CopyDeviceToImage(gfx::Rect32 srcRect, int dstX, int dstY, gfx::Image& img);
 	void CopyImageToDevice(const gfx::Image& img, int dstX, int dstY);
 	void DrawMesh(const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect = gfx::Rect32::Inverted());
-	void DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::Image& img, gfx::Rect32 meshRenderRect = gfx::Rect32::Inverted());
-	void RemovePerspective(const gfx::Image& camera, PerspectiveParams pp);
+	void DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::Image& img1, const gfx::Image* img2 = nullptr, gfx::Rect32 meshRenderRect = gfx::Rect32::Inverted());
+	void RemovePerspective(const gfx::Image& camera, const gfx::Image* adjuster, PerspectiveParams pp);
 	void SaveToFile(std::string filename);
 
 	Error DrawHelloWorldTriangle();
@@ -40,6 +40,7 @@ private:
 
 	void  MakeCurrent();
 	Error CompileShader(std::string vertexSrc, std::string fragSrc, GLuint& shader);
+	void  SetTextureLinearFilter();
 };
 
 } // namespace roadproc

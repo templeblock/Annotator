@@ -98,7 +98,7 @@ int main(int argc, char** argv) {
 	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
 	auto stitch      = args.AddCommand("stitch <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
 	auto stitch2     = args.AddCommand("stitch2 <video> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch2);
-	auto stitch3     = args.AddCommand("stitch3 <video> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch3);
+	auto stitch3     = args.AddCommand("stitch3 <video> <bitmap dir> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch3);
 	stitch->AddValue("n", "number", "Number of frames", "2");
 	stitch->AddValue("s", "start", "Start time in seconds", "0");
 
@@ -108,6 +108,7 @@ int main(int argc, char** argv) {
 
 	stitch3->AddValue("n", "number", "Number of frames", "-1");
 	stitch3->AddValue("s", "start", "Start time in seconds", "0");
+	stitch3->AddSwitch("d", "dryrun", "Don't actually write anything to the infinite bitmap");
 
 	auto webtiles = args.AddCommand("webtiles <infinite bitmap>", "Create web tiles from infinite bitmap", WebTiles3);
 

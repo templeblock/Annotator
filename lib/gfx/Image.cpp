@@ -145,7 +145,7 @@ void Image::Fill(Rect32 rect, uint32_t color) {
 		uint32_t* dst = At32(rect.x1, y);
 		size_t    x2  = rect.x2;
 		for (size_t x = rect.x1; x < x2; x++)
-			dst[x] = color;
+			*dst++ = color;
 	}
 }
 

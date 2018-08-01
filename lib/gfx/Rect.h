@@ -29,6 +29,9 @@ public:
 	T Width() const { return x2 - x1; }
 	T Height() const { return y2 - y1; }
 
+	T CenterX() const { return (x1 + x2) / 2; }
+	T CenterY() const { return (y1 + y2) / 2; }
+
 	void Expand(T x, T y) {
 		x1 -= x;
 		x2 += x;
