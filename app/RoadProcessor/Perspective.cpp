@@ -3,8 +3,11 @@
 #include "LensCorrection.h"
 #include "Globals.h"
 #include "Perspective.h"
+#include "MeshRenderer.h"
 
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /home/ben/mldata/DSCF3040.MOV
+
+// Times.. on the first mthata video I'm trying, time for perspective computation is 1m40.
 
 /*
 The functions in here compute the perspective factor Z2, from a video.
@@ -337,7 +340,7 @@ struct ImageDiffResult {
 };
 
 // Returns the difference between the two images, after they've been unprojected, and aligned
-static ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float zx, float zy) {
+static ImageDiffResult ImageDiff(MeshRenderer& rend, const Image& img1, const Image& img2, float zx, float zy) {
 	bool debug = false;
 
 	float z1         = FindZ1ForIdentityScaleAtBottom(img1.Width, img1.Height, zx, zy);
@@ -350,8 +353,15 @@ static ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float zx,
 	flat1.Alloc(ImageFormat::RGBA, f.Width, f.Height);
 	flat2.Alloc(ImageFormat::RGBA, f.Width, f.Height);
 
-	RemovePerspective(img1, flat1, z1, zx, zy, orgX, orgY);
-	RemovePerspective(img2, flat2, z1, zx, zy, orgX, orgY);
+	//RemovePerspective(img1, flat1, z1, zx, zy, orgX, orgY);
+	//RemovePerspective(img2, flat2, z1, zx, zy, orgX, orgY);
+	//flat1.SaveFile("flat1.jpeg");
+	//flat2.SaveFile("flat2.jpeg");
+
+	rend.RemovePerspectiveAndCopyOut(img1, nullptr, PerspectiveParams(z1, zx, zy), flat1);
+	rend.RemovePerspectiveAndCopyOut(img2, nullptr, PerspectiveParams(z1, zx, zy), flat2);
+	//flat1.SaveFile("flat1.jpeg");
+	//flat2.SaveFile("flat2.jpeg");
 
 	int   windowX1 = flat1.Width / 2 + f.X1 + 2;
 	int   windowX2 = flat1.Width / 2 + f.X2 - 2;
@@ -368,7 +378,7 @@ static ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float zx,
 
 	KeyPointSet        kp1, kp2;
 	vector<cv::DMatch> matches;
-	ComputeKeyPointsAndMatch("FREAK", m1, m2, 5000, 0.1, 10, true, false, kp1, kp2, matches);
+	ComputeKeyPointsAndMatch("FREAK", m1, m2, 5000, 0.1, 10, false, false, kp1, kp2, matches);
 
 	if (debug) {
 		ImageIO imgIO;
@@ -400,18 +410,18 @@ static ImageDiffResult ImageDiff(const Image& img1, const Image& img2, float zx,
 	return res;
 }
 
-static Error EstimateZY(vector<string> videoFiles, float& bestZYEstimate) {
+static StaticError ErrTooFewGoodFrames("Too few good frames");
+
+// If we have less than this number of valid (ie decent quality) frame pairs, then the entire process is considered a failure
+static const int MinValidSamples = 20;
+
+// we store nSamples many pairs of frames in memory
+// A 1920x1080 RGBA image takes 8 MB memory. So 20 pairs is 316 MB, 100 pairs is 1.6 GB
+static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEstimate) {
 	video::VideoFile video;
 	auto             err = video.OpenFile(videoFiles[0]);
 	if (!err.OK())
 		return err;
-
-	// we store this many pairs of frames in memory
-	// A 1920x1080 RGBA image takes 8 MB memory. So 20 pairs is 316 MB, 100 pairs is 1.6 GB
-	int nSamples = 110;
-
-	// If we have less than this number of valid (ie decent quality) frame pairs, then the entire process is considered a failure
-	int minValidSamples = 30;
 
 	// seconds apart each sample
 	double spacing = video.GetVideoStreamInfo().DurationSeconds() / (nSamples + 1);
@@ -425,6 +435,7 @@ static Error EstimateZY(vector<string> videoFiles, float& bestZYEstimate) {
 			return err;
 	}
 
+	tsf::print("Loading camera frames\n");
 	vector<pair<Image, Image>> samples;
 	for (int i = 0; i < nSamples; i++) {
 		//auto err = video.SeekToSecond(40);
@@ -441,37 +452,6 @@ static Error EstimateZY(vector<string> videoFiles, float& bestZYEstimate) {
 		samples.push_back(std::move(sample));
 	}
 
-	// initial search parameters:
-	// z2 = -0.0011,  7 iterations, step with z2 += 0.0001
-	// z2 = -0.0011, 14 iterations, step with z2 += 0.00005
-
-	float zy_min = -0.0011;
-	float zy_max = -0.0005;
-	//float z2 = -0.001;
-	//float z2 = -0.001050;
-	//float z2 = -0.000750;
-
-	// pairs of zy and X match variance, which we fit a parabola to.
-	vector<pair<double, double>> zyAndVar;
-	/*
-	z2AndVar = {
-	    {-0.001100, 268.786},
-	    {-0.001050, 211.148},
-	    {-0.001000, 183.983},
-	    {-0.000950, 147.988},
-	    {-0.000900, 151.185},
-	    {-0.000850, 149.401},
-	    {-0.000800, 168.865},
-	    {-0.000750, 190.066},
-	    {-0.000700, 231.291},
-	    {-0.000650, 267.394},
-	    {-0.000600, 334.534},
-	    {-0.000550, 390.127},
-	    {-0.000500, 473.246},
-	    {-0.000450, 534.972},
-	};
-	*/
-
 	// count the number of times we've noticed that in this frame the vehicle is not moving fast enough,
 	// and also how many times it had too few matches
 	vector<int> tooSlow;
@@ -483,74 +463,116 @@ static Error EstimateZY(vector<string> videoFiles, float& bestZYEstimate) {
 
 	float zx = 0;
 
-	int niter = 20;
-	for (int iter = 0; iter < niter; iter++) {
-		float zy = zy_min + iter * (zy_max - zy_min) / (niter - 1);
-		float z1 = FindZ1ForIdentityScaleAtBottom(samples[0].first.Width, samples[0].first.Height, zx, zy);
-		auto  f  = ComputeFrustum(samples[0].first.Width, samples[0].first.Height, z1, zx, zy);
-		//double score   = 0;
-		//double nsample = 0;
-		vector<Vec2d> stats;
-		for (size_t i = 0; i < samples.size(); i++) {
-			// once we've seen a frame as been "too slow" or "too few" too often, skip it forever
-			if (tooFew[i] >= 5 || tooSlow[i] >= 5) {
-				continue;
-			}
-			const auto& sample = samples[i];
-			auto        diff   = ImageDiff(sample.first, sample.second, zx, zy);
-			if (diff.MatchCount < 100) {
-				tooFew[i]++;
-			} else {
-				//score += diff.XVar;
-				//nsample++;
-				//tsf::print("%3d, %5d, X:(%8.3f, %8.3f), Y(%8.3f, %8.3f)\n", i, diff.MatchCount, diff.XMean, diff.XVar, diff.YMean, diff.YVar);
-				// We need to be moving forward, and YMean predicts this. Typical road speed is around 100 to 300 pixels.
-				if (diff.YMean < 20) {
-					tooSlow[i]++;
+	MeshRenderer rend;
+	err = rend.Initialize(100, 100);
+	if (!err.OK())
+		return err;
+
+	tsf::print("Estimating...\n");
+
+	auto estimate = [&](double zy_min, double zy_max, double& zy_estimate) -> Error {
+		// pairs of zy and X match variance, which we fit a parabola to.
+		vector<pair<double, double>> zyAndVar;
+
+		int nsteps = 3;
+		for (int step = 0; step < nsteps; step++) {
+			float zy = zy_min + step * (zy_max - zy_min) / (nsteps - 1);
+			float z1 = FindZ1ForIdentityScaleAtBottom(samples[0].first.Width, samples[0].first.Height, zx, zy);
+			auto  f  = ComputeFrustum(samples[0].first.Width, samples[0].first.Height, z1, zx, zy);
+
+			err = rend.ResizeFrameBuffer(f.Width, f.Height);
+			if (!err.OK())
+				return err;
+
+			vector<Vec2d> stats;
+			for (size_t i = 0; i < samples.size(); i++) {
+				// once we've seen a frame as been "too slow" or "too few" too often, skip it forever
+				if (tooFew[i] >= 5 || tooSlow[i] >= 5) {
+					continue;
+				}
+				const auto& sample = samples[i];
+				auto        diff   = ImageDiff(rend, sample.first, sample.second, zx, zy);
+				if (diff.MatchCount < 100) {
+					tooFew[i]++;
 				} else {
-					stats.emplace_back(diff.XVar, diff.YVar);
+					//score += diff.XVar;
+					//nsample++;
+					//tsf::print("%3d, %5d, X:(%8.3f, %8.3f), Y(%8.3f, %8.3f)\n", i, diff.MatchCount, diff.XMean, diff.XVar, diff.YMean, diff.YVar);
+					// We need to be moving forward, and YMean predicts this. Typical road speed is around 100 to 300 pixels.
+					if (diff.YMean < 20) {
+						tooSlow[i]++;
+					} else {
+						stats.emplace_back(diff.XVar, diff.YVar);
+					}
 				}
 			}
+			if (stats.size() < MinValidSamples) {
+				tsf::print("Too few valid frames (z1 = %.8f, frames = %v/%v)\n", z1, stats.size(), samples.size());
+				return ErrTooFewGoodFrames;
+			}
+			sort(stats.begin(), stats.end(), [](Vec2d a, Vec2d b) { return a.size() < b.size(); });
+			double score = 0;
+			size_t burn  = stats.size() / 10;
+			for (size_t i = burn; i < stats.size() - burn; i++) {
+				score += stats[i].x;
+			}
+			double nsample = stats.size() - 2 * burn;
+			score /= nsample;
+			zyAndVar.emplace_back(zy, score);
+			tsf::print("%.6f,%.3f,%v,%v,%v\n", zy, score, nsample, f.Width, f.Height);
+			//z2 += 0.00005;
 		}
-		if (stats.size() < minValidSamples)
-			return Error::Fmt("Too few valid frames (z1 = %.8f, frames = %v/%v)", z1, stats.size(), samples.size());
-		sort(stats.begin(), stats.end(), [](Vec2d a, Vec2d b) { return a.size() < b.size(); });
-		double score = 0;
-		size_t burn  = stats.size() / 10;
-		for (size_t i = burn; i < stats.size() - burn; i++) {
-			score += stats[i].x;
-		}
-		double nsample = stats.size() - 2 * burn;
-		score /= nsample;
-		zyAndVar.emplace_back(zy, score);
-		tsf::print("%.6f,%.3f,%v,%v,%v\n", zy, score, nsample, f.Width, f.Height);
-		//z2 += 0.00005;
+
+		// scale and bias the zy values so that the quadratic fit has better conditioned numbers
+		float zyFitBias  = 0.0009;
+		float zyFitScale = 1000000;
+		for (auto& p : zyAndVar)
+			p.first = (p.first + zyFitBias) * zyFitScale;
+
+		double a, b, c;
+		FitQuadratic(zyAndVar, a, b, c);
+		double bestZY = -b / (2 * a);
+		zy_estimate   = bestZY / zyFitScale - zyFitBias;
+		//tsf::print("%v %v %v -> %v\n", a, b, c, bestZY);
+		return Error();
+	};
+
+	//double zy_min = -0.0011;
+	//double zy_max = -0.0002;
+	double zy_min = -0.0008;
+	double zy_max = -0.0002;
+	for (int iter = 0; iter < 3; iter++) {
+		double bestZY = 0;
+		auto   err    = estimate(zy_min, zy_max, bestZY);
+		if (!err.OK())
+			return err;
+		tsf::print("estimate: %.6f\n", bestZY);
+		double radius  = 0.1 * (zy_max - zy_min);
+		zy_min         = bestZY - radius;
+		zy_max         = bestZY + radius;
+		bestZYEstimate = (float) bestZY;
 	}
-
-	// scale and bias the zy values so that the quadratic fit has better conditioned numbers
-	float zyFitBias  = 0.0009;
-	float zyFitScale = 1000000;
-	for (auto& p : zyAndVar)
-		p.first = (p.first + zyFitBias) * zyFitScale;
-
-	double a, b, c;
-	FitQuadratic(zyAndVar, a, b, c);
-	double bestZY  = -b / (2 * a);
-	bestZY         = bestZY / zyFitScale - zyFitBias;
-	bestZYEstimate = (float) bestZY;
-	//tsf::print("%v %v %v -> %v\n", a, b, c, bestZ2);
 
 	return Error();
 }
 
 static Error DoPerspective(vector<string> videoFiles) {
-	float zy  = 0;
-	auto  err = EstimateZY(videoFiles, zy);
+	float zy       = 0;
+	int   nSamples = (int) (MinValidSamples * 1.5);
+	Error err;
+	for (; nSamples < 200; nSamples = int(nSamples * 1.5)) {
+		err = EstimateZY(videoFiles, nSamples, zy);
+		if (err.OK())
+			break;
+		else if (err == ErrTooFewGoodFrames)
+			continue;
+		else if (!err.OK())
+			return err;
+	}
 	if (!err.OK())
 		return err;
 
-	// 3023.mov -> 0.00283583 -0.115201 160.89 -> -0.000879688
-	// z2 = -0.000879688;
+	tsf::print("ZY: %.6f\n", zy);
 	return Error();
 }
 

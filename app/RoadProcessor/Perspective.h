@@ -8,6 +8,9 @@ struct PerspectiveParams {
 	float Z1 = 0; // Scaling Constant
 	float ZX = 0; // X coefficient - aka how much is the plane horizontally tilted in front of us (typically very small for roads)
 	float ZY = 0; // Y coefficient - aka what is vertical angle of the camera. typically much larger than the ZX
+
+	PerspectiveParams() {}
+	PerspectiveParams(float z1, float zx, float zy) : Z1(z1), ZX(zx), ZY(zy) {}
 };
 
 // A frustum that is oriented like an upside-down triangle. The top edge of the frustum

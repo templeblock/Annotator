@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "MeshRenderer.h"
+#include "LensCorrection.h"
 
 #include <glfw/deps/linmath.h>
 
@@ -195,6 +196,32 @@ Error MeshRenderer::Initialize(int fbWidth, int fbHeight) {
 
 	// The GLFW docs recommend that you use a framebuffer object instead of the Window, when rendering offscreen,
 	// so we follow that advice here.
+	auto err = ResizeFrameBuffer(fbWidth, fbHeight);
+	if (!err.OK())
+		return err;
+
+	err = CompileShader(CopyShaderVertex, CopyShaderFrag, CopyShader);
+	if (!err.OK())
+		return err;
+	err = CompileShader(RemovePerspectiveShaderVertex, RemovePerspectiveShaderFrag, RemovePerspectiveShader);
+	if (!err.OK())
+		return err;
+
+	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
+
+	//DrawHelloWorldTriangle();
+
+	return Error();
+}
+
+Error MeshRenderer::ResizeFrameBuffer(int fbWidth, int fbHeight) {
+	MakeCurrent();
+	if (FBO != -1) {
+		glDeleteFramebuffers(1, &FBO);
+		glDeleteTextures(1, &FBTex);
+		FBO   = -1;
+		FBTex = -1;
+	}
 	glGenFramebuffers(1, &FBO);
 	glBindFramebuffer(GL_FRAMEBUFFER, FBO);
 	glGenTextures(1, &FBTex);
@@ -207,28 +234,13 @@ Error MeshRenderer::Initialize(int fbWidth, int fbHeight) {
 		return Error("Framebuffer not complete");
 	FBWidth  = fbWidth;
 	FBHeight = fbHeight;
+	glViewport(0, 0, FBWidth, FBHeight);
 
 	glDisable(GL_CULL_FACE);
 	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-
 	glEnable(GL_FRAMEBUFFER_SRGB);
-
-	glViewport(0, 0, FBWidth, FBHeight);
-	//Clear(Color8(0, 150, 0, 60));
-
-	auto err = CompileShader(CopyShaderVertex, CopyShaderFrag, CopyShader);
-	if (!err.OK())
-		return err;
-	err = CompileShader(RemovePerspectiveShaderVertex, RemovePerspectiveShaderFrag, RemovePerspectiveShader);
-	if (!err.OK())
-		return err;
-
-	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
-
-	//DrawHelloWorldTriangle();
-
 	return Error();
 }
 
@@ -431,11 +443,19 @@ void MeshRenderer::RemovePerspective(const gfx::Image& camera, const gfx::Image*
 	Image nullAdjuster;
 	if (!adjuster) {
 		nullAdjuster.Alloc(ImageFormat::RGBA, 2, 2);
-		nullAdjuster.Fill(0x7f7f7f7f);
+		int one = LensCorrector::VignetteGrayMultiplier;
+		nullAdjuster.Fill(Color8(one, one, one, one).u);
 		adjuster = &nullAdjuster;
 	}
 
 	DrawMeshWithShader(RemovePerspectiveShader, m, camera, adjuster);
+}
+
+void MeshRenderer::RemovePerspectiveAndCopyOut(const gfx::Image& camera, const gfx::Image* adjuster, PerspectiveParams pp, gfx::Image& flat) {
+	MakeCurrent();
+	Clear(Color8(0, 0, 0, 0));
+	RemovePerspective(camera, adjuster, pp);
+	CopyDeviceToImage(Rect32(0, 0, FBWidth, FBHeight), 0, 0, flat);
 }
 
 void MeshRenderer::SaveToFile(std::string filename) {

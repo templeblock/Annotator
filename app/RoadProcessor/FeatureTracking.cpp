@@ -114,8 +114,17 @@ void ComputeMatch(cv::Size img1Size, cv::Size img2Size, const KeyPointSet& kp1, 
 }
 
 void ComputeKeyPointsAndMatch(std::string detector, cv::Mat img1, cv::Mat img2, int maxPoints, double quality, double minDistance, bool withRotation, bool withScale, KeyPointSet& kp1, KeyPointSet& kp2, std::vector<cv::DMatch>& matches) {
-	ComputeKeyPoints(detector, img1, maxPoints, quality, minDistance, withRotation, withScale, kp1);
-	ComputeKeyPoints(detector, img2, maxPoints, quality, minDistance, withRotation, withScale, kp2);
+	struct {
+		cv::Mat*     Img;
+		KeyPointSet* KP;
+	} images[2] = {
+	    {&img1, &kp1},
+	    {&img2, &kp2},
+	};
+#pragma omp parallel for
+	for (int i = 0; i < 2; i++) {
+		ComputeKeyPoints(detector, *images[i].Img, maxPoints, quality, minDistance, withRotation, withScale, *images[i].KP);
+	}
 	ComputeMatch(img1.size(), img2.size(), kp1, kp2, withRotation, withScale, matches);
 }
 
