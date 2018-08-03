@@ -6,13 +6,8 @@
 namespace imqs {
 namespace roadproc {
 int Speed(argparse::Args& args);
-int Speed2(argparse::Args& args);
-int Speed3(argparse::Args& args);
 int Stitch(argparse::Args& args);
-int Stitch2(argparse::Args& args);
-int Stitch3(argparse::Args& args);
 int WebTiles(argparse::Args& args);
-int WebTiles3(argparse::Args& args);
 } // namespace roadproc
 } // namespace imqs
 
@@ -77,44 +72,22 @@ int main(int argc, char** argv) {
 	args.AddValue("e", "lensdb", "Camera/Lens database", "/usr/local/share/lensfun/version_2/");
 	args.AddValue("l", "lens", "Lens correction (eg 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS'");
 
-	auto speed = args.AddCommand("speed <video[,video2][...]>",
+	auto speed = args.AddCommand("speed3 <zy> <video[,video2][...]>",
 	                             "Compute car speed from interframe differences\nOne or more videos can be specified."
-	                             " Separate multiple videos with commas.",
+	                             " Separate multiple videos with commas. This version uses optical flow on flattened images",
 	                             Speed);
 	speed->AddSwitch("", "csv", "Write CSV output (otherwise JSON)");
 	speed->AddValue("o", "outfile", "Write output to file", "stdout");
-
-	auto speed2 = args.AddCommand("speed2 <video[,video2][...]>",
-	                              "Compute car speed from interframe differences\nOne or more videos can be specified."
-	                              " Separate multiple videos with commas. This version uses optical flow on flattened images",
-	                              Speed2);
-	speed2->AddSwitch("", "csv", "Write CSV output (otherwise JSON)");
-	speed2->AddValue("o", "outfile", "Write output to file", "stdout");
-
-	auto speed3 = args.AddCommand("speed3 <zy> <video[,video2][...]>",
-	                              "Compute car speed from interframe differences\nOne or more videos can be specified."
-	                              " Separate multiple videos with commas. This version uses optical flow on flattened images",
-	                              Speed3);
-	speed3->AddSwitch("", "csv", "Write CSV output (otherwise JSON)");
-	speed3->AddValue("o", "outfile", "Write output to file", "stdout");
-	speed3->AddValue("s", "start", "Start time in seconds (for debugging)", "0");
+	speed->AddValue("s", "start", "Start time in seconds (for debugging)", "0");
 
 	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
-	auto stitch      = args.AddCommand("stitch <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
-	auto stitch2     = args.AddCommand("stitch2 <video> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch2);
-	auto stitch3     = args.AddCommand("stitch3 <video> <bitmap dir> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch3);
-	stitch->AddValue("n", "number", "Number of frames", "2");
+	auto stitch      = args.AddCommand("stitch3 <video> <bitmap dir> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
+
+	stitch->AddValue("n", "number", "Number of frames", "-1");
 	stitch->AddValue("s", "start", "Start time in seconds", "0");
+	stitch->AddSwitch("d", "dryrun", "Don't actually write anything to the infinite bitmap");
 
-	stitch2->AddValue("", "phase", "phase", "1");
-	stitch2->AddValue("n", "number", "Number of frames", "-1");
-	stitch2->AddValue("s", "start", "Start time in seconds", "0");
-
-	stitch3->AddValue("n", "number", "Number of frames", "-1");
-	stitch3->AddValue("s", "start", "Start time in seconds", "0");
-	stitch3->AddSwitch("d", "dryrun", "Don't actually write anything to the infinite bitmap");
-
-	auto webtiles = args.AddCommand("webtiles <infinite bitmap>", "Create web tiles from infinite bitmap", WebTiles3);
+	auto webtiles = args.AddCommand("webtiles <infinite bitmap>", "Create web tiles from infinite bitmap", WebTiles);
 
 	if (!args.Parse(argc, (const char**) argv))
 		return 1;

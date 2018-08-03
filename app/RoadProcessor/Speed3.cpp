@@ -2,7 +2,7 @@
 #include "Globals.h"
 #include "Perspective.h"
 #include "MeshRenderer.h"
-#include "OpticalFlow2.h"
+#include "OpticalFlow.h"
 #include "VideoStitcher.h"
 
 // This is the third version of our vehicle speed computation system, which uses
@@ -25,7 +25,7 @@ enum class SpeedOutputMode {
 	JSON,
 };
 
-static Error DoSpeed3(vector<string> videoFiles, float zy, double startTime, SpeedOutputMode outputMode, string outputFile) {
+static Error DoSpeed(vector<string> videoFiles, float zy, double startTime, SpeedOutputMode outputMode, string outputFile) {
 	FILE* outf = stdout;
 	if (outputFile != "stdout") {
 		outf = fopen(outputFile.c_str(), "w");
@@ -81,11 +81,11 @@ static Error DoSpeed3(vector<string> videoFiles, float zy, double startTime, Spe
 	return Error();
 }
 
-int Speed3(argparse::Args& args) {
+int Speed(argparse::Args& args) {
 	auto zy         = atof(args.Params[0].c_str());
 	auto videoFiles = strings::Split(args.Params[1], ',');
 	auto startTime  = atof(args.Get("start").c_str());
-	auto err        = DoSpeed3(videoFiles, zy, startTime, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
+	auto err        = DoSpeed(videoFiles, zy, startTime, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
 	if (!err.OK()) {
 		tsf::print(stderr, "Error: %v\n", err.Message());
 		tsf::print("Error: %v\n", err.Message());

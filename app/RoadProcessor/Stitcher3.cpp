@@ -1,9 +1,9 @@
 #include "pch.h"
-#include "Stitcher3.h"
+#include "Stitcher.h"
 #include "FeatureTracking.h"
 #include "Globals.h"
 #include "Perspective.h"
-#include "OpticalFlow2.h"
+#include "OpticalFlow.h"
 #include "Mesh.h"
 
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -n 1 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
@@ -28,14 +28,14 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
-Stitcher3::Stitcher3() {
+Stitcher::Stitcher() {
 	//ClearColor = Color8(0, 150, 0, 60);
 	ClearColor = Color8(0, 0, 0, 0);
 	for (int i = 0; i < NVignette; i++)
 		Vignetting[i] = 1;
 }
 
-Error Stitcher3::Initialize(string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds) {
+Error Stitcher::Initialize(string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds) {
 	auto err = InfBmp.Initialize(bitmapDir);
 	if (!err.OK())
 		return err;
@@ -68,7 +68,7 @@ Error Stitcher3::Initialize(string bitmapDir, std::vector<std::string> videoFile
 	return Error();
 }
 
-Error Stitcher3::DoStitch(string bitmapDir, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count) {
+Error Stitcher::DoStitch(string bitmapDir, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count) {
 	//os::RemoveAll(bitmapDir);
 	os::MkDirAll(bitmapDir);
 
@@ -114,7 +114,7 @@ Error Stitcher3::DoStitch(string bitmapDir, std::vector<std::string> videoFiles,
 
 // Stitch a bunch of frames, and with each stitch, compare our GPS velocity to our pixel velocity.
 // Then, use that to generate a scale for our pixels, and thereafter use that scale for the entire video.
-Error Stitcher3::MeasurePixelScale() {
+Error Stitcher::MeasurePixelScale() {
 	EnableSimpleRender = false;
 	EnableGeoRender    = false;
 	auto err           = VidStitcher.Rewind();
@@ -158,15 +158,15 @@ static const double InitialResolution = 2 * IMQS_PI * 6378137 / TileSize; // 156
 static const double OriginShift       = 2 * IMQS_PI * 6378137 / 2.0;      // 20037508.342789244
 } // namespace tiles
 
-void Stitcher3::SetupBaseMapScale() {
+void Stitcher::SetupBaseMapScale() {
 	BaseZoomLevel = (int) floor(log2(tiles::InitialResolution / (double) MetersPerPixel));
 }
 
-double Stitcher3::BaseMapMetersPerPixel() {
+double Stitcher::BaseMapMetersPerPixel() {
 	return tiles::InitialResolution / (double) (1 << BaseZoomLevel);
 }
 
-Error Stitcher3::Run(int count) {
+Error Stitcher::Run(int count) {
 	auto err = VidStitcher.Rewind();
 	if (!err.OK())
 		return err;
@@ -212,7 +212,7 @@ static float LineLuminance(const Image& img, int x1, int x2, int y) {
 	return (float) lum / (float) (x2 - x1);
 }
 
-void Stitcher3::MeasureVignetting() {
+void Stitcher::MeasureVignetting() {
 	int xleft           = (int) VidStitcher.Frustum.X1FullFrame() + 20;
 	int xright          = (int) VidStitcher.Frustum.X2FullFrame() - 20;
 	int xloc[NVignette] = {xleft, (xleft + xright) / 2, xright};
@@ -231,7 +231,7 @@ void Stitcher3::MeasureVignetting() {
 	tsf::print("%5.2f %5.2f %5.2f\n", Vignetting[0], Vignetting[1], Vignetting[2]);
 }
 
-Error Stitcher3::StitchFrame() {
+Error Stitcher::StitchFrame() {
 	// The alignment mesh is produced on a crop of the full flattened frame.
 	// Our job now is to turn that little alignment mesh into a full mesh that covers the entire
 	// flattened frame.
@@ -289,7 +289,7 @@ Error Stitcher3::StitchFrame() {
 	return Error();
 }
 
-Error Stitcher3::DrawGeoReferencedFrame() {
+Error Stitcher::DrawGeoReferencedFrame() {
 	Vec3d geoPos;
 	Vec2d vel2D;
 	Track.GetPositionAndVelocity(Frames[0].FrameTime, geoPos, vel2D);
@@ -306,7 +306,7 @@ Error Stitcher3::DrawGeoReferencedFrame() {
 	return Error();
 }
 
-void Stitcher3::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
+void Stitcher::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
 	// Firstly, imagine the (flattened) frame on your screen. X is pointing right, and Y is pointing
 	// down, as is usual for images.
 	// The bottom of the image is T0, the FrameTime at which the frame was captured. Now, imagine
@@ -373,7 +373,7 @@ void Stitcher3::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
 	}
 }
 
-Error Stitcher3::DrawGeoMesh(gfx::Vec3d geoOffset) {
+Error Stitcher::DrawGeoMesh(gfx::Vec3d geoOffset) {
 	// Adjust our infinite bitmap view, if necessary
 	FrameObject& f       = Frames[0];
 	auto         boundsF = f.Mesh.PosBounds();
@@ -412,7 +412,7 @@ Error Stitcher3::DrawGeoMesh(gfx::Vec3d geoOffset) {
 	return Error();
 }
 
-void Stitcher3::ExtrapolateMesh(const Mesh& smallMesh, Mesh& fullMesh, gfx::Vec2f& uvAtTopLeftOfImage) {
+void Stitcher::ExtrapolateMesh(const Mesh& smallMesh, Mesh& fullMesh, gfx::Vec2f& uvAtTopLeftOfImage) {
 	Rect32 smallCropRect = VidStitcher.CropRectFromFullFlat();
 
 	// This is the position of the upper-left corner of the small alignment image, within the full flattened image
@@ -495,7 +495,7 @@ void Stitcher3::ExtrapolateMesh(const Mesh& smallMesh, Mesh& fullMesh, gfx::Vec2
 	}
 }
 
-void Stitcher3::TransformMeshIntoRendCoords(Mesh& mesh) {
+void Stitcher::TransformMeshIntoRendCoords(Mesh& mesh) {
 	for (int i = 0; i < mesh.Count; i++) {
 		mesh.Vertices[i].Pos += PrevTopLeft;
 	}
@@ -518,7 +518,7 @@ void Stitcher3::TransformMeshIntoRendCoords(Mesh& mesh) {
 	*/
 }
 
-Error Stitcher3::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
+Error Stitcher::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
 	if (outRect.x1 >= InfBmpView.x1 &&
 	    outRect.y1 >= InfBmpView.y1 &&
 	    outRect.x2 <= InfBmpView.x2 &&
@@ -576,7 +576,7 @@ Error Stitcher3::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
 	return Error();
 }
 
-Error Stitcher3::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirection) {
+Error Stitcher::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirection) {
 	auto isInside = [&](Vec2f p) {
 		return p.x >= 0 && p.y >= 0 && p.x < Rend.FBWidth && p.y < Rend.FBHeight;
 	};
@@ -655,7 +655,7 @@ Error Stitcher3::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirect
 	return Error();
 }
 
-int WebTiles3(argparse::Args& args) {
+int WebTiles(argparse::Args& args) {
 	string         bmpDir = args.Params[0];
 	InfiniteBitmap bmp;
 	auto           err = bmp.Initialize(bmpDir);
@@ -668,7 +668,7 @@ int WebTiles3(argparse::Args& args) {
 	return 0;
 }
 
-int Stitch3(argparse::Args& args) {
+int Stitch(argparse::Args& args) {
 	auto   videoFiles = strings::Split(args.Params[0], ',');
 	auto   bmpDir     = args.Params[1];
 	auto   trackFile  = args.Params[2];
@@ -677,7 +677,7 @@ int Stitch3(argparse::Args& args) {
 	int    count      = args.GetInt("number");
 	double seek       = atof(args.Get("start").c_str());
 
-	Stitcher3 s;
+	Stitcher s;
 	s.DryRun = args.Has("dryrun");
 	auto err = s.DoStitch(bmpDir, videoFiles, trackFile, zx, zy, seek, count);
 	if (!err.OK()) {

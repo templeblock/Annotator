@@ -11,14 +11,14 @@ namespace roadproc {
 
 /* Stitcher3 is my third attempt at a big image stitcher.
 */
-class Stitcher3 {
+class Stitcher {
 public:
 	gfx::Color8 ClearColor;         // In production we'll want this to be black, but during dev it's nice to have it some other color like green
 	float       MetersPerPixel = 0; // Computed scale. After computing this, we assume it is constant for the entire recording
 	int         BaseZoomLevel  = 0;
 	bool        DryRun         = false; // If true, then don't actually write anything to the infinite bitmap
 
-	Stitcher3();
+	Stitcher();
 
 	Error DoStitch(std::string bitmapDir, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count);
 
