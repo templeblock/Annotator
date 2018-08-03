@@ -151,12 +151,14 @@ void PositionTrack::Smooth(double smoothness, double increment) {
 
 	size_t nM1 = Values.size() - 1;
 	for (size_t i = 0; i < Values.size() - 1; i++) {
-		Vec2d  c3, c4;
+		Vec2d c3, c4;
+		// Generate the curve from Values[i] to Values[i + 1]
 		Vec2d  p0      = Values[i].Pos.vec2;
 		Vec2d  p1      = Values[i + 1].Pos.vec2;
 		Vec2d  p2      = Values[min(i + 2, nM1)].Pos.vec2;
 		double segDist = p1.distance2D(p0);
 		if (segDist < increment) {
+			// The segment is too small. Don't add any intermediate curve points
 			newVal.push_back(Values[i + 1]);
 		} else {
 			ComputeSmoothCubicBezierControlPoints(p0.x, p0.y,
@@ -169,8 +171,8 @@ void PositionTrack::Smooth(double smoothness, double increment) {
 			int    pieces = (int) max(2.0, segDist / increment);
 			double step   = 1.0 / pieces;
 			double t      = step;
-			size_t start  = newVal.size() - 1;
-			for (int j = 0; j < pieces - 1; j++) {
+			size_t start  = newVal.size() - 1; // start = the previous vertex, aka Values[i]
+			for (int j = 1; j < pieces; j++) {
 				TimePos val  = Values[i];
 				val.Pos.vec2 = EvaluateCubicBezier(p0, c2, c3, p1, t);
 				newVal.push_back(val);
@@ -183,8 +185,8 @@ void PositionTrack::Smooth(double smoothness, double increment) {
 				totalLength += newVal[start + j].Pos.vec2.distance(newVal[start + j + 1].Pos.vec2);
 			}
 			t = 0;
-			for (int j = 0; j < pieces; j++) {
-				t += newVal[start + j].Pos.vec2.distance(newVal[start + j + 1].Pos.vec2) / totalLength;
+			for (int j = 1; j <= pieces; j++) {
+				t += newVal[start + j - 1].Pos.vec2.distance(newVal[start + j].Pos.vec2) / totalLength;
 				newVal[start + j].FrameTime = Values[i].FrameTime + t * (Values[i + 1].FrameTime - Values[i].FrameTime);
 				newVal[start + j].Pos.z     = Values[i].Pos.z + t * (Values[i + 1].Pos.z - Values[i].Pos.z);
 			}

@@ -465,6 +465,7 @@ void MeshRenderer::DrawMeshWireframe(const Mesh& m, gfx::Color8 color, float wid
 	for (int y = mr.y1; y < mr.y2; y++) {
 		for (int x = mr.x1; x < mr.x2; x++) {
 			const auto& v = m.At(x, y);
+			IMQS_ASSERT(__finite(v.Pos.x) && __finite(v.Pos.y));
 			if (x < mr.x2 - 1) {
 				lv.emplace_back(v.Pos.x, v.Pos.y);
 				const auto& vx = m.At(x + 1, y);
@@ -478,7 +479,7 @@ void MeshRenderer::DrawMeshWireframe(const Mesh& m, gfx::Color8 color, float wid
 		}
 	}
 
-	DrawLines(lv.size() * 2, &lv[0], color, width);
+	DrawLines(lv.size() / 2, &lv[0], color, width);
 }
 
 void MeshRenderer::DrawLines(size_t nlines, const gfx::Vec2f* linevx, gfx::Color8 color, float width) {

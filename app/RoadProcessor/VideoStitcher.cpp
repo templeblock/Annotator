@@ -56,6 +56,8 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiv
 	PP.Z1   = FindZ1ForIdentityScaleAtBottom(VideoWidth, VideoHeight, PP.ZX, PP.ZY);
 	Frustum = ComputeFrustum(VideoWidth, VideoHeight, PP);
 
+	//Frustum.Width = (int) (Frustum.Width * (1.0 - BlackenPercentage)); -- it's not this simple.. and I'm not going to fuss with it now... reverting back to cheap hack
+
 	// We only monitor a cropped region of the image:
 	// +----------+
 	// |          |
@@ -233,6 +235,13 @@ void VideoStitcher::RemovePerspective() {
 		} else {
 			Rend.CopyDeviceToImage(cropRect, 0, 0, Flat);
 		}
+	}
+
+	if (BlackenPercentage != 0 && EnableFullFlatOutput) {
+		// This is a cheap trick. We should rather manage this at the Frustum level, and change the width of the image
+		int bw = FullFlat.Width * BlackenPercentage * 0.5;
+		FullFlat.Fill(Rect32(0, 0, bw, FullFlat.Height), 0);
+		FullFlat.Fill(Rect32(FullFlat.Width - bw, 0, FullFlat.Width, FullFlat.Height), 0);
 	}
 
 	//Flat.SaveFile(tsf::fmt("flat-%d.png", FrameNumber));

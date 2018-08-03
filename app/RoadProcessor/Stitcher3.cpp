@@ -40,6 +40,8 @@ Error Stitcher3::Initialize(string bitmapDir, std::vector<std::string> videoFile
 	if (!err.OK())
 		return err;
 
+	VidStitcher.BlackenPercentage = 0.15;
+
 	VidStitcher.EnableFullFlatOutput = true;
 	VidStitcher.DebugStartVideoAt    = seconds;
 	err                              = VidStitcher.Start(videoFiles, zy);
@@ -76,7 +78,7 @@ Error Stitcher3::DoStitch(string bitmapDir, std::vector<std::string> videoFiles,
 		return err;
 	Track.ConvertToWebMercator();
 	//Track.Simplify(0.001);
-	//Track.Smooth(0.5, 0.1);
+	Track.Smooth(0.5, 0.1);
 	//Track.Dump(0, 20, 0.05);
 	//Track.SaveCSV("/home/ben/tracks.csv");
 	//exit(1);
@@ -404,6 +406,8 @@ Error Stitcher3::DrawGeoMesh(gfx::Vec3d geoOffset) {
 		v.Pos         = Vec2f(rendPix.x, rendPix.y);
 	}
 	Rend.DrawMesh(f.Mesh, f.Img);
+
+	//Rend.DrawMeshWireframe(f.Mesh, Color8(200, 0, 0, 255), 0.6f);
 
 	return Error();
 }

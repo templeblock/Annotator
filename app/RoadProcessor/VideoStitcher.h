@@ -37,6 +37,7 @@ public:
 	PerspectiveParams PP;
 	OpticalFlow2      Flow;
 	Frustum           Frustum;
+	double            BlackenPercentage = 0;   // If non-zero, then blacken left/right edges, so they don't make it into the stitched footage
 	int               FlatWidth         = 0;   // computed according to perspective params and video size
 	int               FlatHeight        = 550; // Only perform matching on this window, aligned to the bottom of the flattened frame
 	int               MatchHeight       = 150; // Only perform matching from the bottom matchHeight pixels of the 'next' flattened frame
