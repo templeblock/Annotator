@@ -67,7 +67,10 @@ int main(int argc, char** argv) {
 	imqs::video::VideoFile::Initialize();
 	//imqs::gfx::raster::TestBilinear();
 	//imqs::roadproc::MeshRenderer rend;
-	//rend.Initialize(1024, 1024);
+	//rend.Initialize(800, 800);
+	//rend.Clear(imqs::gfx::Color8(255, 255, 255, 255));
+	//rend.DrawTestLines();
+	//rend.SaveToFile("test.png");
 	//return 0;
 
 	argparse::Args args("Usage: RoadProcessor [options] <command>");
@@ -94,6 +97,7 @@ int main(int argc, char** argv) {
 	                              Speed3);
 	speed3->AddSwitch("", "csv", "Write CSV output (otherwise JSON)");
 	speed3->AddValue("o", "outfile", "Write output to file", "stdout");
+	speed3->AddValue("s", "start", "Start time in seconds (for debugging)", "0");
 
 	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
 	auto stitch      = args.AddCommand("stitch <video> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);

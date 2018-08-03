@@ -42,6 +42,15 @@ inline int NumChannels(ImageFormat f) {
 	return 0;
 }
 
+enum class JpegSampling {
+	Samp444  = TJSAMP_444,
+	Samp422  = TJSAMP_422,
+	Samp420  = TJSAMP_420,
+	SampGray = TJSAMP_GRAY,
+	Samp440  = TJSAMP_440,
+	Samp411  = TJSAMP_411,
+};
+
 // An image in memory.
 // The buffer is by default owned by the Image object, but it doesn't need to be.
 // There is no reference counting, so if you construct a window from an image, then
@@ -85,7 +94,7 @@ public:
 	void  CopyFrom(const Image& src, Rect32 srcRect, int dstX, int dstY); // Source rectangle is clipped before copying
 
 	Error SavePng(const std::string& filename, bool withAlpha = true, int zlibLevel = 5) const;
-	Error SaveJpeg(const std::string& filename, int quality = 90) const;
+	Error SaveJpeg(const std::string& filename, int quality = 90, JpegSampling sampling = JpegSampling::Samp422) const;
 	Error SaveFile(const std::string& filename) const;
 
 	uint8_t*        At(int x, int y) { return Data + (y * Stride) + x * BytesPerPixel(); }

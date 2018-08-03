@@ -99,8 +99,11 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiv
 	}
 	*/
 
-	Flow.StableHSearchRange = 10;
-	Flow.StableVSearchRange = 10;
+	// When doing the initial Stellenbosch tar roads work, these values could be 10,10, and we had good
+	// tracking. However, the massive engine shake on the bakkies in Mthata forced me to raise this up
+	// top 18,22.
+	Flow.StableHSearchRange = 18;
+	Flow.StableVSearchRange = 22;
 
 	auto err = Rewind();
 	if (!err.OK())
@@ -282,7 +285,7 @@ Error VideoStitcher::ComputeStitch() {
 		Velocities[0].second = disp;
 	}
 
-	ComputeBrightnessAdjustment(disp);
+	//ComputeBrightnessAdjustment(disp);
 
 	return Error();
 }

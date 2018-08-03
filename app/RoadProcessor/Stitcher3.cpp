@@ -16,6 +16,10 @@
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 --phase 2 -n 200 --start 14 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -d ~/mldata/DSCF3040.MOV ~/inf ~/dev/Annotator/pos.json 0 -0.00095
 
+// mthata
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -d ~/mldata/mthata/DSCF0001-HG-3.MOV ~/inf mthata-pos.json 0 -0.000411
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 ~/mldata/mthata/DSCF0001-HG-3.MOV ~/inf mthata-pos.json 0 -0.000411
+
 // build/run-roadprocessor -r webtiles ~/inf
 
 using namespace std;
@@ -72,7 +76,7 @@ Error Stitcher3::DoStitch(string bitmapDir, std::vector<std::string> videoFiles,
 		return err;
 	Track.ConvertToWebMercator();
 	//Track.Simplify(0.001);
-	Track.Smooth(0.5, 0.1);
+	//Track.Smooth(0.5, 0.1);
 	//Track.Dump(0, 20, 0.05);
 	//Track.SaveCSV("/home/ben/tracks.csv");
 	//exit(1);
@@ -177,8 +181,9 @@ Error Stitcher3::Run(int count) {
 		if (!err.OK())
 			return err;
 
-		if ((EnableSimpleRender || EnableGeoRender) && (i % 30 == 0 || (i < 20 && i % 5 == 0)))
-			Rend.SaveToFile("giant2.jpeg");
+		//if ((EnableSimpleRender || EnableGeoRender) && (i % 30 == 0 || (i < 20 && i % 5 == 0)))
+		//	Rend.SaveToFile("giant2.jpeg");
+		//Rend.SaveToFile("giant2.jpeg");
 
 		//if (VidStitcher.FrameNumber != 0) {
 		//	err = VidStitcher.Mesh.SaveCompact(path::Join(TempDir, "mesh", tsf::fmt("%08d", VidStitcher.FrameNumber)));
@@ -187,7 +192,7 @@ Error Stitcher3::Run(int count) {
 		//}
 
 		//tsf::print("%v\n", VidStitcher.FrameNumber);
-		//VidStitcher.PrintRemainingTime();
+		VidStitcher.PrintRemainingTime();
 
 		if (EnableSimpleRender)
 			AdjustInfiniteBitmapView(PrevFullMesh, PrevDir);

@@ -170,6 +170,50 @@ void main()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+static const char* LineShaderVertex = R"(
+uniform mat4 MVP;
+attribute vec3 vPos;
+attribute vec2 vUV;
+attribute vec4 vExtra;
+attribute vec4 vColor;
+varying vec2 uv;
+varying vec4 extra;
+varying vec4 color;
+void main()
+{
+	// with buffer:
+	// float buffer = 0.0;
+	// pos += vec3(vUV * (buffer + vExtra.x), 0);
+	// uv = vUV * (1.0 + buffer/vExtra.x);
+	// however, it looks like that buffer is never necessary
+
+	vec3 pos = vPos;
+	pos += vec3(vUV * vExtra.x, 0);
+    gl_Position = MVP * vec4(pos, 1.0);
+	color = premultiply(fromSRGB(vColor));
+	uv = vUV;
+	extra = vExtra;
+}
+)";
+
+static const char* LineShaderFrag = R"(
+varying vec2 uv;
+varying vec4 extra;
+varying vec4 color;
+void main()
+{
+	vec4 c = color;
+	float distance_from_edge = extra.x - (extra.x * length(uv));
+	float a = distance_from_edge;
+	a = clamp(a, 0.0, 1.0);
+	//c.g = length(uv);
+	//c.b = length(uv);
+    gl_FragColor = a * c;
+}
+)";
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 MeshRenderer::~MeshRenderer() {
 	Destroy();
 }
@@ -204,6 +248,9 @@ Error MeshRenderer::Initialize(int fbWidth, int fbHeight) {
 	if (!err.OK())
 		return err;
 	err = CompileShader(RemovePerspectiveShaderVertex, RemovePerspectiveShaderFrag, RemovePerspectiveShader);
+	if (!err.OK())
+		return err;
+	err = CompileShader(LineShaderVertex, LineShaderFrag, LineShader);
 	if (!err.OK())
 		return err;
 
@@ -406,6 +453,117 @@ void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::I
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
 }
 
+void MeshRenderer::DrawMeshWireframe(const Mesh& m, gfx::Color8 color, float width, gfx::Rect32 meshRenderRect) {
+	MakeCurrent();
+	if (meshRenderRect.IsInverted())
+		meshRenderRect = Rect32(0, 0, m.Width, m.Height);
+	auto mr = meshRenderRect;
+
+	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
+
+	vector<Vec2f> lv;
+	for (int y = mr.y1; y < mr.y2; y++) {
+		for (int x = mr.x1; x < mr.x2; x++) {
+			const auto& v = m.At(x, y);
+			if (x < mr.x2 - 1) {
+				lv.emplace_back(v.Pos.x, v.Pos.y);
+				const auto& vx = m.At(x + 1, y);
+				lv.emplace_back(vx.Pos.x, vx.Pos.y);
+			}
+			if (y < mr.y2 - 1) {
+				lv.emplace_back(v.Pos.x, v.Pos.y);
+				const auto& vy = m.At(x, y + 1);
+				lv.emplace_back(vy.Pos.x, vy.Pos.y);
+			}
+		}
+	}
+
+	DrawLines(lv.size() * 2, &lv[0], color, width);
+}
+
+void MeshRenderer::DrawLines(size_t nlines, const gfx::Vec2f* linevx, gfx::Color8 color, float width) {
+	MakeCurrent();
+
+	glUseProgram(LineShader);
+
+	// We're roughly following https://blog.mapbox.com/drawing-antialiased-lines-with-opengl-8766f34192dc here, to draw lines
+
+	if (width < 1.0f) {
+		// this prevents thin lines from becoming "ropey". See http://www.humus.name/index.php?page=3D&ID=89
+		color.a = (uint8_t) math::Clamp<float>((float) color.a * width, 0, 255);
+		width   = 1.0f;
+	}
+
+	auto locMVP    = glGetUniformLocation(LineShader, "MVP");
+	auto locvPos   = glGetAttribLocation(LineShader, "vPos");
+	auto locvUV    = glGetAttribLocation(LineShader, "vUV");
+	auto locvColor = glGetAttribLocation(LineShader, "vColor");
+	auto locvExtra = glGetAttribLocation(LineShader, "vExtra");
+	IMQS_ASSERT(locMVP != -1 && locvPos != -1 && locvUV != -1 && locvColor != -1 && locvExtra != -1);
+
+	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
+
+	VxGen*    vx       = new VxGen[nlines * 4];
+	int       nindices = nlines * 6;
+	uint32_t* indices  = new uint32_t[nindices];
+	size_t    iout     = 0;
+	size_t    iv       = 0;
+
+	for (size_t i = 0; i < nlines; i++) {
+		const auto& s1   = linevx[i * 2];
+		const auto& s2   = linevx[i * 2 + 1];
+		Vec2f       dir  = s2 - s1;
+		float       size = dir.size();
+		size             = max(size, FLT_EPSILON);
+		dir /= size;
+		Vec2f normal = Vec2f(dir.y, -dir.x);
+		Vec4f extra;
+		// yellow triangle (mapbox illustration)
+		indices[iout++] = iv;
+		indices[iout++] = iv + 2;
+		indices[iout++] = iv + 1;
+		// blue triangle
+		indices[iout++] = iv + 1;
+		indices[iout++] = iv + 2;
+		indices[iout++] = iv + 3;
+		vx[iv++]        = VxGen::Make(Vec3f(s1, 0), Vec2f(-normal.x, -normal.y), color, Vec4f(width, 0, 0, 0));
+		vx[iv++]        = VxGen::Make(Vec3f(s1, 0), Vec2f(normal.x, normal.y), color, Vec4f(width, 0, 0, 0));
+		vx[iv++]        = VxGen::Make(Vec3f(s2, 0), Vec2f(-normal.x, -normal.y), color, Vec4f(width, 0, 0, 0));
+		vx[iv++]        = VxGen::Make(Vec3f(s2, 0), Vec2f(normal.x, normal.y), color, Vec4f(width, 0, 0, 0));
+	}
+
+	IMQS_ASSERT(iv == nlines * 4);
+	IMQS_ASSERT(iout == nindices);
+
+	const uint8_t* vptr = (const uint8_t*) vx;
+
+	glEnableVertexAttribArray(locvPos);
+	glVertexAttribPointer(locvPos, 3, GL_FLOAT, GL_FALSE, sizeof(VxGen), vptr + offsetof(VxGen, Pos));
+	glEnableVertexAttribArray(locvUV);
+	glVertexAttribPointer(locvUV, 2, GL_FLOAT, GL_FALSE, sizeof(VxGen), vptr + offsetof(VxGen, UV));
+	glEnableVertexAttribArray(locvColor);
+	glVertexAttribPointer(locvColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(VxGen), vptr + offsetof(VxGen, Color));
+	glEnableVertexAttribArray(locvExtra);
+	glVertexAttribPointer(locvExtra, 4, GL_FLOAT, GL_FALSE, sizeof(VxGen), vptr + offsetof(VxGen, Extra));
+
+	Mat4f mvp;
+	mvp.MakeIdentity();
+	mvp.Ortho(0, FBWidth, 0, FBHeight, -1, 1);
+	auto mvpT = mvp;
+	mvpT.Transpose();
+	glUniformMatrix4fv(locMVP, 1, GL_FALSE, &mvpT.row[0].x); // GLES doesn't support TRANSPOSE = TRUE
+	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
+
+	glDrawElements(GL_TRIANGLES, nindices, GL_UNSIGNED_INT, indices);
+
+	glDisableVertexAttribArray(locvPos);
+	glDisableVertexAttribArray(locvUV);
+	glDisableVertexAttribArray(locvColor);
+	glDisableVertexAttribArray(locvExtra);
+
+	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
+}
+
 void MeshRenderer::SetTextureLinearFilter() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -546,6 +704,16 @@ Error MeshRenderer::DrawHelloWorldTriangle() {
 #endif
 
 	return Error();
+}
+
+void MeshRenderer::DrawTestLines() {
+	Vec2f lines[4] = {
+	    {10, 10},
+	    {50, 50},
+	    {100, 100},
+	    {200, 130},
+	};
+	DrawLines(2, lines, Color8(200, 0, 0, 255), 0.7f);
 }
 
 static Error CheckShaderCompilation(const std::string& shaderSrc, GLuint shader) {

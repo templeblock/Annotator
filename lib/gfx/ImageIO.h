@@ -44,10 +44,10 @@ public:
 	Error LoadJpegScaled(const void* jpegBuf, size_t jpegLen, int scaleFactor, int& width, int& height, void*& buf, TJPF format = TJPF_RGBA);
 
 	// Encode an RGBA buffer to jpeg
-	Error SaveJpeg(int width, int height, int stride, const void* buf, int quality_0_to_100, void*& jpegBuf, size_t& jpegSize);
+	Error SaveJpeg(int width, int height, int stride, const void* buf, int quality_0_to_100, JpegSampling sampling, void*& jpegBuf, size_t& jpegSize);
 
 	// Save jpeg to file
-	static Error SaveJpegFile(const std::string& filename, int width, int height, int stride, const void* buf, int quality_0_to_100 = 90);
+	static Error SaveJpegFile(const std::string& filename, int width, int height, int stride, const void* buf, int quality_0_to_100 = 90, JpegSampling sampling = JpegSampling::Samp422);
 };
 
 } // namespace gfx

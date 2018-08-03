@@ -71,7 +71,7 @@ private:
 
 	// Tracking parameters
 	float                   AngleDeadAhead         = -90; // -90 is when the camera is facing straight forward from the car, and driving straight
-	float                   ExpectedAngleRange     = 8;   // expect camera to be pointing at most ExpectedAngleRange degrees left or right, from dead ahead
+	float                   ExpectedAngleRange     = 10;  // expect camera to be pointing at most ExpectedAngleRange degrees left or right, from dead ahead
 	float                   AvgImgDiff             = 0;
 	float                   AbsDivergenceThreshold = 30; // When running velocity differs from absolute by more than this, we invoke a restart
 	gfx::Vec2f              FlowBias;

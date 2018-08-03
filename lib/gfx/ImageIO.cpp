@@ -21,7 +21,7 @@ ImageIO::~ImageIO() {
 
 Error ImageIO::Save(int width, int height, int stride, const void* buf, ImageType type, bool withAlpha, int lossyQ_0_to_100, int losslessQ_1_to_9, void*& encBuf, size_t& encSize) {
 	switch (type) {
-	case ImageType::Jpeg: return SaveJpeg(width, height, stride, buf, lossyQ_0_to_100, encBuf, encSize);
+	case ImageType::Jpeg: return SaveJpeg(width, height, stride, buf, lossyQ_0_to_100, JpegSampling::Samp422, encBuf, encSize);
 	case ImageType::Png: return SavePng(withAlpha, width, height, stride, buf, losslessQ_1_to_9, encBuf, encSize);
 	default: return Error("Unsupported image type for compression");
 	}
@@ -196,22 +196,22 @@ Error ImageIO::LoadJpegScaled(const void* jpegBuf, size_t jpegLen, int scaleFact
 	return Error();
 }
 
-Error ImageIO::SaveJpeg(int width, int height, int stride, const void* buf, int quality_0_to_100, void*& jpegBuf, size_t& jpegSize) {
+Error ImageIO::SaveJpeg(int width, int height, int stride, const void* buf, int quality_0_to_100, JpegSampling sampling, void*& jpegBuf, size_t& jpegSize) {
 	if (!JpegEncoder)
 		JpegEncoder = tjInitCompress();
 
 	unsigned long size = 0;
-	if (tjCompress2(JpegEncoder, (unsigned char*) buf, width, stride, height, TJPF_RGBA, (unsigned char**) &jpegBuf, &size, TJSAMP_444, quality_0_to_100, 0) != 0)
+	if (tjCompress2(JpegEncoder, (unsigned char*) buf, width, stride, height, TJPF_RGBA, (unsigned char**) &jpegBuf, &size, (int) sampling, quality_0_to_100, 0) != 0)
 		return Error(tjGetErrorStr());
 	jpegSize = size;
 	return Error();
 }
 
-Error ImageIO::SaveJpegFile(const std::string& filename, int width, int height, int stride, const void* buf, int quality_0_to_100) {
+Error ImageIO::SaveJpegFile(const std::string& filename, int width, int height, int stride, const void* buf, int quality_0_to_100, JpegSampling sampling) {
 	ImageIO self;
 	void*   encBuf  = nullptr;
 	size_t  encSize = 0;
-	auto    err     = self.SaveJpeg(width, height, stride, buf, quality_0_to_100, encBuf, encSize);
+	auto    err     = self.SaveJpeg(width, height, stride, buf, quality_0_to_100, sampling, encBuf, encSize);
 	if (!err.OK())
 		return err;
 	err = os::WriteWholeFile(filename, encBuf, encSize);

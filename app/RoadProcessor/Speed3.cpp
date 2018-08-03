@@ -10,6 +10,9 @@
 //
 // build/run-roadprocessor -r speed3 --csv -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
 // build/run-roadprocessor -r speed3 -o speeds.json -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
+//
+// mthata
+// build/run-roadprocessor -r speed3 --csv -0.000411 ~/mldata/mthata/DSCF0001-HG-3.MOV 2>/dev/null
 
 using namespace std;
 using namespace imqs::gfx;
@@ -22,7 +25,7 @@ enum class SpeedOutputMode {
 	JSON,
 };
 
-static Error DoSpeed3(vector<string> videoFiles, float zy, SpeedOutputMode outputMode, string outputFile) {
+static Error DoSpeed3(vector<string> videoFiles, float zy, double startTime, SpeedOutputMode outputMode, string outputFile) {
 	FILE* outf = stdout;
 	if (outputFile != "stdout") {
 		outf = fopen(outputFile.c_str(), "w");
@@ -34,7 +37,8 @@ static Error DoSpeed3(vector<string> videoFiles, float zy, SpeedOutputMode outpu
 		tsf::print(outf, "time,speed\n");
 
 	VideoStitcher stitcher;
-	auto          err = stitcher.Start(videoFiles, zy);
+	stitcher.DebugStartVideoAt = startTime;
+	auto err                   = stitcher.Start(videoFiles, zy);
 	if (!err.OK())
 		return err;
 
@@ -80,7 +84,8 @@ static Error DoSpeed3(vector<string> videoFiles, float zy, SpeedOutputMode outpu
 int Speed3(argparse::Args& args) {
 	auto zy         = atof(args.Params[0].c_str());
 	auto videoFiles = strings::Split(args.Params[1], ',');
-	auto err        = DoSpeed3(videoFiles, zy, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
+	auto startTime  = atof(args.Get("start").c_str());
+	auto err        = DoSpeed3(videoFiles, zy, startTime, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
 	if (!err.OK()) {
 		tsf::print(stderr, "Error: %v\n", err.Message());
 		tsf::print("Error: %v\n", err.Message());

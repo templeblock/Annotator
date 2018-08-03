@@ -116,20 +116,23 @@ Error InfiniteBitmap::Save(gfx::Rect64 rect, const gfx::Image& img) const {
 
 Error InfiniteBitmap::CreateWebTiles() {
 	vector<os::FindFileItem> all;
-	os::FindFiles(RootDir, [&all](const os::FindFileItem& item) -> bool {
-		if (item.IsDir)
-			return false;
-		if (item.Name.find("t-") == 0 && item.Name.find(".lz4") != -1)
-			all.push_back(item);
-		return true;
-	});
+	auto                     err = os::FindFiles(RootDir, [&all](const os::FindFileItem& item) -> bool {
+        if (item.IsDir)
+            return false;
+        if (item.Name.find("t-") == 0 && item.Name.find(".lz4") != -1)
+            all.push_back(item);
+        return true;
+    });
+	if (!err.OK())
+		return err;
 
 	int webTileSize = 256;
 
 	// first zoom level
 	int firstLevel = 25;
 
-	int jpegQuality = 90;
+	int          jpegQuality  = 90;
+	JpegSampling jpegSampling = JpegSampling::Samp422;
 
 	// at level 10 this puts us somewhere in east africa
 	//int64_t xOffset = 18000;
@@ -147,14 +150,16 @@ Error InfiniteBitmap::CreateWebTiles() {
 		int64_t x = AtoI64(t.Name.substr(2, 8).c_str());
 		int64_t y = AtoI64(t.Name.substr(11, 8).c_str());
 
-		bool isLoaded     = false;
-		auto ensureLoaded = [&]() -> Error {
-			if (!isLoaded) {
-				auto err = Load(Rect64(x * TileSize, y * TileSize, (x + 1) * TileSize, (y + 1) * TileSize), img);
-				if (!err.OK())
-					return err;
-			}
-			return Error();
+		mutex loadLock;
+		bool  isLoaded     = false;
+		auto  ensureLoaded = [&]() -> Error {
+            lock_guard<mutex> lock(loadLock);
+            if (!isLoaded) {
+                auto err = Load(Rect64(x * TileSize, y * TileSize, (x + 1) * TileSize, (y + 1) * TileSize), img);
+                if (!err.OK())
+                    return err;
+            }
+            return Error();
 		};
 
 		int64_t absMacroX = xOffset + x * (TileSize / webTileSize);
@@ -162,118 +167,66 @@ Error InfiniteBitmap::CreateWebTiles() {
 
 		// native resolution
 		int nchunk = TileSize / webTileSize;
+
+		vector<Point32> chunks;
 		for (int cy = 0; cy < nchunk; cy++) {
 			for (int cx = 0; cx < nchunk; cx++) {
-				int64_t absX       = absMacroX + cx;
-				int64_t absY       = absMacroY + cy;
-				string  outTileDir = path::Join(outDir, ItoA(firstLevel), ItoA(absX));
-				auto    err        = os::MkDirAll(outTileDir);
+				chunks.emplace_back(cx, cy);
+			}
+		}
+
+		mutex errorLock;
+		auto  setLockedError = [&](Error newErr) {
+            lock_guard<mutex> lock(errorLock);
+            err = newErr;
+		};
+
+		int chunks_size = chunks.size();
+#pragma omp parallel for
+		for (int i = 0; i < chunks_size; i++) {
+			{
+				// this is our equivalent of a 'break' statement, because we're not allowed to break out of an OMP loop
+				lock_guard<mutex> lock(errorLock);
 				if (!err.OK())
-					return err;
-				string             outTileFile = path::Join(outTileDir, tsf::fmt("%d.jpeg", absY));
-				os::FileAttributes attribs;
-				err = os::Stat(outTileFile, attribs);
-				if (err.OK() && attribs.TimeModify > t.TimeModify) {
-					// tile already exists, and is newer than the lz4 tile
 					continue;
-				}
-				err = ensureLoaded();
-				if (!err.OK())
-					return err;
-				auto chunk = img.Window(cx * webTileSize, cy * webTileSize, webTileSize, webTileSize);
-				err        = chunk.SaveJpeg(outTileFile, jpegQuality);
-				if (!err.OK())
-					return err;
+			}
+			int     cx         = chunks[i].x;
+			int     cy         = chunks[i].y;
+			int64_t absX       = absMacroX + cx;
+			int64_t absY       = absMacroY + cy;
+			string  outTileDir = path::Join(outDir, ItoA(firstLevel), ItoA(absX));
+			auto    e          = os::MkDirAll(outTileDir);
+			if (!e.OK()) {
+				setLockedError(e);
+				continue;
+			}
+			string             outTileFile = path::Join(outTileDir, tsf::fmt("%d.jpeg", absY));
+			os::FileAttributes attribs;
+			e = os::Stat(outTileFile, attribs);
+			if (e.OK() && attribs.TimeModify > t.TimeModify) {
+				// tile already exists, and is newer than the lz4 tile
+				continue;
+			}
+			e = ensureLoaded();
+			if (!e.OK()) {
+				setLockedError(e);
+				continue;
+			}
+			auto chunk = img.Window(cx * webTileSize, cy * webTileSize, webTileSize, webTileSize);
+			e          = chunk.SaveJpeg(outTileFile, jpegQuality, jpegSampling);
+			if (!e.OK()) {
+				setLockedError(e);
+				continue;
 			}
 		}
-		// Ehh.. just let Pillow-SIMD handle all subsequent levels. It's fast enough, and I think it does
-		// downsampling in linear space.
-		/*
-		// we can create the two subsequent downscaled resolutions right here, so we do it
-		for (int downscale = 1; downscale <= (int) log2(TileSize / webTileSize); downscale++) {
-			absMacroX /= 2;
-			absMacroY /= 2;
-			nchunk /= 2;
-			int downscaleFactor = 1 << downscale;
-			for (int cy = 0; cy < nchunk; cy++) {
-				for (int cx = 0; cx < nchunk; cx++) {
-					int64_t absX       = absMacroX + cx;
-					int64_t absY       = absMacroY + cy;
-					string  outTileDir = path::Join(outDir, ItoA(firstLevel - downscale), ItoA(absX));
-					auto    err        = os::MkDirAll(outTileDir);
-					if (!err.OK())
-						return err;
-					string             outTileFile = path::Join(outTileDir, tsf::fmt("%d.jpeg", absY));
-					os::FileAttributes attribs;
-					err = os::Stat(outTileFile, attribs);
-					if (err.OK() && attribs.TimeModify > t.TimeModify) {
-						// tile already exists, and is newer than the lz4 tile
-						continue;
-					}
-					err = ensureLoaded();
-					if (!err.OK())
-						return err;
-					while (img.Width != TileSize / downscaleFactor)
-						//img = img.HalfSizeLinear();
-						img = img.HalfSizeCheap();
-					auto chunk = img.Window(cx * webTileSize, cy * webTileSize, webTileSize, webTileSize);
-					err        = chunk.SaveJpeg(outTileFile, jpegQuality);
-					if (!err.OK())
-						return err;
-				}
-			}
-		}
-		*/
+		if (!err.OK())
+			return err;
 		tsf::print("\rFinished %d/%d", i, all.size());
 		fflush(stdout);
 	}
 
-	/*
-	for (int i = firstLevel; i >= 0; i--) {
-		auto err = DownscaleWebTiles(outDir, i);
-		if (!err.OK())
-			return err;
-	}
-	*/
-
 	return Error();
 }
-
-/*
-Error InfiniteBitmap::DownscaleWebTiles(std::string outDir, int level) {
-	auto srcRoot = path::Join(outDir, ItoA(level));
-	auto dstRoot = path::Join(outDir, ItoA(level - 1));
-	auto err     = os::MkDirAll(dstRoot);
-	if (!err.OK())
-		return err;
-
-	// all target tiles
-	ohash::set<Tile> allDst;
-
-	os::FindFiles(RootDir, [&allDst](const os::FindFileItem& item) -> bool {
-		if (item.IsDir)
-			return true;
-		int64_t y = AtoI64(path::Filename(path::Dir(item.FullPath())).c_str());
-		int64_t x = AtoI64(path::ChangeExtension(path::Filename(item.FullPath()), "").c_str());
-		allDst.insert(Tile(x, y));
-		return true;
-	});
-
-	ImageIO io;
-	for (size_t i = 0; i < allDst.size(); i++) {
-		for (int cx = 0; cx < 2; cx++) {
-			for (int cy = 0; cy < 2; cy++) {
-				string raw;
-				err = os::ReadWholeFile(path::Join(srcRoot, ItoA(cy), ItoA(cy) + ".jpeg"), raw);
-				//io.LoadJpegScaled()
-			}
-			tsf::print("\rFinished %d/%d", i, allDst.size());
-			fflush(stdout);
-		}
-	}
-	return Error();
-}
-*/
 
 std::string InfiniteBitmap::PathOfTile(int64_t tx, int64_t ty) const {
 	return path::Join(RootDir, tsf::fmt("t-%08d-%08d.lz4", tx, ty));

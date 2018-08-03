@@ -477,12 +477,12 @@ Error Image::SavePng(const std::string& filename, bool withAlpha, int zlibLevel)
 	return ImageIO::SavePngFile(filename, withAlpha, Width, Height, Stride, Data, zlibLevel);
 }
 
-Error Image::SaveJpeg(const std::string& filename, int quality) const {
+Error Image::SaveJpeg(const std::string& filename, int quality, JpegSampling sampling) const {
 	if (Format == ImageFormat::Gray) {
 		auto copy = AsType(ImageFormat::RGBA);
-		return copy.SaveJpeg(filename, quality);
+		return copy.SaveJpeg(filename, quality, sampling);
 	}
-	return ImageIO::SaveJpegFile(filename, Width, Height, Stride, Data, quality);
+	return ImageIO::SaveJpegFile(filename, Width, Height, Stride, Data, quality, sampling);
 }
 
 Error Image::SaveFile(const std::string& filename) const {

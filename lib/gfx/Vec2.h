@@ -39,6 +39,12 @@ public:
 		return *this;
 	}
 
+	Vec2Base& operator/=(T d) {
+		x /= d;
+		y /= d;
+		return *this;
+	}
+
 	Vec2Base& operator+=(Vec2Base b) {
 		x += b.x;
 		y += b.y;
