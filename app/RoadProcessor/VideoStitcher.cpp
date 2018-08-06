@@ -124,8 +124,8 @@ Error VideoStitcher::Rewind() {
 	if (!err.OK())
 		return err;
 
-	if (DebugStartVideoAt != 0) {
-		err = Video.SeekToSecond(DebugStartVideoAt, video::Seek::Any);
+	if (StartVideoAt != 0) {
+		err = Video.SeekToSecond(StartVideoAt, video::Seek::Any);
 		if (!err.OK())
 			return err;
 	}

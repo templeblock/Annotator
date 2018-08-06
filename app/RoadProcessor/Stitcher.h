@@ -20,6 +20,7 @@ public:
 
 	Stitcher();
 
+	Error DoMeasureScale(std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy);
 	Error DoStitch(std::string bitmapDir, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count);
 
 private:
@@ -47,6 +48,7 @@ private:
 	float                    Vignetting[NVignette];
 
 	Error  Initialize(std::string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds);
+	Error  LoadTrack(std::string trackFile);
 	Error  AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirection);
 	Error  AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect);
 	Error  MeasurePixelScale();
@@ -56,7 +58,7 @@ private:
 	void   MeasureVignetting();
 	Error  StitchFrame();
 	Error  DrawGeoReferencedFrame();
-	void   TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset);
+	Error  TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset);
 	Error  DrawGeoMesh(gfx::Vec3d geoOffset);
 	void   ExtrapolateMesh(const Mesh& smallMesh, Mesh& fullMesh, gfx::Vec2f& uvAtTopLeftOfImage);
 	void   TransformMeshIntoRendCoords(Mesh& mesh);

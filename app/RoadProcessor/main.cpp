@@ -6,6 +6,7 @@
 namespace imqs {
 namespace roadproc {
 int Speed(argparse::Args& args);
+int MeasureScale(argparse::Args& args);
 int Stitch(argparse::Args& args);
 int WebTiles(argparse::Args& args);
 } // namespace roadproc
@@ -72,7 +73,9 @@ int main(int argc, char** argv) {
 	args.AddValue("e", "lensdb", "Camera/Lens database", "/usr/local/share/lensfun/version_2/");
 	args.AddValue("l", "lens", "Lens correction (eg 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS'");
 
-	auto speed = args.AddCommand("speed3 <zy> <video[,video2][...]>",
+	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
+
+	auto speed = args.AddCommand("speed <zy> <video[,video2][...]>",
 	                             "Compute car speed from interframe differences\nOne or more videos can be specified."
 	                             " Separate multiple videos with commas. This version uses optical flow on flattened images",
 	                             Speed);
@@ -80,11 +83,13 @@ int main(int argc, char** argv) {
 	speed->AddValue("o", "outfile", "Write output to file", "stdout");
 	speed->AddValue("s", "start", "Start time in seconds (for debugging)", "0");
 
-	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
-	auto stitch      = args.AddCommand("stitch3 <video> <bitmap dir> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
+	auto measureScale = args.AddCommand("measure-scale <video> <position track> <zx> <zy>", "Measure scale, in meters per pixel.", MeasureScale);
+
+	auto stitch = args.AddCommand("stitch <video> <bitmap dir> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
 
 	stitch->AddValue("n", "number", "Number of frames", "-1");
 	stitch->AddValue("s", "start", "Start time in seconds", "0");
+	stitch->AddValue("m", "mpp", "Meters per pixel", "0");
 	stitch->AddSwitch("d", "dryrun", "Don't actually write anything to the infinite bitmap");
 
 	auto webtiles = args.AddCommand("webtiles <infinite bitmap>", "Create web tiles from infinite bitmap", WebTiles);

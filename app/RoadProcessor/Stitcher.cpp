@@ -6,19 +6,24 @@
 #include "OpticalFlow.h"
 #include "Mesh.h"
 
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -n 1 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -n 40 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -n 40 --start 0.7 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -n 30 --start 260 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// Time to measure meters/pixel is about 0m20
+
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 1 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 40 --start 0 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 40 --start 0.7 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 30 --start 260 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
 
 // second video
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 --phase 1 -n 30 --start 0 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 --phase 2 -n 200 --start 14 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -d ~/mldata/DSCF3040.MOV ~/inf ~/dev/Annotator/pos.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch --phase 1 -n 30 --start 0 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch --phase 2 -n 200 --start 14 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -d ~/mldata/DSCF3040.MOV ~/inf ~/dev/Annotator/pos.json 0 -0.00095
 
 // mthata
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 -d ~/mldata/mthata/DSCF0001-HG-3.MOV ~/inf mthata-pos.json 0 -0.000411
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch3 ~/mldata/mthata/DSCF0001-HG-3.MOV ~/inf mthata-pos.json 0 -0.000411
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' measure-scale ~/mldata/mthata/DSCF0001-HG-3.MOV mthata-pos.json 0 -0.000411
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -s 20 ~/mldata/mthata/DSCF0001-HG-3.MOV ~/inf mthata-pos.json 0 -0.000411
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch ~/mldata/mthata/DSCF0001-HG-3.MOV ~/inf mthata-pos.json 0 -0.000411
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -m .0024 /home/ben/mldata/mthata/DSCF0001-HG-3.MOV,/home/ben/mldata/mthata/DSCF0001-HG-4.MOV,/home/ben/mldata/mthata/DSCF0001-HG-5.MOV ~/inf mthata-pos.json 0 -0.000411
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -m .0024 /home/ben/mldata/mthata/DSCF0001-HG-3.MOV ~/inf mthata-pos.json 0 -0.000411
 
 // build/run-roadprocessor -r webtiles ~/inf
 
@@ -28,6 +33,8 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
+static StaticError ErrGeoVelocityZero("GPS position has no velocity");
+
 Stitcher::Stitcher() {
 	//ClearColor = Color8(0, 150, 0, 60);
 	ClearColor = Color8(0, 0, 0, 0);
@@ -36,15 +43,16 @@ Stitcher::Stitcher() {
 }
 
 Error Stitcher::Initialize(string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds) {
-	auto err = InfBmp.Initialize(bitmapDir);
-	if (!err.OK())
-		return err;
+	if (bitmapDir != "") {
+		auto err = InfBmp.Initialize(bitmapDir);
+		if (!err.OK())
+			return err;
+	}
 
-	VidStitcher.BlackenPercentage = 0.15;
-
+	VidStitcher.BlackenPercentage    = 0.15;
 	VidStitcher.EnableFullFlatOutput = true;
-	VidStitcher.DebugStartVideoAt    = seconds;
-	err                              = VidStitcher.Start(videoFiles, zy);
+	VidStitcher.StartVideoAt         = seconds;
+	auto err                         = VidStitcher.Start(videoFiles, zy);
 	if (!err.OK())
 		return err;
 
@@ -68,10 +76,7 @@ Error Stitcher::Initialize(string bitmapDir, std::vector<std::string> videoFiles
 	return Error();
 }
 
-Error Stitcher::DoStitch(string bitmapDir, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count) {
-	//os::RemoveAll(bitmapDir);
-	os::MkDirAll(bitmapDir);
-
+Error Stitcher::LoadTrack(std::string trackFile) {
 	HavePositions = true;
 	auto err      = Track.LoadFile(trackFile);
 	if (!err.OK())
@@ -82,17 +87,47 @@ Error Stitcher::DoStitch(string bitmapDir, std::vector<std::string> videoFiles, 
 	//Track.Dump(0, 20, 0.05);
 	//Track.SaveCSV("/home/ben/tracks.csv");
 	//exit(1);
+	return Error();
+}
 
-	err = Initialize(bitmapDir, videoFiles, zx, zy, seconds);
+Error Stitcher::DoMeasureScale(std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy) {
+	auto err = LoadTrack(trackFile);
+	err      = Initialize("", videoFiles, zx, zy, 0);
 	if (!err.OK())
 		return err;
 
-	MetersPerPixel = 0.0033; // dev time
+	//MetersPerPixel = 0.0033; // dev time
 
 	if (MetersPerPixel == 0) {
 		err = MeasurePixelScale();
 		if (!err.OK())
 			return err;
+	}
+
+	// This is our only output
+	tsf::print("%.6f\n", MetersPerPixel);
+
+	return Error();
+}
+
+Error Stitcher::DoStitch(string bitmapDir, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count) {
+	//os::RemoveAll(bitmapDir);
+	os::MkDirAll(bitmapDir);
+
+	auto err = LoadTrack(trackFile);
+
+	err = Initialize(bitmapDir, videoFiles, zx, zy, seconds);
+	if (!err.OK())
+		return err;
+
+	//MetersPerPixel = 0.0033; // dev time
+
+	if (MetersPerPixel == 0) {
+		tsf::print("Measuring meters/pixel\n");
+		err = MeasurePixelScale();
+		if (!err.OK())
+			return err;
+		tsf::print("meters/pixel: %.6f\n", MetersPerPixel);
 	}
 
 	SetupBaseMapScale();
@@ -117,17 +152,37 @@ Error Stitcher::DoStitch(string bitmapDir, std::vector<std::string> videoFiles, 
 Error Stitcher::MeasurePixelScale() {
 	EnableSimpleRender = false;
 	EnableGeoRender    = false;
-	auto err           = VidStitcher.Rewind();
+
+	bool debug = false;
+
+	size_t        minSamples = 200;
+	vector<float> metersPerPixelSamples;
+	if (debug)
+		tsf::print("\n");
+
+	// In the first few seconds of a recording, the vehicle is not moving
+	auto orgStart            = VidStitcher.StartVideoAt;
+	VidStitcher.StartVideoAt = 20;
+	auto err                 = VidStitcher.Rewind();
 	if (!err.OK())
 		return err;
 
-	vector<float> metersPerPixelSamples;
-	tsf::print("\n");
-
-	for (int i = 0; i < 1000; i++) {
+	for (int i = 0; metersPerPixelSamples.size() < minSamples; i++) {
 		err = VidStitcher.Next();
 		if (!err.OK())
 			return err;
+
+		Vec3d pos;
+		Vec2d vel2D;
+		Track.GetPositionAndVelocity(VidStitcher.FrameTime, pos, vel2D);
+		if (vel2D.size() < 5) {
+			VidStitcher.StartVideoAt = VidStitcher.FrameTime + 5;
+			VidStitcher.Rewind();
+			if (debug)
+				tsf::print("\nSeeking to %v\n", VidStitcher.StartVideoAt);
+			continue;
+		}
+		//tsf::print("%v: vel2D: %v, disp: %v\n", VidStitcher.FrameTime, vel2D.size(), PrevDirUnfiltered.size());
 
 		err = StitchFrame();
 		if (!err.OK())
@@ -135,19 +190,25 @@ Error Stitcher::MeasurePixelScale() {
 
 		float pixelsPerFrame  = PrevDirUnfiltered.size();
 		float pixelsPerSecond = pixelsPerFrame * VidStitcher.Video.GetVideoStreamInfo().FrameRateSeconds();
-		Vec3d pos;
-		Vec2d vel2D;
-		Track.GetPositionAndVelocity(VidStitcher.FrameTime, pos, vel2D);
 		metersPerPixelSamples.push_back((float) vel2D.size() / pixelsPerSecond);
 
 		if (i % 10 == 0) {
-			tsf::print("MetersPerPixel: %v\r", math::MeanAndVariance<float, double>(metersPerPixelSamples).first);
-			fflush(stdout);
+			auto mv     = math::MeanAndVariance<float, double>(metersPerPixelSamples);
+			auto median = math::Median(metersPerPixelSamples);
+			if (debug) {
+				tsf::print("MetersPerPixel mean: %v, median: %v, sd: %v (%v/%v samples)\r", mv.first, median, sqrt(mv.second), metersPerPixelSamples.size(), minSamples);
+				fflush(stdout);
+			}
 		}
 	}
 
-	MetersPerPixel = math::MeanAndVariance<float, double>(metersPerPixelSamples).first;
-	tsf::print("\nFinal MetersPerPixel: %v\n", math::MeanAndVariance<float, double>(metersPerPixelSamples).first);
+	if (metersPerPixelSamples.size() < minSamples)
+		return Error::Fmt("Unable to measure meters/pixel. Too few fast-moving samples (%v). Need at least %v", metersPerPixelSamples.size(), minSamples);
+
+	VidStitcher.StartVideoAt = orgStart;
+	VidStitcher.Rewind();
+
+	MetersPerPixel = math::Median(metersPerPixelSamples);
 
 	return Error();
 }
@@ -173,7 +234,9 @@ Error Stitcher::Run(int count) {
 
 	for (int i = 0; i < count || count == -1; i++) {
 		err = VidStitcher.Next();
-		if (!err.OK())
+		if (err == ErrEOF)
+			break;
+		else if (!err.OK())
 			return err;
 
 		// For now we just use hardcoded values for vignetting
@@ -183,8 +246,8 @@ Error Stitcher::Run(int count) {
 		if (!err.OK())
 			return err;
 
-		//if ((EnableSimpleRender || EnableGeoRender) && (i % 30 == 0 || (i < 20 && i % 5 == 0)))
-		//	Rend.SaveToFile("giant2.jpeg");
+		if ((EnableSimpleRender || EnableGeoRender) && (i % 100 == 0 || (i < 20 && i % 5 == 0)))
+			Rend.SaveToFile("giant2.jpeg");
 		//Rend.SaveToFile("giant2.jpeg");
 
 		//if (VidStitcher.FrameNumber != 0) {
@@ -274,7 +337,9 @@ Error Stitcher::StitchFrame() {
 		}
 	}
 
-	if (EnableSimpleRender) {
+	{
+		// These parameters are not used for GeoReferenced rendering.
+		// This is used for "EnableSimpleRender", and also for the meters/pixel scale measurement
 		Vec2f newTopLeft = full.PosAtFractionalUV(uvAtTopLeftOfImage);
 		Vec2f dir        = newTopLeft - PrevTopLeft;
 		if (dir.size() > 5 && VidStitcher.FrameNumber >= 1) {
@@ -298,15 +363,23 @@ Error Stitcher::DrawGeoReferencedFrame() {
 	// We just produce noise if we output frames when standing still, so when we come to a stop, then we cease outputting frames
 	if (geoPos.distance2D(PrevGeoFramePos) > 1.0 || vel2D.size() > 4.0) {
 		Vec3d geoOffset;
-		TransformFrameCoordsToGeo(geoOffset);
-		auto err        = DrawGeoMesh(geoOffset);
+		auto  err = TransformFrameCoordsToGeo(geoOffset);
+		if (err == ErrGeoVelocityZero) {
+			// we have to skip this frame. We have zero velocity, so it's pointless continuing stitching,
+			// and additionally, we don't know our direction of travel. I first saw this at the start of
+			// a recording.
+			return Error();
+		} else if (!err.OK()) {
+			return err;
+		}
+		err             = DrawGeoMesh(geoOffset);
 		PrevGeoFramePos = geoPos;
 		return err;
 	}
 	return Error();
 }
 
-void Stitcher::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
+Error Stitcher::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
 	// Firstly, imagine the (flattened) frame on your screen. X is pointing right, and Y is pointing
 	// down, as is usual for images.
 	// The bottom of the image is T0, the FrameTime at which the frame was captured. Now, imagine
@@ -360,6 +433,8 @@ void Stitcher::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
 			Vec3d  geoCenterPos;
 			Vec2d  geoVel;
 			Track.GetPositionAndVelocity(ptime, geoCenterPos, geoVel);
+			if (geoVel.size() == 0)
+				return ErrGeoVelocityZero;
 			Vec2d  right                   = Vec2d(geoVel.y, -geoVel.x).normalized();
 			double meterDistanceFromCenter = pixelDistanceFromCenter * MetersPerPixel;
 			Vec3d  geoPos                  = geoCenterPos + sideOfCenter * meterDistanceFromCenter * Vec3d(right.x, right.y, 0);
@@ -371,6 +446,7 @@ void Stitcher::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
 			//	tsf::print("%.1f %.1f (%f) (%f %f)\n", geoPos.x, geoPos.y, sideOfCenter, right.x, right.y);
 		}
 	}
+	return Error();
 }
 
 Error Stitcher::DrawGeoMesh(gfx::Vec3d geoOffset) {
@@ -557,7 +633,7 @@ Error Stitcher::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
 	    outRect.y1 < newView.y1 ||
 	    outRect.x2 > newView.x2 ||
 	    outRect.y2 > newView.y2) {
-		return Error::Fmt("Resolution is too high to draw a single mesh into the framebuffer. You'll have to split the rendering across multiple framebuffers (easy!). Resolution is %v x %v",
+		return Error::Fmt("Resolution is too high to draw a single mesh into the framebuffer. Resolution is %v x %v",
 		                  outRect.Width(), outRect.Height());
 	}
 
@@ -668,18 +744,35 @@ int WebTiles(argparse::Args& args) {
 	return 0;
 }
 
-int Stitch(argparse::Args& args) {
-	auto   videoFiles = strings::Split(args.Params[0], ',');
-	auto   bmpDir     = args.Params[1];
-	auto   trackFile  = args.Params[2];
-	float  zx         = atof(args.Params[3].c_str());
-	float  zy         = atof(args.Params[4].c_str());
-	int    count      = args.GetInt("number");
-	double seek       = atof(args.Get("start").c_str());
+int MeasureScale(argparse::Args& args) {
+	auto  videoFiles = strings::Split(args.Params[0], ',');
+	auto  trackFile  = args.Params[1];
+	float zx         = atof(args.Params[2].c_str());
+	float zy         = atof(args.Params[3].c_str());
 
 	Stitcher s;
-	s.DryRun = args.Has("dryrun");
-	auto err = s.DoStitch(bmpDir, videoFiles, trackFile, zx, zy, seek, count);
+	auto     err = s.DoMeasureScale(videoFiles, trackFile, zx, zy);
+	if (!err.OK()) {
+		tsf::print("Error: %v\n", err.Message());
+		return 1;
+	}
+	return 0;
+}
+
+int Stitch(argparse::Args& args) {
+	auto   videoFiles     = strings::Split(args.Params[0], ',');
+	auto   bmpDir         = args.Params[1];
+	auto   trackFile      = args.Params[2];
+	float  zx             = atof(args.Params[3].c_str());
+	float  zy             = atof(args.Params[4].c_str());
+	int    count          = args.GetInt("number");
+	double seek           = args.GetDouble("start");
+	double metersPerPixel = args.GetDouble("mpp");
+
+	Stitcher s;
+	s.DryRun         = args.Has("dryrun");
+	s.MetersPerPixel = metersPerPixel;
+	auto err         = s.DoStitch(bmpDir, videoFiles, trackFile, zx, zy, seek, count);
 	if (!err.OK()) {
 		tsf::print("Error: %v\n", err.Message());
 		return 1;

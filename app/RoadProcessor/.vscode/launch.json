@@ -38,10 +38,10 @@
             "args": [
                 "--lens",
                 "Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS",
-                "stitch3",
+                "stitch",
                 "-d",
-                "-s",
-                "180",
+                "-m",
+                "0.0024",
                 "~/mldata/mthata/DSCF0001-HG-3.MOV",
                 "~/inf",
                 "~/dev/Annotator/mthata-pos.json",

@@ -93,10 +93,13 @@ bool PositionTrack::GetPositionAndVelocity(double frameTime, gfx::Vec3d& pos, gf
 		auto pp2 = OutProj.Convert(p2.Pos);
 	}
 
-	pos            = pp1 + frac * (pp2 - pp1);
-	auto   delta2D = (pp2 - pp1).vec2;
-	double speed   = delta2D.size() / (p2.FrameTime - p1.FrameTime);
-	vel2D          = speed * delta2D.normalized();
+	pos                = pp1 + frac * (pp2 - pp1);
+	auto   delta2D     = (pp2 - pp1).vec2;
+	double speed       = delta2D.size() / (p2.FrameTime - p1.FrameTime);
+	auto   delta2DNorm = delta2D;
+	if (delta2D.size() != 0)
+		delta2DNorm = delta2D.normalized();
+	vel2D = speed * delta2DNorm;
 
 	return true;
 }

@@ -8,11 +8,15 @@
 // This is the third version of our vehicle speed computation system, which uses
 // optical flow on flattened images, instead of using OpenCV feature tracking.
 //
-// build/run-roadprocessor -r speed3 --csv -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
-// build/run-roadprocessor -r speed3 -o speeds.json -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
+// Time to do 3 mthata videos (4.1GB, 4.1GB, 3.8GB): 40 minutes
+//
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed -o speeds.json -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
 //
 // mthata
-// build/run-roadprocessor -r speed3 --csv -0.000411 ~/mldata/mthata/DSCF0001-HG-3.MOV 2>/dev/null
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS'speed --csv -0.000411 ~/mldata/mthata/DSCF0001-HG-3.MOV 2>/dev/null
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed -o mthata-speeds.json -0.000411 /home/ben/mldata/mthata/DSCF0001-HG-3.MOV,/home/ben/mldata/mthata/DSCF0001-HG-4.MOV,/home/ben/mldata/mthata/DSCF0001-HG-5.MOV 2>/dev/null
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.000411 /home/ben/mldata/mthata/DSCF0001-HG-3.MOV,/home/ben/mldata/mthata/DSCF0001-HG-4.MOV,/home/ben/mldata/mthata/DSCF0001-HG-5.MOV 2>/dev/null
 
 using namespace std;
 using namespace imqs::gfx;
@@ -37,8 +41,8 @@ static Error DoSpeed(vector<string> videoFiles, float zy, double startTime, Spee
 		tsf::print(outf, "time,speed\n");
 
 	VideoStitcher stitcher;
-	stitcher.DebugStartVideoAt = startTime;
-	auto err                   = stitcher.Start(videoFiles, zy);
+	stitcher.StartVideoAt = startTime;
+	auto err              = stitcher.Start(videoFiles, zy);
 	if (!err.OK())
 		return err;
 

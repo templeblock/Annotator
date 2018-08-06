@@ -138,5 +138,24 @@ std::pair<Result, Result> MinMax(const std::vector<T>& x) {
 	return MinMax<T, Result>(x.size(), &x[0]);
 }
 
+template <typename T>
+T Median(size_t n, const T* x) {
+	if (n == 0)
+		return T();
+	if (n == 1)
+		return x[0];
+	auto copy = new T[n];
+	for (size_t i = 0; i < n; i++)
+		copy[i] = x[i];
+	std::sort(copy, copy + n);
+	delete[] copy;
+	return copy[n / 2];
+}
+
+template <typename T>
+T Median(const std::vector<T>& x) {
+	return Median<T>(x.size(), &x[0]);
+}
+
 } // namespace math
 } // namespace imqs

@@ -45,7 +45,7 @@ public:
 	time::Duration    RemainingTime;
 	double            FrameTime                   = 0; // Absolute video time in seconds, of most recently decoded frame
 	size_t            FrameNumber                 = 0;
-	double            DebugStartVideoAt           = 0;     // Used during debugging/development. Seeks first frame of video to X seconds of first video.
+	double            StartVideoAt                = 0;     // Seeks first frame of video to X seconds of first video.
 	bool              EnableFullFlatOutput        = false; // If true, then FullFlat contains the full flat image output
 	bool              EnableCPUPerspectiveRemoval = false; // CPU path supports lens correction, but it's slower
 	bool              EnableBrightnessAdjuster    = true;
@@ -58,7 +58,7 @@ public:
 	roadproc::Mesh                             Mesh;                   // The most recently stitched mesh
 
 	Error       Start(std::vector<std::string> videoFiles, float perspectiveZY);
-	Error       Rewind();               // Rewind to start of first video
+	Error       Rewind();               // Rewind to StartVideoAt of first video
 	Error       Next();                 // Process the next frame
 	gfx::Rect32 CropRectFromFullFlat(); // Returns the crop rectangle (out of the full flattened frustum image) that is used for alignment.
 	void        PrintRemainingTime();
