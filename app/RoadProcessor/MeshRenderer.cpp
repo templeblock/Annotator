@@ -603,7 +603,7 @@ void MeshRenderer::RemovePerspective(const gfx::Image& camera, const gfx::Image*
 	if (!adjuster) {
 		nullAdjuster.Alloc(ImageFormat::RGBA, 2, 2);
 		int one = LensCorrector::VignetteGrayMultiplier;
-		nullAdjuster.Fill(Color8(one, one, one, one).u);
+		nullAdjuster.Fill(Color8(one, one, one, one));
 		adjuster = &nullAdjuster;
 	}
 

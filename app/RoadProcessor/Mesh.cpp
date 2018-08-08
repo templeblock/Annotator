@@ -294,6 +294,16 @@ void Mesh::Print(gfx::Rect32 rect) const {
 	}
 }
 
+void Mesh::PrintPosX(gfx::Rect32 rect) const {
+	for (int y = rect.y1; y < rect.y2; y++) {
+		for (int x = rect.x1; x < rect.x2; x++) {
+			auto& p = At(x, y);
+			tsf::print("%4.1f ", p.Pos.x);
+		}
+		tsf::print("\n");
+	}
+}
+
 void Mesh::PrintValid() const {
 	Rect32 rect(0, 0, Width, Height);
 	for (int y = rect.y1; y < rect.y2; y++) {

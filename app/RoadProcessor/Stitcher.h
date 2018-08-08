@@ -13,15 +13,16 @@ namespace roadproc {
 */
 class Stitcher {
 public:
-	gfx::Color8 ClearColor;         // In production we'll want this to be black, but during dev it's nice to have it some other color like green
-	float       MetersPerPixel = 0; // Computed scale. After computing this, we assume it is constant for the entire recording
-	int         BaseZoomLevel  = 0;
-	bool        DryRun         = false; // If true, then don't actually write anything to the infinite bitmap
+	gfx::Color8 ClearColor;              // In production we'll want this to be black, but during dev it's nice to have it some other color like green
+	float       MetersPerPixel      = 0; // Computed scale. After computing this, we assume it is constant for the entire recording
+	int         BaseZoomLevel       = 0;
+	bool        DryRun              = false; // If true, then don't actually write anything to the infinite bitmap
+	bool        PrintTileIOMessages = true;
 
 	Stitcher();
 
 	Error DoMeasureScale(std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy);
-	Error DoStitch(std::string bitmapDir, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count);
+	Error DoStitch(std::string storageSpec, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count);
 
 private:
 	struct FrameObject {
@@ -32,7 +33,8 @@ private:
 	};
 	VideoStitcher            VidStitcher;
 	InfiniteBitmap           InfBmp;
-	gfx::Rect64              InfBmpView; // Where in InfBmp's world is Rend pointed at
+	gfx::Rect64              InfBmpView;  // Where in InfBmp's world is Rend pointed at
+	gfx::Image               InfBmpDirty; // One gray pixel for every tile in InfBmp - 255 if dirty. 0 if not touched.
 	MeshRenderer             Rend;
 	PositionTrack            Track;
 	gfx::Vec2f               PrevTopLeft;
@@ -47,7 +49,7 @@ private:
 	const static int         NVignette          = 3;
 	float                    Vignetting[NVignette];
 
-	Error  Initialize(std::string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds);
+	Error  Initialize(std::string storageSpec, std::vector<std::string> videoFiles, float zx, float zy, double seconds);
 	Error  LoadTrack(std::string trackFile);
 	Error  AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirection);
 	Error  AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect);

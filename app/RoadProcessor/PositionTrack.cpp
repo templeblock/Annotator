@@ -120,6 +120,13 @@ void PositionTrack::Dump(double start, double end, double interval) const {
 	}
 }
 
+void PositionTrack::DumpRaw(size_t start, size_t end) const {
+	for (size_t i = start; i < end; i++) {
+		auto v = Values[i];
+		tsf::print("%4.1f, %12.1f %12.1f\n", v.FrameTime, v.Pos.x, v.Pos.y);
+	}
+}
+
 void PositionTrack::ConvertToWebMercator() {
 	if (IsProjected)
 		return;
@@ -156,21 +163,22 @@ void PositionTrack::Smooth(double smoothness, double increment) {
 	for (size_t i = 0; i < Values.size() - 1; i++) {
 		Vec2d c3, c4;
 		// Generate the curve from Values[i] to Values[i + 1]
-		Vec2d  p0      = Values[i].Pos.vec2;
-		Vec2d  p1      = Values[i + 1].Pos.vec2;
-		Vec2d  p2      = Values[min(i + 2, nM1)].Pos.vec2;
+		Vec2d p0 = Values[i].Pos.vec2;
+		Vec2d p1 = Values[i + 1].Pos.vec2;
+		Vec2d p2 = Values[min(i + 2, nM1)].Pos.vec2;
+		// Even if we don't end up interpolating for this segment, we must still compute the control points,
+		// so that we have values ready for the next segment.
+		ComputeSmoothCubicBezierControlPoints(p0.x, p0.y,
+		                                      p1.x, p1.y,
+		                                      p2.x, p2.y,
+		                                      smoothness,
+		                                      c3.x, c3.y,
+		                                      c4.x, c4.y);
 		double segDist = p1.distance2D(p0);
 		if (segDist < increment) {
 			// The segment is too small. Don't add any intermediate curve points
 			newVal.push_back(Values[i + 1]);
 		} else {
-			ComputeSmoothCubicBezierControlPoints(p0.x, p0.y,
-			                                      p1.x, p1.y,
-			                                      p2.x, p2.y,
-			                                      smoothness,
-			                                      c3.x, c3.y,
-			                                      c4.x, c4.y);
-
 			int    pieces = (int) max(2.0, segDist / increment);
 			double step   = 1.0 / pieces;
 			double t      = step;

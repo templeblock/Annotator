@@ -74,6 +74,7 @@ public:
 	void PrintSample(int x, int y) const;
 	void Print(gfx::Rect32 rect) const;
 	void PrintValid() const;
+	void PrintPosX(gfx::Rect32 rect) const;
 	void PrintDeltaPos(gfx::Rect32 rect, gfx::Vec2f norm = gfx::Vec2f(FLT_MAX, FLT_MAX)) const;
 	void PrintDeltaStrength(gfx::Rect32 rect) const;
 	void DrawFlowImage(std::string filename) const;

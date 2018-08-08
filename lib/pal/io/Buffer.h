@@ -48,12 +48,27 @@ public:
 // Wraps a memory buffer in a Reader
 class IMQS_PAL_API ByteReader : public Reader {
 public:
-	const uint8_t* Buf = nullptr;
-	size_t         Len = 0;
-	size_t         Pos = 0;
+	bool           OwnBuf = false;
+	const uint8_t* Buf    = nullptr;
+	size_t         Len    = 0;
+	size_t         Pos    = 0;
 
 	ByteReader() {}
 	ByteReader(const void* buf, size_t len) : Buf((const uint8_t*) buf), Len(len) {}
+
+	Error Read(void* buf, size_t& len) override;
+};
+
+// Wraps a string in a Reader
+class IMQS_PAL_API StringReader : public Reader {
+public:
+	std::string Buf;
+	size_t      Pos = 0;
+
+	StringReader() {}
+	StringReader(const void* buf, size_t len) { Buf.assign((const char*) buf, len); }
+	StringReader(const std::string& buf) : Buf(buf) {}
+	StringReader(std::string&& buf) : Buf(std::move(buf)) {}
 
 	Error Read(void* buf, size_t& len) override;
 };

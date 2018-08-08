@@ -30,7 +30,8 @@ sudo apt-get install -y \
 #
 # ffmpeg must be installed from source on ubuntu 16.04, because we need at least version 3.3
 # I don't understand why, but I got linker errors when trying to build lib/Video, complaining
-# that ffmpeg needed to be built with -fPIC. So then I tried re-running ./configure --enable-pic,
+# that ffmpeg needed to be built with -fPIC. This was when trying to link to the static version
+# of ffmpeg. So then I tried re-running ./configure --enable-pic,
 # and then building again, but that didn't help. So eventually I resorted to building the shared
 # library only, and that fixed it.
 # 

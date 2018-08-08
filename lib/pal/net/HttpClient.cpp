@@ -506,6 +506,22 @@ bool Response::FirstSetCookie(Cookie& cookie) const {
 	return false;
 }
 
+Error Response::ToError() const {
+	if (Is200())
+		return Error();
+	if (!Err.OK())
+		return Err;
+	auto msg = StatusCodeStr();
+	if (Body != "") {
+		msg += ". ";
+		if (Body.size() > 40)
+			msg += Body.substr(40) + "...";
+		else
+			msg += Body;
+	}
+	return Error(msg);
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -532,6 +548,13 @@ Response Client::Perform(const std::string& method, const std::string& url, size
 void Client::Perform(const Request& request, Response& response) {
 	Connection c;
 	c.Perform(request, response);
+}
+
+Response Client::Perform(const Request& request) {
+	Response   response;
+	Connection c;
+	c.Perform(request, response);
+	return response;
 }
 
 bool Client::IsLocalHost(const char* url) {
@@ -706,6 +729,12 @@ void Connection::Perform(const Request& request, Response& response) {
 
 	ReadPtr         = nullptr;
 	CurrentResponse = nullptr;
+}
+
+Response Connection::Perform(const Request& request) {
+	Response response;
+	Perform(request, response);
+	return response;
 }
 
 void Connection::Cancel() {

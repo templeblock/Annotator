@@ -60,6 +60,8 @@ void TestBilinear() {
 int main(int argc, char** argv) {
 	using namespace imqs::roadproc;
 
+	imqs::logging::SetupCrashHandler("RoadProcessor");
+
 	imqs::video::VideoFile::Initialize();
 	//imqs::gfx::raster::TestBilinear();
 	//imqs::roadproc::MeshRenderer rend;
