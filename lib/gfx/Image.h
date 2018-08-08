@@ -84,8 +84,8 @@ public:
 	void  Alloc(ImageFormat format, int width, int height, int stride = 0); // Allocate memory and initialize data structure
 	Image Window(int x, int y, int width, int height) const;                // Returns a window into Image, at the specified rectangle. Does not copy memory. Parent must outlive window.
 	Image Window(Rect32 rect) const;                                        // Returns a window into Image, at the specified rectangle. Does not copy memory. Parent must outlive window.
-	void  Fill(uint32_t color);
-	void  Fill(Rect32 rect, uint32_t color);
+	void  Fill(Color8 color);
+	void  Fill(Rect32 rect, Color8 color);
 	Image AsType(ImageFormat fmt) const;
 	Image HalfSizeCheap() const;                                          // Downscale by 1/2, in gamma/sRGB space (this is why it's labeled cheap. correct downscale is in linear space, not sRGB)
 	Image HalfSizeLinear() const;                                         // Downscale by 1/2, in linear light space. Slower, but correct.

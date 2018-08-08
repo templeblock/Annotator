@@ -132,20 +132,27 @@ Image Image::Window(Rect32 rect) const {
 	return Window(rect.x1, rect.y1, rect.Width(), rect.Height());
 }
 
-void Image::Fill(uint32_t color) {
+void Image::Fill(Color8 color) {
 	Fill(Rect32(0, 0, Width, Height), color);
 }
 
-void Image::Fill(Rect32 rect, uint32_t color) {
-	rect.x1 = math::Clamp(rect.x1, 0, Width);
-	rect.y1 = math::Clamp(rect.y1, 0, Height);
-	rect.x2 = math::Clamp(rect.x2, 0, Width);
-	rect.y2 = math::Clamp(rect.y2, 0, Height);
+void Image::Fill(Rect32 rect, Color8 color) {
+	rect.x1        = math::Clamp(rect.x1, 0, Width);
+	rect.y1        = math::Clamp(rect.y1, 0, Height);
+	rect.x2        = math::Clamp(rect.x2, 0, Width);
+	rect.y2        = math::Clamp(rect.y2, 0, Height);
+	uint8_t gray   = color.Lum();
+	bool    isGray = NumChannels() == 1;
 	for (int y = rect.y1; y < rect.y2; y++) {
 		uint32_t* dst = At32(rect.x1, y);
 		size_t    x2  = rect.x2;
-		for (size_t x = rect.x1; x < x2; x++)
-			*dst++ = color;
+		if (isGray) {
+			for (size_t x = rect.x1; x < x2; x++)
+				*dst++ = gray;
+		} else {
+			for (size_t x = rect.x1; x < x2; x++)
+				*dst++ = color.u;
+		}
 	}
 }
 
@@ -437,7 +444,7 @@ void Image::CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect) {
 		srcRect.x2 = src.Width;
 	}
 	if (srcRect.y2 > src.Height) {
-		dstRect.y2 -= srcRect.x2 - src.Height;
+		dstRect.y2 -= srcRect.y2 - src.Height;
 		srcRect.y2 = src.Height;
 	}
 
@@ -454,12 +461,15 @@ void Image::CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect) {
 		dstRect.x2 = Width;
 	}
 	if (dstRect.y2 > Height) {
-		srcRect.y2 -= dstRect.x2 - Height;
+		srcRect.y2 -= dstRect.y2 - Height;
 		dstRect.y2 = Height;
 	}
 
-	if (srcRect.Width() < 0 || srcRect.Height() < 0)
+	if (srcRect.Width() <= 0 || srcRect.Height() <= 0)
 		return;
+
+	IMQS_ASSERT(srcRect.x1 >= 0 && srcRect.x2 <= src.Width && srcRect.y1 >= 0 && srcRect.y2 <= src.Height);
+	IMQS_ASSERT(dstRect.x1 >= 0 && dstRect.x2 <= Width && dstRect.y1 >= 0 && dstRect.y2 <= Height);
 
 	for (int y = 0; y < srcRect.Height(); y++)
 		memcpy(At(dstRect.x1, dstRect.y1 + y), src.At(srcRect.x1, srcRect.y1 + y), srcRect.Width() * BytesPerPixel());
