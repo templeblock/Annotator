@@ -1,0 +1,10 @@
+/.tundra2.*
+/t2-output
+/ide
+/*.png
+/*.jpeg
+pkg/
+CMakeFiles/
+/third_party/cntk/Windows
+/third_party/xo
+/third_party/vcpkg
