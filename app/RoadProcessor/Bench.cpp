@@ -3,6 +3,7 @@
 
 using namespace std;
 using namespace imqs::gfx;
+using namespace imqs::video;
 
 namespace imqs {
 namespace roadproc {
@@ -19,18 +20,22 @@ void BenchVideoDecode() {
 
 	NVVideo nv;
 	err = nv.Initialize();
-	err = nv.OpenFile(filename);
-	tsf::print("Open: %v\n", err.Message());
-	IMQS_ASSERT(err.OK());
-	Image img;
-	img.Alloc(ImageFormat::RGBA, nv.Width(), nv.Height());
-	auto start = time::Now();
-	for (int i = 0; i < n; i++) {
-		err = nv.DecodeFrameRGBA(img.Width, img.Height, img.Data, img.Stride);
-		//img.SaveFile("frame-nvdec.jpg");
+	for (int ii = 0; ii < 1; ii++) {
+		err = nv.OpenFile(filename);
+		tsf::print("Open: %v\n", err.Message());
 		IMQS_ASSERT(err.OK());
+		Image img;
+		img.Alloc(ImageFormat::RGBA, nv.Width(), nv.Height());
+		auto start = time::Now();
+		for (int i = 0; i < n; i++) {
+			double ftime = 0;
+			err          = nv.DecodeFrameRGBA(img.Width, img.Height, img.Data, img.Stride, &ftime);
+			//img.SaveFile("frame-nvdec.jpg");
+			IMQS_ASSERT(err.OK());
+			//tsf::print("%.6f\n", ftime);
+		}
+		tsf::print("FPS: %f\n", n / (time::Now() - start).Seconds());
 	}
-	tsf::print("FPS: %f\n", n / (time::Now() - start).Seconds());
 
 	/*
 	video::VideoFile v;
