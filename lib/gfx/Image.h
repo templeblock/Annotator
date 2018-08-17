@@ -69,6 +69,7 @@ public:
 	int         Height  = 0;
 	ImageFormat Format  = ImageFormat::Null;
 	bool        OwnData = true;
+	bool        Locked  = false; // If true, then any attempt to realloc the memory will cause a runtime assert
 
 	Image() {}
 	Image(ImageFormat format, ContructMode mode, int stride, void* data, int width, int height);
@@ -90,6 +91,7 @@ public:
 	Image HalfSizeCheap() const;                                          // Downscale by 1/2, in gamma/sRGB space (this is why it's labeled cheap. correct downscale is in linear space, not sRGB)
 	Image HalfSizeLinear() const;                                         // Downscale by 1/2, in linear light space. Slower, but correct.
 	void  BoxBlur(int size, int iterations);                              // Box blur of size [1 + 2 * size], repeated 'iterations' times
+	void  CopyFrom(const Image& src);                                     // Copies as much from src into this as possible
 	void  CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect);     // Source and destination rectangles are clipped before copying, but they must be equal in size
 	void  CopyFrom(const Image& src, Rect32 srcRect, int dstX, int dstY); // Source rectangle is clipped before copying
 

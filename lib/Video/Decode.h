@@ -65,12 +65,13 @@ private:
 	AVCodecContext*  VideoDecCtx    = nullptr;
 	AVStream*        VideoStream    = nullptr;
 	int              VideoStreamIdx = -1;
-	AVFrame*         Frame          = nullptr;
-	SwsContext*      SwsCtx         = nullptr;
-	int              SwsDstW        = 0;
-	int              SwsDstH        = 0;
-	int64_t          LastFramePTS   = 0;  // PTS = presentation time stamp (ie time when frame should be shown to user)
-	int64_t          LastSeekPTS    = -1; // Set to a value other than -1, if we have just executed a seek operation
+	AVPacket         Pkt;
+	AVFrame*         Frame        = nullptr;
+	SwsContext*      SwsCtx       = nullptr;
+	int              SwsDstW      = 0;
+	int              SwsDstH      = 0;
+	int64_t          LastFramePTS = 0;  // PTS = presentation time stamp (ie time when frame should be shown to user)
+	int64_t          LastSeekPTS  = -1; // Set to a value other than -1, if we have just executed a seek operation
 
 	static Error TranslateErr(int ret, const char* whileBusyWith = nullptr);
 	static Error OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, int& stream_idx, AVCodecContext*& dec_ctx);

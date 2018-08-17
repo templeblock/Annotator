@@ -21,7 +21,7 @@ static double  ImageStdDev(const Image& img, Rect32 crop);
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-OpticalFlow2::OpticalFlow2() {
+OpticalFlow::OpticalFlow() {
 }
 
 static Rect32 MakeBoxAroundPoint(int x, int y, int radius) {
@@ -452,7 +452,7 @@ int FixElementsTooFarFromGlobalBest(Mesh& warpMesh, Rect32 warpMeshValidRect, Ve
 // All pixels in stableImg are expected to be defined, but we allow blank (zero alpha) pixels
 // in warpImg, and we make sure that we don't try to align any grid cells that have
 // one or more blank pixels inside them.
-FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Image& _warpImg, const gfx::Image& _stableImg, gfx::Vec2f& bias) {
+FlowResult OpticalFlow::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Image& _warpImg, const gfx::Image& _stableImg, gfx::Vec2f& bias) {
 	FlowResult result;
 	int        frameNumber = HistorySize++;
 
@@ -749,9 +749,8 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 			DrawMesh("mesh-prefilter-1.png", *warpImg, warpMesh, false);
 		}
 
-		int maxFilterPasses = 10;
-		//int       maxFilterPasses = 0;
-		int       nfilterPasses = 0;
+		int       maxFilterPasses = EnableMedianFilter ? 10 : 0;
+		int       nfilterPasses   = 0;
 		DeltaGrid dg;
 		CopyMeshToDelta(warpMesh, warpMeshValidRect, dg, bias);
 		for (int ifilter = 0; ifilter < maxFilterPasses; ifilter++) {
@@ -877,9 +876,9 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 	return result;
 }
 
-void OpticalFlow2::DrawMesh(std::string filename, const gfx::Image& img, const Mesh& mesh, bool isStable) {
+void OpticalFlow::DrawMesh(std::string filename, const gfx::Image& img, const Mesh& mesh, bool isStable) {
 	Canvas c(img.Width, img.Height);
-	*c.GetImage() = img;
+	c.GetImage()->CopyFrom(img);
 	for (int y = 0; y < mesh.Height; y++) {
 		for (int x = 0; x < mesh.Width; x++) {
 			auto& v = mesh.At(x, y);

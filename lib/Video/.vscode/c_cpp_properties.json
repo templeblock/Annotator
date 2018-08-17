@@ -13,7 +13,8 @@
             "includePath": [
                 "${workspaceFolder}",
                 "${workspaceFolder}/../..",
-                "${workspaceFolder}/../../third_party"
+                "${workspaceFolder}/../../third_party",
+                "/usr/local/cuda-9.1/targets/x86_64-linux/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",

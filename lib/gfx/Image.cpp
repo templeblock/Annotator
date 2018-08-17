@@ -85,6 +85,7 @@ Image& Image::operator=(Image&& b) {
 }
 
 void Image::Reset() {
+	IMQS_ASSERT(!Locked);
 	if (OwnData)
 		free(Data);
 	Width   = 0;
@@ -99,6 +100,8 @@ void Image::Alloc(ImageFormat format, int width, int height, int stride) {
 	if (stride == 0) {
 		stride = gfx::BytesPerPixel(format) * width;
 		stride = 4 * ((stride + 3) / 4); // round up to multiple of 4
+		if (stride != gfx::BytesPerPixel(format) * width)
+			tsf::print("stride up from %v to %v\n", gfx::BytesPerPixel(format) * width, stride);
 	}
 
 	IMQS_ASSERT(stride >= gfx::BytesPerPixel(format) * width);
@@ -424,6 +427,10 @@ void Image::BoxBlur(int size, int iterations) {
 
 	free(buf1);
 	free(buf2);
+}
+
+void Image::CopyFrom(const Image& src) {
+	CopyFrom(src, Rect32(0, 0, src.Width, src.Height), 0, 0);
 }
 
 void Image::CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect) {

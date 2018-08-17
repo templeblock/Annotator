@@ -7,6 +7,7 @@ extern "C" {
 }
 
 #include <lib/pal/pal.h>
+#include <lib/gfx/gfx.h>
 
 #ifdef _WIN32
 #define IMQS_VIDEO_API __declspec(dllimport)
@@ -15,3 +16,5 @@ extern "C" {
 #endif
 
 #include "Decode.h"
+
+#include "NVidia/NVVideo.h"

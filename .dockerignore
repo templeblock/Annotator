@@ -6,5 +6,8 @@
 pkg/
 CMakeFiles/
 /third_party/cntk/Windows
-/third_party/xo
+/third_party/xo/t2-output
+/third_party/xo/.tundra2.*
 /third_party/vcpkg
+/build/docker/roadprocessor/Dockerfile
+/build/docker/roads-cppbuild/Dockerfile

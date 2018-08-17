@@ -2,6 +2,7 @@
 #include "HttpClient.h"
 #include "url.h"
 #include "../strings/strings.h"
+#include "../modp/modp_b64.h"
 
 namespace imqs {
 namespace http {
@@ -312,6 +313,11 @@ void Request::AddCookie(const Cookie& cookie) {
 	AddCookie(cookie.Name, cookie.Value);
 }
 
+void Request::SetBasicAuth(const std::string& username, const std::string& password) {
+	auto val = "BASIC " + modp::b64_encode(username + ":" + password);
+	SetHeader("Authentication", val.c_str());
+}
+
 HeaderItem* Request::HeaderByName(const std::string& name, bool createIfNotExist) {
 	const HeaderItem* item = HeaderByName(name);
 	if (!createIfNotExist || item != nullptr)
@@ -502,6 +508,16 @@ bool Response::FirstSetCookie(Cookie& cookie) const {
 	for (size_t i = 0; i < Headers.size(); i++) {
 		if (strings::eqnocase(Headers[i].Key, "Set-Cookie"))
 			return Cookie::ParseCookieFromServer(Headers[i].Value.c_str(), Headers[i].Value.size(), cookie);
+	}
+	return false;
+}
+
+bool Response::FirstSetCookie(const std::string& name, Cookie& cookie) const {
+	for (size_t i = 0; i < Headers.size(); i++) {
+		if (strings::eqnocase(Headers[i].Key, "Set-Cookie")) {
+			if (Cookie::ParseCookieFromServer(Headers[i].Value.c_str(), Headers[i].Value.size(), cookie) && cookie.Name == name)
+				return true;
+		}
 	}
 	return false;
 }

@@ -4,6 +4,7 @@
 #include "MeshRenderer.h"
 #include "OpticalFlow.h"
 #include "VideoStitcher.h"
+#include "Speed.h"
 
 // This is the third version of our vehicle speed computation system, which uses
 // optical flow on flattened images, instead of using OpenCV feature tracking.
@@ -24,12 +25,7 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
-enum class SpeedOutputMode {
-	CSV,
-	JSON,
-};
-
-static Error DoSpeed(vector<string> videoFiles, float zy, double startTime, SpeedOutputMode outputMode, string outputFile) {
+Error DoSpeed(vector<string> videoFiles, float zy, double startTime, SpeedOutputMode outputMode, string outputFile) {
 	FILE* outf = stdout;
 	if (outputFile != "stdout") {
 		outf = fopen(outputFile.c_str(), "w");
@@ -92,7 +88,7 @@ int Speed(argparse::Args& args) {
 	auto err        = DoSpeed(videoFiles, zy, startTime, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
 	if (!err.OK()) {
 		tsf::print(stderr, "Error: %v\n", err.Message());
-		tsf::print("Error: %v\n", err.Message());
+		tsf::print("Error measuring speed: %v\n", err.Message());
 		return 1;
 	}
 	return 0;

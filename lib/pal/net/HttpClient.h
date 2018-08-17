@@ -126,6 +126,7 @@ public:
 
 	void              AddCookie(const std::string& name, const std::string& value);
 	void              AddCookie(const Cookie& cookie);
+	void              SetBasicAuth(const std::string& username, const std::string& password);
 	HeaderItem*       HeaderByName(const std::string& name, bool createIfNotExist);
 	const HeaderItem* HeaderByName(const std::string& name) const;
 	void              SetHeader(const std::string& name, const std::string& value);
@@ -176,6 +177,7 @@ public:
     int         StatusCodeInt() const;                     // Returns, for example, the integer 401. Can compare against Status enum, but note that this value could be outside of Status's range.
     Status      StatusCode() const;                        // If the status not in our Status enum, returns Status200_OK.
     bool        FirstSetCookie(Cookie& cookie) const;
+    bool        FirstSetCookie(const std::string& name, Cookie& cookie) const;
 
     bool  Is200() const { return StatusCodeInt() == (int) Status::Status200_OK; }
     Error ToError() const;

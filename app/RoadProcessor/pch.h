@@ -21,8 +21,15 @@
 
 #include <pdqsort/pdqsort.h>
 
-#include <glfw/deps/glad/glad.h>
-#include <glfw/include/GLFW/glfw3.h>
+//#include <glfw/deps/glad/glad.h>
+//#include <glfw/include/GLFW/glfw3.h>
+
+#include <EGL/egl.h>
+//#include <GL/gl.h>
+
+#include <glad/glad.h>
+//#define GL_GLEXT_PROTOTYPES
+//#include <GL/glext.h>
 
 // proj4
 #include <proj_api.h>

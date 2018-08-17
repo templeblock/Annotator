@@ -10,6 +10,7 @@ Canvas::Canvas(int width, int height, Color8 fill) {
 }
 
 Canvas::~Canvas() {
+	Reset();
 }
 
 void Canvas::Alloc(int width, int height, Color8 fill) {
@@ -17,7 +18,9 @@ void Canvas::Alloc(int width, int height, Color8 fill) {
 	if (width == 0 || height == 0)
 		return;
 	Img.Alloc(ImageFormat::RGBA, width, height);
-	//Buf = (uint8_t*) imqs_malloc_or_die(width * height * 4);
+	// Lock the image, so that a user can't accidentally cause it's memory to be reallocated.
+	// Doing so would invalidate RenderBuff
+	Img.Locked = true;
 	RenderBuff.attach((uint8_t*) Img.Data, width, height, Img.Stride);
 	PixFormatRGBA.attach(RenderBuff);
 	RenderBaseRGBA.attach(PixFormatRGBA);
@@ -29,6 +32,7 @@ void Canvas::Alloc(int width, int height, Color8 fill) {
 }
 
 void Canvas::Reset() {
+	Img.Locked = false;
 	Img.Reset();
 	//Buf     = nullptr;
 	IsAlive = false;

@@ -18,7 +18,7 @@ namespace roadproc {
 // same time apart as any other pair of frames within a single video file. This
 // assumption is valid for a Fuji X-T2.
 // Right now only the CPU perspective removal supports lens correction, but
-// we I've commented out the CPU path in here, and hardcoded it to use the GPU.
+// I've commented out the CPU path in here, and hardcoded it to use the GPU.
 // It shouldn't be too hard to make the GPU also do the lens correction, but
 // it's just not a massive priority right now.
 class VideoStitcher {
@@ -35,7 +35,7 @@ public:
 	gfx::Image        VignetteAdjust;     // This is computed during initialization, and then held constant
 	video::VideoFile  Video;
 	PerspectiveParams PP;
-	OpticalFlow2      Flow;
+	OpticalFlow       Flow;
 	Frustum           Frustum;
 	double            BlackenPercentage = 0;   // If non-zero, then blacken left/right edges, so they don't make it into the stitched footage
 	int               FlatWidth         = 0;   // computed according to perspective params and video size

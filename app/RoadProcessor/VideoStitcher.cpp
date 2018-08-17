@@ -103,7 +103,7 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiv
 
 	// When doing the initial Stellenbosch tar roads work, these values could be 10,10, and we had good
 	// tracking. However, the massive engine shake on the bakkies in Mthata forced me to raise this up
-	// top 18,22.
+	// to 18,22.
 	Flow.StableHSearchRange = 18;
 	Flow.StableVSearchRange = 22;
 
@@ -307,8 +307,8 @@ void VideoStitcher::CheckSyncRestart(FlowResult& absFlowResult, bool& didReset) 
 	if (AbsRestart <= 0 || NeedResync) {
 		roadproc::Mesh mesh;
 		SetupMesh(mesh);
-		Vec2f        bias(0, 0);
-		OpticalFlow2 flowAbs;
+		Vec2f       bias(0, 0);
+		OpticalFlow flowAbs;
 		absFlowResult       = flowAbs.Frame(mesh, roadproc::Frustum(), Flat, FlatPrev, bias);
 		auto  disp          = mesh.AvgValidDisplacement();
 		float absDivergence = (disp - FlowBias).size();

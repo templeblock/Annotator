@@ -14,9 +14,9 @@
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 30 --start 260 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
 
 // second video
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch --phase 1 -n 30 --start 0 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch --phase 2 -n 200 --start 14 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -d ~/mldata/DSCF3040.MOV ~/inf ~/dev/Annotator/pos.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 30 --start 0 ~/mldata/DSCF3040.MOV ~/pos.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 200 --start 14 ~/mldata/DSCF3040.MOV ~/pos.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -m 0.003365 ~/mldata/DSCF3040.MOV ~/inf2 ~/dev/Annotator/pos.json 0 -0.00095
 
 // mthata
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' measure-scale ~/mldata/mthata/DSCF0001-HG-3.MOV mthata-pos.json 0 -0.000411
@@ -89,7 +89,9 @@ Error Stitcher::LoadTrack(std::string trackFile) {
 
 Error Stitcher::DoMeasureScale(std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy) {
 	auto err = LoadTrack(trackFile);
-	err      = Initialize(nullptr, videoFiles, zx, zy, 0);
+	if (!err.OK())
+		return err;
+	err = Initialize("", videoFiles, zx, zy, 0);
 	if (!err.OK())
 		return err;
 
@@ -236,7 +238,7 @@ Error Stitcher::Run(int count) {
 		else if (!err.OK())
 			return err;
 
-		// For now we just use hardcoded values for vignetting
+		// For now we just use lensfun to do vignetting correction
 		//MeasureVignetting();
 		//Track.DumpRaw(0, 6);
 
@@ -829,7 +831,7 @@ int MeasureScale(argparse::Args& args) {
 	Stitcher s;
 	auto     err = s.DoMeasureScale(videoFiles, trackFile, zx, zy);
 	if (!err.OK()) {
-		tsf::print("Error: %v\n", err.Message());
+		tsf::print("Error measuring scale: %v\n", err.Message());
 		return 1;
 	}
 	return 0;
@@ -850,7 +852,7 @@ int Stitch(argparse::Args& args) {
 	s.MetersPerPixel = metersPerPixel;
 	auto err         = s.DoStitch(storageSpec, videoFiles, trackFile, zx, zy, seek, count);
 	if (!err.OK()) {
-		tsf::print("Error: %v\n", err.Message());
+		tsf::print("Error stitching: %v\n", err.Message());
 		return 1;
 	}
 	return 0;

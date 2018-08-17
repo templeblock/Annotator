@@ -4,8 +4,22 @@
 #include "Globals.h"
 #include "Perspective.h"
 #include "MeshRenderer.h"
+#include "OpticalFlow.h"
+#include "Mesh.h"
 
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /home/ben/mldata/DSCF3040.MOV
+// docker run --runtime=nvidia --rm -v /home/ben/mldata:/mldata roadprocessor --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /mldata/DSCF3040.MOV
+
+// 7 samples per iteration, 10x1 grid
+// mthata/DSCF0001-HG-3.MOV: -0.000385 (2 iterations)
+// mthata/DSCF0001-HG-4.MOV: -0.000401 (2 iterations)
+// mthata/DSCF0001-HG-5.MOV: -0.000402 (2 iterations)
+
+// 7 samples per iteration, 10x2 grid
+// DSCF3040.MOV: -0.000981 (2 iterations)
+// mthata/DSCF0001-HG-3.MOV: -0.000391 (2 iterations)
+// mthata/DSCF0001-HG-4.MOV: -0.000392 (2 iterations)
+// mthata/DSCF0001-HG-5.MOV: -0.000396 (2 iterations)
 
 // Times.. on the first mthata video I'm trying, time for perspective computation is 1m40.
 
@@ -332,11 +346,12 @@ void RemovePerspective(const gfx::Image& camera, gfx::Image& flat, PerspectivePa
 }
 
 struct ImageDiffResult {
-	size_t MatchCount;
-	double XMean;
-	double YMean;
-	double XVar;
-	double YVar;
+	size_t MatchCount  = 0;
+	double XMean       = 0;
+	double YMean       = 0;
+	double XVar        = 0;
+	double YVar        = 0;
+	float  OptFlowDiff = 0;
 };
 
 // Returns the difference between the two images, after they've been unprojected, and aligned
@@ -410,10 +425,93 @@ static ImageDiffResult ImageDiff(MeshRenderer& rend, const Image& img1, const Im
 	return res;
 }
 
+static ImageDiffResult ImageDiffOptFlow(MeshRenderer& rend, const Image& img1, const Image& img2, Image& flat1, Image& flat2, float zx, float zy) {
+	bool debug = false;
+
+	float z1         = FindZ1ForIdentityScaleAtBottom(img1.Width, img1.Height, zx, zy);
+	auto  f          = ComputeFrustum(img1.Width, img1.Height, z1, zx, zy);
+	auto  flatOrigin = CameraToFlat(img1.Width, img1.Height, Vec2f(0, 0), z1, zx, zy);
+	int   orgX       = (int) flatOrigin.x;
+	int   orgY       = (int) flatOrigin.y;
+
+	int fX1     = f.Width / 2 + f.X1 + 2;
+	int fX2     = f.Width / 2 + f.X2 - 2;
+	int fY1     = f.Height / 2;
+	int fY2     = f.Height;
+	int fWidth  = fX2 - fX1;
+	int fHeight = fY2 - fY1;
+
+	// These alloc's should be null ops for all except the first sample
+	flat1.Alloc(ImageFormat::RGBA, fWidth, fHeight);
+	flat2.Alloc(ImageFormat::RGBA, fWidth, fHeight);
+
+	rend.RemovePerspectiveAndCopyOut(img1, nullptr, PerspectiveParams(z1, zx, zy), flat1, Rect32(fX1, fY1, fX2, fY2));
+	rend.RemovePerspectiveAndCopyOut(img2, nullptr, PerspectiveParams(z1, zx, zy), flat2, Rect32(fX1, fY1, fX2, fY2));
+
+	//flat1.SaveJpeg("/home/ben/p1.jpeg");
+	//flat2.SaveJpeg("/home/ben/p2.jpeg");
+
+	OpticalFlow opt;
+	opt.EnableMedianFilter = false;
+	Mesh mesh;
+	mesh.Initialize(10, 2);
+	float spacing = opt.MatchRadius * 2.5f;
+	int   mY      = flat1.Height - 30 - mesh.Height * spacing;
+	for (int y = 0; y < mesh.Height; y++) {
+		for (int x = 0; x < mesh.Width; x++) {
+			float    xf = ((float) x / (float) (mesh.Width - 1));
+			Mesh::VX vx;
+			vx.Pos        = Vec2f(xf * (float) flat1.Width, mY + y * spacing);
+			vx.UV         = Vec2f(xf * (float) flat1.Width, mY + y * spacing);
+			mesh.At(x, y) = vx;
+		}
+	}
+
+	Vec2f bias(0, 0);
+	auto  flow = opt.Frame(mesh, Frustum(), flat2, flat1, bias);
+	//exit(1);
+	auto avg = mesh.AvgValidDisplacement();
+
+	//mesh.PrintValid();
+	//mesh.Print(Rect32(0, 0, mesh.Width, mesh.Height));
+	//mesh.PrintDeltaPos(Rect32(0, 0, mesh.Width, mesh.Height));
+
+	//float         xdiff    = 0;
+	float         nsamples = 0;
+	vector<float> xdiff;
+	vector<float> ydiff;
+	for (int y = 0; y < mesh.Height; y++) {
+		for (int x = 0; x < mesh.Width; x++) {
+			if (mesh.At(x, y).IsValid) {
+				const auto& vx = mesh.At(x, y);
+				//xdiff.push_back();
+				//xdiff += fabs(vx.Pos.x - vx.UV.x);
+				xdiff.push_back(vx.Pos.x - vx.UV.x);
+				ydiff.push_back(vx.Pos.y - vx.UV.y);
+				nsamples++;
+			}
+		}
+	}
+	//xdiff /= nsamples;
+
+	auto xstats = math::MeanAndVariance<float, float>(xdiff);
+	auto ystats = math::MeanAndVariance<float, float>(ydiff);
+
+	ImageDiffResult res;
+	res.MatchCount  = 101;
+	res.XMean       = avg.x;
+	res.YMean       = -avg.y; // negate, so that positive numbers indicate forward travel
+	res.XVar        = 10 * sqrt(xstats.second) + sqrt(ystats.second) + flow.Diff / 200.0f;
+	res.YVar        = 0;
+	res.OptFlowDiff = flow.Diff;
+
+	return res;
+}
+
 static StaticError ErrTooFewGoodFrames("Too few good frames");
 
 // If we have less than this number of valid (ie decent quality) frame pairs, then the entire process is considered a failure
-static const int MinValidSamples = 20;
+static const int MinValidSamples = 40;
 
 // we store nSamples many pairs of frames in memory
 // A 1920x1080 RGBA image takes 8 MB memory. So 20 pairs is 316 MB, 100 pairs is 1.6 GB
@@ -422,6 +520,8 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 	auto             err = video.OpenFile(videoFiles[0]);
 	if (!err.OK())
 		return err;
+
+	bool debugPrint = true;
 
 	// seconds apart each sample
 	double spacing = video.GetVideoStreamInfo().DurationSeconds() / (nSamples + 1);
@@ -435,7 +535,8 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 			return err;
 	}
 
-	tsf::print("Loading camera frames\n");
+	if (debugPrint)
+		tsf::print("Loading camera frames\n");
 	vector<pair<Image, Image>> samples;
 	for (int i = 0; i < nSamples; i++) {
 		//auto err = video.SeekToSecond(40);
@@ -468,13 +569,14 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 	if (!err.OK())
 		return err;
 
-	tsf::print("Estimating...\n");
+	if (debugPrint)
+		tsf::print("Estimating on %v samples...\n", nSamples);
 
-	auto estimate = [&](double zy_min, double zy_max, double& zy_estimate) -> Error {
+	auto estimate = [&](double zy_min, double zy_max, double& zy_best, double& zy_quadratic) -> Error {
 		// pairs of zy and X match variance, which we fit a parabola to.
 		vector<pair<double, double>> zyAndVar;
 
-		int nsteps = 3;
+		int nsteps = 7;
 		for (int step = 0; step < nsteps; step++) {
 			float zy = zy_min + step * (zy_max - zy_min) / (nsteps - 1);
 			float z1 = FindZ1ForIdentityScaleAtBottom(samples[0].first.Width, samples[0].first.Height, zx, zy);
@@ -484,25 +586,36 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 			if (!err.OK())
 				return err;
 
+			//tsf::print("zy: %.6f\n", zy);
+
+			bool          useOpticalFlow = true;
 			vector<Vec2d> stats;
+			float         flowDiff = 0;
+			Image         flat1, flat2;
 			for (size_t i = 0; i < samples.size(); i++) {
 				// once we've seen a frame as been "too slow" or "too few" too often, skip it forever
 				if (tooFew[i] >= 5 || tooSlow[i] >= 5) {
 					continue;
 				}
-				const auto& sample = samples[i];
-				auto        diff   = ImageDiff(rend, sample.first, sample.second, zx, zy);
+				const auto&     sample = samples[i];
+				ImageDiffResult diff;
+				if (useOpticalFlow)
+					diff = ImageDiffOptFlow(rend, sample.first, sample.second, flat1, flat2, zx, zy);
+				else
+					diff = ImageDiff(rend, sample.first, sample.second, zx, zy);
+
 				if (diff.MatchCount < 100) {
 					tooFew[i]++;
 				} else {
 					//score += diff.XVar;
 					//nsample++;
-					//tsf::print("%3d, %5d, X:(%8.3f, %8.3f), Y(%8.3f, %8.3f)\n", i, diff.MatchCount, diff.XMean, diff.XVar, diff.YMean, diff.YVar);
+					//tsf::print("%3d, %5d, X:(%8.3f, %8.3f), Y(%8.3f, %8.3f) Flow(%8.3f)\n", i, diff.MatchCount, diff.XMean, diff.XVar, diff.YMean, diff.YVar, diff.OptFlowDiff);
 					// We need to be moving forward, and YMean predicts this. Typical road speed is around 100 to 300 pixels.
 					if (diff.YMean < 20) {
 						tooSlow[i]++;
 					} else {
 						stats.emplace_back(diff.XVar, diff.YVar);
+						flowDiff += diff.OptFlowDiff;
 					}
 				}
 			}
@@ -512,20 +625,26 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 			}
 			sort(stats.begin(), stats.end(), [](Vec2d a, Vec2d b) { return a.size() < b.size(); });
 			double score = 0;
-			size_t burn  = stats.size() / 10;
+			//size_t burn  = stats.size() / 10;
+			size_t burn = 0;
 			for (size_t i = burn; i < stats.size() - burn; i++) {
 				score += stats[i].x;
 			}
 			double nsample = stats.size() - 2 * burn;
 			score /= nsample;
+			flowDiff /= nsample;
 			zyAndVar.emplace_back(zy, score);
-			tsf::print("%.6f,%.3f,%v,%v,%v\n", zy, score, nsample, f.Width, f.Height);
+			if (debugPrint)
+				tsf::print("%.6f,%.3f,%v,%v,%v,[flow diff: %v]\n", zy, score, nsample, f.Width, f.Height, flowDiff);
 			//z2 += 0.00005;
 		}
 
+		/*
 		// scale and bias the zy values so that the quadratic fit has better conditioned numbers
-		float zyFitBias  = 0.0009;
-		float zyFitScale = 1000000;
+		//float zyFitBias  = 0.0009;
+		//float zyFitScale = 1000000;
+		float zyFitBias  = 0;
+		float zyFitScale = 1;
 		for (auto& p : zyAndVar)
 			p.first = (p.first + zyFitBias) * zyFitScale;
 
@@ -533,32 +652,68 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 		FitQuadratic(zyAndVar, a, b, c);
 		double bestZY = -b / (2 * a);
 		zy_estimate   = bestZY / zyFitScale - zyFitBias;
+		*/
+		double a, b, c;
+		FitQuadratic(zyAndVar, a, b, c);
+		zy_quadratic = -b / (2 * a);
+		if (debugPrint)
+			tsf::print("quadratic best: %.6f\n", zy_quadratic);
+
+		double lowestZY  = 0;
+		double lowestVar = DBL_MAX;
+		for (auto p : zyAndVar) {
+			if (p.second < lowestVar) {
+				lowestVar = p.second;
+				lowestZY  = p.first;
+			}
+		}
+		zy_best = lowestZY;
 		//tsf::print("%v %v %v -> %v\n", a, b, c, bestZY);
 		return Error();
 	};
 
 	//double zy_min = -0.0011;
 	//double zy_max = -0.0002;
-	double zy_min = -0.0008;
-	double zy_max = -0.0002;
+	double zy_min             = -0.0012;
+	double zy_max             = -0.0002;
+	double radiusShrinkFactor = 0.3; // On every iteration, narrow the search window by this much
 	for (int iter = 0; iter < 3; iter++) {
-		double bestZY = 0;
-		auto   err    = estimate(zy_min, zy_max, bestZY);
+		double zyBest      = 0;
+		double zyQuadratic = 0;
+		auto   err         = estimate(zy_min, zy_max, zyBest, zyQuadratic);
 		if (!err.OK())
 			return err;
-		tsf::print("estimate: %.6f\n", bestZY);
-		double radius  = 0.1 * (zy_max - zy_min);
-		zy_min         = bestZY - radius;
-		zy_max         = bestZY + radius;
-		bestZYEstimate = (float) bestZY;
+		bool quadraticGood = fabs(zyBest / zyQuadratic - 1) < 0.1;
+		if (debugPrint)
+			tsf::print("estimate: %.6f, %.6f (%v)\n", zyBest, zyQuadratic, quadraticGood ? "match" : "no match");
+		if (quadraticGood)
+			zyBest = zyQuadratic;
+		if (zyBest < -0.0012) {
+			if (debugPrint)
+				tsf::print("Clamping to -0.0012\n");
+			zyBest = -0.0012;
+		}
+		double radius  = radiusShrinkFactor * (zy_max - zy_min) / 2;
+		zy_min         = zyBest - radius;
+		zy_max         = zyBest + radius;
+		bestZYEstimate = (float) zyBest;
+		/*
+		if (quadraticGood && iter >= 2) {
+			//bestZYEstimate = (float) zyQuadratic;
+			if (debugPrint)
+				tsf::print("quadratic and min agree, so picking quadratic and stopping\n");
+			break;
+		}
+		*/
 	}
 
 	return Error();
 }
 
-static Error DoPerspective(vector<string> videoFiles) {
-	float zy       = 0;
-	int   nSamples = (int) (MinValidSamples * 1.5);
+Error DoPerspective(std::vector<std::string> videoFiles, float& zy) {
+	zy           = 0;
+	int nSamples = (int) (MinValidSamples * 1.5);
+	//int   nSamples = 30;
 	Error err;
 	for (; nSamples < 200; nSamples = int(nSamples * 1.5)) {
 		err = EstimateZY(videoFiles, nSamples, zy);
@@ -577,12 +732,13 @@ static Error DoPerspective(vector<string> videoFiles) {
 }
 
 int Perspective(argparse::Args& args) {
-	TestPerspectiveAndFrustum(1, 0, -0.0007);
-	TestPerspectiveAndFrustum(1, 0.00001, -0.0007);
-	auto videoFiles = strings::Split(args.Params[0], ',');
-	auto err        = DoPerspective(videoFiles);
+	//TestPerspectiveAndFrustum(1, 0, -0.0007);
+	//TestPerspectiveAndFrustum(1, 0.00001, -0.0007);
+	auto  videoFiles = strings::Split(args.Params[0], ',');
+	float zy         = 0;
+	auto  err        = DoPerspective(videoFiles, zy);
 	if (!err.OK()) {
-		tsf::print("Error: %v\n", err.Message());
+		tsf::print("Error measuring perspective: %v\n", err.Message());
 		return 1;
 	}
 	return 0;
