@@ -187,7 +187,7 @@ int64_t VideoFile::LastFrameAVTime() const {
 }
 */
 
-Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
+Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds) {
 	// Allow for multiple attempts, if we have just performed a seek.
 	// After performing a seek, the codec will often emit what looks like a previously buffered
 	// frame. If the first frame that we receive is not the one that we seeked to, then
@@ -266,6 +266,8 @@ Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
 	}
 
 	LastSeekPTS = -1;
+	if (timeSeconds)
+		*timeSeconds = LastFrameTimeSeconds();
 
 	if (width == 0 || height == 0 || buf == nullptr) {
 		// caller is not interested in actual frame pixels

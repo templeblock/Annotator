@@ -8,6 +8,7 @@
 #include "Mesh.h"
 
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /home/ben/mldata/DSCF3040.MOV
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /home/ben/mldata/mthata/Day3-4.MOV
 // docker run --runtime=nvidia --rm -v /home/ben/mldata:/mldata roadprocessor --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /mldata/DSCF3040.MOV
 
 // 7 samples per iteration, 10x1 grid
@@ -20,6 +21,8 @@
 // mthata/DSCF0001-HG-3.MOV: -0.000391 (2 iterations)
 // mthata/DSCF0001-HG-4.MOV: -0.000392 (2 iterations)
 // mthata/DSCF0001-HG-5.MOV: -0.000396 (2 iterations)
+
+// mthata/Day3-4.MOV: ZY: -0.000722
 
 // Times.. on the first mthata video I'm trying, time for perspective computation is 1m40.
 

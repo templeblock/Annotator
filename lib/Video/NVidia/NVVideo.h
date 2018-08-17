@@ -2,6 +2,7 @@
 
 #include "NvDecoder/NvDecoder.h"
 #include "Utils/FFmpegDemuxer.h"
+#include "../IVideo.h"
 
 namespace imqs {
 namespace video {
@@ -9,7 +10,7 @@ namespace video {
 /* Use NvDecoder to decode video to OpenGL
 This code was built up from the AppDecGL sample in the NVidia Video SDK, version 8.2.15
 */
-class NVVideo {
+class NVVideo : public IVideo {
 public:
 	enum DecodeStates {
 		DecodeStateNotStarted = 0,
@@ -19,11 +20,13 @@ public:
 	NVVideo();
 	~NVVideo();
 	Error Initialize(int iGPU = 0);
-	Error OpenFile(std::string filename);
 	void  Close();
 	int   Width();
 	int   Height();
-	Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr);
+
+	// IVideo
+	Error OpenFile(std::string filename) override;
+	Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) override;
 
 private:
 	struct DeviceFrame {

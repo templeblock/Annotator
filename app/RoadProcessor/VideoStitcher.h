@@ -34,6 +34,8 @@ public:
 	gfx::Image        BrightnessAdjuster; // This is dynamically adjusted
 	gfx::Image        VignetteAdjust;     // This is computed during initialization, and then held constant
 	video::VideoFile  Video;
+	video::NVVideo    NVVid;
+	video::IVideo*    ActiveVideo = nullptr;
 	PerspectiveParams PP;
 	OpticalFlow       Flow;
 	Frustum           Frustum;
@@ -49,6 +51,7 @@ public:
 	bool              EnableFullFlatOutput        = false; // If true, then FullFlat contains the full flat image output
 	bool              EnableCPUPerspectiveRemoval = false; // CPU path supports lens correction, but it's slower
 	bool              EnableBrightnessAdjuster    = true;
+	bool              EnableNVVideo               = true;
 
 	// Output
 	bool                                       EnableDebugPrint  = false;

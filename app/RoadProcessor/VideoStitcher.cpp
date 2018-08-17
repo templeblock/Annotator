@@ -120,11 +120,18 @@ Error VideoStitcher::Rewind() {
 	RemainingTime = time::Duration(0);
 	Velocities.clear();
 
-	auto err = Video.OpenFile(VideoFiles[0]);
+	if (EnableNVVideo)
+		ActiveVideo = &NVVid;
+	else
+		ActiveVideo = &Video;
+
+	auto err = ActiveVideo->OpenFile(VideoFiles[0]);
 	if (!err.OK())
 		return err;
 
 	if (StartVideoAt != 0) {
+		if (EnableNVVideo)
+			return Error("CUDA accelerated video decoder does not support seeking");
 		err = Video.SeekToSecond(StartVideoAt, video::Seek::Any);
 		if (!err.OK())
 			return err;
@@ -167,7 +174,8 @@ Rect32 VideoStitcher::CropRectFromFullFlat() {
 }
 
 Error VideoStitcher::LoadNextFrame() {
-	auto err = Video.DecodeFrameRGBA(Frame.Width, Frame.Height, Frame.Data, Frame.Stride);
+	double ftime = 0;
+	auto   err   = ActiveVideo->DecodeFrameRGBA(Frame.Width, Frame.Height, Frame.Data, Frame.Stride, &ftime);
 	if (err == ErrEOF) {
 		if (CurrentVideo == VideoFiles.size() - 1) {
 			// end of the end
@@ -176,20 +184,21 @@ Error VideoStitcher::LoadNextFrame() {
 
 		// You might be tempted to add one frame worth of delay here to VideoTimeOffset, but empirical measurements on our
 		// Fuji X-T2 show that this formulation here is correct.
-		VideoTimeOffset += Video.LastFrameTimeSeconds();
+		//VideoTimeOffset += Video.LastFrameTimeSeconds();
+		VideoTimeOffset = FrameTime;
 
 		CurrentVideo++;
-		err = Video.OpenFile(VideoFiles[CurrentVideo]);
+		err = ActiveVideo->OpenFile(VideoFiles[CurrentVideo]);
 		if (!err.OK())
 			return err;
-		err = Video.DecodeFrameRGBA(Frame.Width, Frame.Height, Frame.Data, Frame.Stride);
+		err = ActiveVideo->DecodeFrameRGBA(Frame.Width, Frame.Height, Frame.Data, Frame.Stride, &ftime);
 		if (!err.OK())
 			return err;
 	} else if (!err.OK()) {
 		return err;
 	}
 	FrameNumber++;
-	FrameTime = VideoTimeOffset + Video.LastFrameTimeSeconds();
+	FrameTime = VideoTimeOffset + ftime;
 
 	RemovePerspective();
 

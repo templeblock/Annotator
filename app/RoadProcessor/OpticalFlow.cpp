@@ -701,9 +701,14 @@ FlowResult OpticalFlow::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Im
 			dxMin          = -fineAdjust;
 			dxMax          = fineAdjust;
 		}
-		int   searchWindowSize = (dxMax - dxMin) * (dyMax - dyMin);
-		float allDiffSum       = 0;
-		for (auto& c : validCells) {
+		int     searchWindowSize = (dxMax - dxMin) * (dyMax - dyMin);
+		int64_t allDiffSum       = 0;
+		int     nValidCells      = validCells.size();
+		// omp parallel here takes us from 22 milliseconds to 6 milliseconds
+		//auto start = time::PerformanceCounter();
+#pragma omp parallel for
+		for (int iCell = 0; iCell < nValidCells; iCell++) {
+			auto& c = validCells[iCell];
 			//Vec2f  cSrc    = warpMesh.UVimg(warpImg.Width, warpImg.Height, c.x, c.y);
 			Vec2f  cSrc    = warpMesh.At(c.x, c.y).UV;
 			Vec2f  cDst    = warpMesh.At(c.x, c.y).Pos;
@@ -730,17 +735,20 @@ FlowResult OpticalFlow::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Im
 					}
 				}
 			}
-			allDiffSum += (float) bestSum;
+#pragma omp atomic
+			allDiffSum += bestSum;
 			// I thought this would work well, indicating patches that have good detail for matching, but it doesn't work. No idea why not.
 			//warpMesh.At(c.x, c.y).DeltaStrength = float((double) avgSum / (double) searchWindowSize) / ((float) bestSum + 0.1f);
 			warpMesh.At(c.x, c.y).Pos += Vec2f(bestDx, bestDy);
 		}
+		//auto duration = time::PerformanceCounter() - start;
+		//tsf::print("flow time: %v microseconds\n", duration / 1000);
 		if (debugMedianFilter) {
 			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
 			//warpMesh.PrintDeltaStrength(warpMeshValidRect);
 		}
 
-		result.Diff = allDiffSum / (float) validCells.size();
+		result.Diff = float((double) allDiffSum / (double) validCells.size());
 
 		//if (debugMedianFilter)
 		//	warpMesh.PrintDeltaPos(warpMeshValidRect, bias);

@@ -9,6 +9,7 @@
 //#include "../Common/AppDecUtils.h"
 
 simplelogger::Logger* logger = simplelogger::LoggerFactory::CreateConsoleLogger();
+using namespace std;
 
 namespace imqs {
 namespace video {
@@ -49,6 +50,11 @@ Error NVVideo::Initialize(int iGPU) {
 
 Error NVVideo::OpenFile(std::string filename) {
 	Close();
+	if (!CUCtx) {
+		auto err = Initialize();
+		if (!err.OK())
+			return err;
+	}
 	auto err = Demuxer.Open(filename.c_str());
 	if (!err.OK())
 		return err;
@@ -63,6 +69,8 @@ void NVVideo::Close() {
 	ExitSignaled = 1;
 	if (DecodeThread.joinable())
 		DecodeThread.join();
+	for (auto& f : HostFrames)
+		cudaFreeHost(f.Img.Data);
 	HostFrames.resize(0);
 	for (auto f : DeviceFrames)
 		cuMemFree(f.Frame);
@@ -125,8 +133,13 @@ Error NVVideo::InitBuffers() {
 	IMQS_ASSERT(DeviceFrames.size() == 0);
 
 	HostFrames.resize(HostBufferSize);
-	for (int i = 0; i < HostBufferSize; i++)
-		HostFrames[i].Img.Alloc(gfx::ImageFormat::RGBA, Width(), Height());
+	for (int i = 0; i < HostBufferSize; i++) {
+		void* b;
+		auto  err = cuErr(cudaMallocHost(&b, FrameSize));
+		if (!err.OK())
+			return err;
+		HostFrames[i].Img = gfx::Image(gfx::ImageFormat::RGBA, gfx::Image::ConstructWindow, Width() * 4, b, Width(), Height());
+	}
 	HostHead = 0;
 	HostTail = 0;
 
@@ -171,6 +184,7 @@ void NVVideo::DecodeThreadFunc() {
 		//SemDecode.signal(nPost);
 	};
 
+	int maxNFrames = 0;
 	while (!ExitSignaled) {
 		int64_t*  timeStamps;
 		int       videoBytes     = 0;
@@ -179,9 +193,17 @@ void NVVideo::DecodeThreadFunc() {
 		uint8_t** ppFrame;
 		int64_t   pts = 0;
 		Demuxer.Demux(&pVideo, &videoBytes, &pts);
+		// error handling!
 		Decoder->Decode(pVideo, videoBytes, &ppFrame, &nFrameReturned, 0, &timeStamps, pts);
 		//if (!nFrame && nFrameReturned)
 		//	LOG(INFO) << dec.GetVideoInfo();
+
+		// The maximum number I've seen here is 13.
+		//int prevMax = maxNFrames;
+		//maxNFrames  = max(maxNFrames, nFrameReturned);
+		//if (maxNFrames > prevMax) {
+		//	tsf::print("max nframes: %v\n", maxNFrames);
+		//}
 
 		if (nFrameReturned + (dHead - dTail) > DeviceBufferSize) {
 			// if we cannot fit nFrameReturned into our device buffer, then flush all remaining device frames to host
