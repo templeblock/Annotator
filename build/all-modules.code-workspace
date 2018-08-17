@@ -17,6 +17,12 @@
 		},
 		{
 			"path": "/home/ben/dev/Annotator/lib/pal"
+		},
+		{
+			"path": "/home/ben/dev/Annotator/app/Labeler"
+		},
+		{
+			"path": "/home/ben/dev/Annotator/lib/Train"
 		}
 	],
 	"settings": {

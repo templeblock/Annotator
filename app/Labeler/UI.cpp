@@ -532,7 +532,7 @@ Label* UI::FindOrInsertLabel(ImageLabels* frame, int gridX, int gridY) {
 	Label lab;
 	auto  p1 = GridPosToVideo(gridX, gridY);
 	auto  p2 = GridPosToVideo(gridX + 1, gridY + 1);
-	lab.Rect = Rect::Inverted();
+	lab.Rect = train::Rect::Inverted();
 	lab.Rect.ExpandToFit(p1.X, p1.Y);
 	lab.Rect.ExpandToFit(p2.X, p2.Y);
 	frame->Labels.push_back(lab);

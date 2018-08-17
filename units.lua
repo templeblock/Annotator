@@ -798,7 +798,7 @@ local Video = SharedLibrary {
 local Train = SharedLibrary {
 	Name = "Train",
 	Depends = {
-		winCrt, pal, tsf, Video, gfx, png, lz4, agg
+		winCrt, pal, tsf, Video, CUDA, gfx, png, lz4, agg, libjpeg_turbo
 	},
 	Libs = {
 		-- This stuff is weird. Gotta do it this way to maintain linux and windows compatibility
@@ -840,10 +840,10 @@ local AI = SharedLibrary {
 local Labeler = Program {
 	Name = "Labeler",
 	Depends = {
-		winCrt, xo, ffmpeg, Train, Video, pal, tsf, png, 
+		winCrt, xo, ffmpeg, Train, Video, CUDA, pal, tsf, png, libjpeg_turbo
 	},
 	Libs = { 
-		{ "m", "stdc++"; Config = linuxFilter },
+		{ "omp", "pthread", "m", "stdc++"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/Labeler/pch.cpp",

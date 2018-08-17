@@ -28,8 +28,9 @@ void xoMain(xo::SysWnd* wnd) {
 	svg::LoadAll(wnd->Doc());
 	//wnd->SetPosition(xo::Box(0, 0, 1600, 1020), xo::SysWnd::SetPosition_Size);
 
-	auto ui       = new UI(&wnd->Doc()->Root);
-	ui->LabelMode = UI::LabelModes::Segmentation;
+	auto ui = new UI(&wnd->Doc()->Root);
+	//ui->LabelMode = UI::LabelModes::Segmentation;
+	ui->LabelMode = UI::LabelModes::FixedBoxes;
 
 #ifdef IMQS_AI_API
 	auto err         = ui->Model.Load("c:\\mldata\\cp\\model.cntk");
@@ -87,7 +88,8 @@ void xoMain(xo::SysWnd* wnd) {
 
 	//ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
 	//ui->VideoFilename = "C:\\mldata\\DSCF3022.MOV";
-	ui->VideoFilename = "T:\\IMQS8_Data\\ML\\DSCF3022.MOV";
+	//ui->VideoFilename = "T:\\IMQS8_Data\\ML\\DSCF3022.MOV";
+	ui->VideoFilename = "/home/ben/mldata/mthata/Day3-11.MOV";
 	//ui->VideoFilename = "LOAD FILE";
 	if (!ui->OpenVideo())
 		ui->Render();

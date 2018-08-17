@@ -28,9 +28,13 @@ Error ExportLabeledImagePatches_Frame_Rect(ExportTypes type, std::string dir, in
 
 	int dim = labels.Labels[0].Rect.Width(); // assume all rectangles are the same size, and that width == height
 
+	atomic<bool> haveErr;
+	haveErr = false;
 	Error firstErr;
 #pragma omp parallel for
 	for (int i = 0; i < (int) labels.Labels.size(); i++) {
+		if (haveErr)
+			continue;
 		const auto& patch = labels.Labels[i];
 		IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
 		auto           patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
@@ -53,7 +57,7 @@ Error ExportLabeledImagePatches_Frame_Rect(ExportTypes type, std::string dir, in
 		if (!err.OK()) {
 #pragma omp critical(firstError)
 			firstErr = err;
-			break;
+			haveErr  = true;
 		}
 	}
 	return firstErr;
