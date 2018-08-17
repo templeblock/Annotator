@@ -1,6 +1,5 @@
 require 'tundra.syntax.glob'
 require 'tundra.syntax.files'
---require "tundra.syntax.cuda"
 
 local winFilter = "win*"
 local winDebugFilter = "win*-*-debug"
@@ -600,7 +599,7 @@ local xo = SharedLibrary {
 		"third_party/xo/dependencies/expat",
 	},
 	Depends = {
-		winCrt, freetype, directx, utfz, stb,
+		winCrt, freetype, directx, utfz, stb, tsf,
 		{ expat; Config = winFilter },
 	},
 	PrecompiledHeader = {
@@ -759,18 +758,21 @@ local CUDA = ExternalLibrary {
 			LIBPATH = {
 				{ "/usr/local/cuda-9.1/targets/x86_64-linux/lib",
 				  "/usr/lib/nvidia-396"; Config = linuxFilter },
+				{ "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v9.1/lib/x64"; Config = winFilter },
 			},
 			NVCCOPTS = {
-				{ "-std=c++11 -Xcompiler -fPIC"; Config = linuxFilter }
+				{ "-std=c++11 -Xcompiler -fPIC"; Config = linuxFilter },
+				{ "--cl-version 2015 -Xcompiler \"$(CCOPTS)\""; Config = winFilter },
 			}
 		},
 		Includes = {
 			{ "/usr/local/cuda-9.1/targets/x86_64-linux/include",
 			  "/usr/include/nvidia-396/cuda"; Config = linuxFilter },
-
+			{ '"$(CUDA_PATH)\\include"'; Config = winFilter },
 		},
 		Libs = { 
 			{ "cuda", "cudart", "nvcuvid"; Config = linuxFilter },
+			{ "cuda.lib", "cudart.lib", "nvcuvid.lib"; Config = winFilter },
 		},	
 	}	
 }
@@ -778,7 +780,7 @@ local CUDA = ExternalLibrary {
 local Video = SharedLibrary {
 	Name = "Video",
 	Depends = {
-		winCrt, CUDA, ffmpeg, pal, tsf
+		winCrt, CUDA, ffmpeg, pal, tsf, gfx, libjpeg_turbo, png, stb
 	},
 	PrecompiledHeader = {
 		Source = "lib/Video/pch.cpp",
@@ -790,7 +792,7 @@ local Video = SharedLibrary {
 	},
 	Sources = {
 		makeGlob("lib/Video", {}),
-		"lib/Video/NVidia/Utils/ColorSpace.cu"
+		"lib/Video/NVidia_linux/Utils/ColorSpace.cu"
 	},
 	IdeGenerationHints = ideHintLibrary,
 }
@@ -798,7 +800,7 @@ local Video = SharedLibrary {
 local Train = SharedLibrary {
 	Name = "Train",
 	Depends = {
-		winCrt, pal, tsf, Video, gfx, png, lz4, agg
+		winCrt, pal, tsf, Video, gfx, png, lz4, agg, stb
 	},
 	Libs = {
 		-- This stuff is weird. Gotta do it this way to maintain linux and windows compatibility

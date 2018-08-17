@@ -17,4 +17,8 @@ extern "C" {
 
 #include "Decode.h"
 
-#include "NVidia/NVVideo.h"
+#ifdef _WIN32
+#include "NVVideoStub_windows.h"
+#else
+#include "NVidia_linux/NVVideo.h"
+#endif

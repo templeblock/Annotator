@@ -5,6 +5,8 @@ local util     = require "tundra.util"
 local boot     = require "tundra.boot"
 local scanner  = require "tundra.scanner"
 local depgraph = require "tundra.depgraph"
+local platform = require "tundra.platform"
+local native   = require 'tundra.native'
 
 -- Register implicit make functions for assembly files.
 -- These functions are called to transform source files in unit lists into
@@ -47,9 +49,18 @@ end
 function apply(env, options)
   env:add_setup_function(cuda_setup)
 
+  cuda_path = native.getenv("CUDA_PATH")
+
+  if platform.host_platform() == "windows" then
+    nvcc = '"' .. cuda_path .. '\\bin\\nvcc.exe"'
+  else
+    nvcc = "/usr/local/cuda/bin/nvcc"
+  end
+
   env:set_many {
     ["CUDA_EXTS"] = { ".cu" },
-    ["NVCC"] = "/usr/local/cuda/bin/nvcc",
+    ["CUDA_PATH"] = cuda_path,
+    ["NVCC"] = nvcc,
     ["NVCCOPTS"] = "",
     ["NVCCCOM"] = "$(NVCC) $(NVCCOPTS) -o $(@) -c $(<)",
   }

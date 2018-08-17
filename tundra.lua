@@ -115,13 +115,13 @@ Build {
 			Name = "win32-msvc2015",
 			SupportedHosts = { "windows" },
 			Inherit = win_common,
-			Tools = { {"msvc-vs2015"; TargetArch = "x86"} },
+			Tools = { {"msvc-vs2015"; TargetArch = "x86"}, "cuda" },
 		},
 		{
 			Name = "win64-msvc2015",
 			DefaultOnHost = "windows",
 			Inherit = win_common,
-			Tools = { {"msvc-vs2015"; TargetArch = "x64"} },
+			Tools = { {"msvc-vs2015"; TargetArch = "x64"}, "cuda" },
 		},
 	},
 	IdeGenerationHints = {
