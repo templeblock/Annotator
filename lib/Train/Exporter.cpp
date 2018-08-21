@@ -99,6 +99,37 @@ Error ExportLabeledImagePatches_Frame_Polygons(std::string dir, int64_t frameTim
 	return Error();
 }
 
+Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string rootDir, const LabelTaxonomy& taxonomy) {
+	auto           labelsDir = path::Join(rootDir, "labels");
+	vector<string> videoFiles;
+	auto           err = os::FindFiles(labelsDir, [&](const os::FindFileItem& item) -> bool {
+        if (item.IsDir) {
+            videoFiles.push_back(path::Join(rootDir, item.Name));
+            return false;
+        }
+        return true;
+    });
+	if (!err.OK())
+		return err;
+
+	for (size_t i = 0; i < videoFiles.size(); i++) {
+		auto progress = [&](size_t pos, size_t total) -> bool {
+			tsf::print("Video %v/%v. File %v/%v\r", i + 1, videoFiles.size(), pos + 1, total);
+			fflush(stdout);
+			return true;
+		};
+		VideoLabels labels;
+		auto        err = LoadVideoLabels(videoFiles[i], labels);
+		if (!err.OK())
+			return err;
+		err = ExportLabeledImagePatches_Video(type, videoFiles[i], taxonomy, labels, progress);
+		if (!err.OK())
+			return err;
+	}
+	tsf::print("\n");
+	return Error();
+}
+
 Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilename, const LabelTaxonomy& taxonomy, const VideoLabels& labels, ProgressCallback prog) {
 	auto dir = ImagePatchDir(videoFilename);
 	auto err = os::MkDirAll(dir);
@@ -139,12 +170,12 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 			lastFrameTime = pts;
 			if (pts == frame.Time) {
 				// found our frame
-				if (type == ExportTypes::Segmentation)
-					err = ExportLabeledImagePatches_Frame_Polygons(dir, frame.Time, frame, img);
-				else
-					err = ExportLabeledImagePatches_Frame_Rect(type, dir, frame.Time, frame, img);
-				if (!err.OK())
-					return err;
+				//if (type == ExportTypes::Segmentation)
+				//	err = ExportLabeledImagePatches_Frame_Polygons(dir, frame.Time, frame, img);
+				//else
+				//	err = ExportLabeledImagePatches_Frame_Rect(type, dir, frame.Time, frame, img);
+				//if (!err.OK())
+				//	return err;
 
 				if (prog != nullptr) {
 					if (!prog(i, labels.Frames.size())) {
