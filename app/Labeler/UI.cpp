@@ -570,19 +570,20 @@ void UI::DrawEvalOverlay() {
 	    {0, 0, 250, 200},
 	    {250, 0, 250, 200},
 	};
-	int lwidth  = (vwidth / LabelGridSize) * LabelGridSize;
-	int lheight = (vheight / LabelGridSize) * LabelGridSize;
-	int stride  = 128;
-	int gwidth  = 1 + (vwidth - LabelGridSize) / stride;
-	int gheight = 1 + (vheight - LabelGridSize) / stride;
-	gheight     = 4;
-	auto start  = time::Now();
+	int gridSize = Taxonomy.GridSize;
+	int lwidth   = (vwidth / gridSize) * gridSize;
+	int lheight  = (vheight / gridSize) * gridSize;
+	int stride   = 128;
+	int gwidth   = 1 + (vwidth - gridSize) / stride;
+	int gheight  = 1 + (vheight - gridSize) / stride;
+	gheight      = 4;
+	auto start   = time::Now();
 	for (int x = 0; x < gwidth; x++) {
 		for (int y = 0; y < gheight; y++) {
-			IMQS_ASSERT(x * stride + LabelGridSize <= (int) LastFrameImg.Width);
-			IMQS_ASSERT(y * stride + LabelGridSize <= (int) LastFrameImg.Height);
-			int     py = vheight - y * stride - LabelGridSize;
-			int     c  = Model.EvalRGBAClassify(LastFrameImg.DataAt(x * stride, py), LabelGridSize, LabelGridSize, LastFrameImg.Stride);
+			IMQS_ASSERT(x * stride + gridSize <= (int) LastFrameImg.Width);
+			IMQS_ASSERT(y * stride + gridSize <= (int) LastFrameImg.Height);
+			int     py = vheight - y * stride - gridSize;
+			int     c  = Model.EvalRGBAClassify(LastFrameImg.DataAt(x * stride, py), gridSize, gridSize, LastFrameImg.Stride);
 			int     bs = 10;
 			int     x1 = (int) (((float) x + 0.5f) * stride);
 			int     y1 = vheight - (int) (((float) y + 0.5f) * stride);
@@ -858,8 +859,8 @@ void UI::SetLabelDirty(train::ImageLabels* frame, train::Label* label, bool redr
 void UI::GridDimensions(int& width, int& height) {
 	int vwidth, vheight;
 	Video.Dimensions(vwidth, vheight);
-	width  = (int) floor((float) vwidth / (float) LabelGridSize);
-	height = (int) floor((float) vheight / (float) LabelGridSize);
+	width  = (int) floor((float) vwidth / (float) Taxonomy.GridSize);
+	height = (int) floor((float) vheight / (float) Taxonomy.GridSize);
 }
 
 // If video is shown at half it's actual resolution, then scale = 0.5
@@ -912,7 +913,7 @@ xo::Point UI::GridPosOffset() {
 	// horizontally: center the grid
 	// vertically: we want to align it to the bottom of the screen
 	xo::Point offset;
-	offset.X = (vwidth % LabelGridSize) / 2;
+	offset.X = (vwidth % Taxonomy.GridSize) / 2;
 	offset.Y = 0;
 	return offset;
 }
@@ -925,8 +926,8 @@ xo::Point UI::VideoPosToGrid(int x, int y) {
 		y = vheight - y;
 	x -= offset.X;
 	y -= offset.Y;
-	int gx = (int) (x / LabelGridSize);
-	int gy = (int) (y / LabelGridSize);
+	int gx = (int) (x / Taxonomy.GridSize);
+	int gy = (int) (y / Taxonomy.GridSize);
 	int gwidth, gheight;
 	GridDimensions(gwidth, gheight);
 	gx = xo::Clamp(gx, 0, gwidth - 1);
@@ -937,8 +938,8 @@ xo::Point UI::VideoPosToGrid(int x, int y) {
 xo::Point UI::GridPosToVideo(int x, int y) {
 	int vwidth, vheight;
 	Video.Dimensions(vwidth, vheight);
-	x *= LabelGridSize;
-	y *= LabelGridSize;
+	x *= Taxonomy.GridSize;
+	y *= Taxonomy.GridSize;
 	auto offset = GridPosOffset();
 	x += offset.X;
 	y += offset.Y;

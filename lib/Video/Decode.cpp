@@ -210,15 +210,15 @@ Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride, d
 				return ErrEOF;
 			case AVERROR(EAGAIN): {
 				// need more data
-				//AVPacket pkt;
-				//av_init_packet(&pkt);
-				//pkt.data = nullptr;
-				//pkt.size = 0;
-				r = av_read_frame(FmtCtx, &Pkt);
+				AVPacket pkt;
+				av_init_packet(&pkt);
+				pkt.data = nullptr;
+				pkt.size = 0;
+				r        = av_read_frame(FmtCtx, &pkt);
 				if (r != 0)
 					return TranslateErr(r, "av_read_frame");
-				r = avcodec_send_packet(VideoDecCtx, &Pkt);
-				//av_packet_unref(&Pkt);
+				r = avcodec_send_packet(VideoDecCtx, &pkt);
+				av_packet_unref(&pkt);
 				if (r == AVERROR_INVALIDDATA) {
 					// skip over invalid data, and keep trying
 				} else if (r != 0) {
