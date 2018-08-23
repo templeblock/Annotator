@@ -14,9 +14,9 @@
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 30 --start 260 /home/ben/win/c/mldata/DSCF3023.MOV 0 -0.000999
 
 // second video
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch --phase 1 -n 30 --start 0 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch --phase 2 -n 200 --start 14 ~/mldata/DSCF3040.MOV ~/DSCF3040-positions.json 0 -0.00095
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -d ~/mldata/DSCF3040.MOV ~/inf ~/dev/Annotator/pos.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 30 --start 0 ~/mldata/DSCF3040.MOV ~/pos.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -n 200 --start 14 ~/mldata/DSCF3040.MOV ~/pos.json 0 -0.00095
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' stitch -m 0.003365 ~/mldata/DSCF3040.MOV ~/inf2 ~/dev/Annotator/pos.json 0 -0.00095
 
 // mthata
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' measure-scale ~/mldata/mthata/DSCF0001-HG-3.MOV mthata-pos.json 0 -0.000411
@@ -42,12 +42,9 @@ Stitcher::Stitcher() {
 		Vignetting[i] = 1;
 }
 
-Error Stitcher::Initialize(string bitmapDir, std::vector<std::string> videoFiles, float zx, float zy, double seconds) {
-	if (bitmapDir != "") {
-		auto err = InfBmp.Initialize(bitmapDir);
-		if (!err.OK())
-			return err;
-	}
+Error Stitcher::Initialize(std::string storageSpec, std::vector<std::string> videoFiles, float zx, float zy, double seconds) {
+	if (storageSpec != "")
+		InfBmp.Initialize(storageSpec);
 
 	VidStitcher.BlackenPercentage    = 0.15;
 	VidStitcher.EnableFullFlatOutput = true;
@@ -84,7 +81,7 @@ Error Stitcher::LoadTrack(std::string trackFile) {
 	Track.ConvertToWebMercator();
 	//Track.Simplify(0.001);
 	Track.Smooth(0.5, 0.1);
-	//Track.Dump(0, 20, 0.05);
+	//Track.DumpRaw(0, 6);
 	//Track.SaveCSV("/home/ben/tracks.csv");
 	//exit(1);
 	return Error();
@@ -92,7 +89,9 @@ Error Stitcher::LoadTrack(std::string trackFile) {
 
 Error Stitcher::DoMeasureScale(std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy) {
 	auto err = LoadTrack(trackFile);
-	err      = Initialize("", videoFiles, zx, zy, 0);
+	if (!err.OK())
+		return err;
+	err = Initialize("", videoFiles, zx, zy, 0);
 	if (!err.OK())
 		return err;
 
@@ -110,13 +109,13 @@ Error Stitcher::DoMeasureScale(std::vector<std::string> videoFiles, std::string 
 	return Error();
 }
 
-Error Stitcher::DoStitch(string bitmapDir, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count) {
+Error Stitcher::DoStitch(std::string storageSpec, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count) {
 	//os::RemoveAll(bitmapDir);
-	os::MkDirAll(bitmapDir);
+	//os::MkDirAll(bitmapDir);
 
 	auto err = LoadTrack(trackFile);
 
-	err = Initialize(bitmapDir, videoFiles, zx, zy, seconds);
+	err = Initialize(storageSpec, videoFiles, zx, zy, seconds);
 	if (!err.OK())
 		return err;
 
@@ -239,8 +238,9 @@ Error Stitcher::Run(int count) {
 		else if (!err.OK())
 			return err;
 
-		// For now we just use hardcoded values for vignetting
+		// For now we just use lensfun to do vignetting correction
 		//MeasureVignetting();
+		//Track.DumpRaw(0, 6);
 
 		err = StitchFrame();
 		if (!err.OK())
@@ -257,7 +257,7 @@ Error Stitcher::Run(int count) {
 		//}
 
 		//tsf::print("%v\n", VidStitcher.FrameNumber);
-		VidStitcher.PrintRemainingTime();
+		//VidStitcher.PrintRemainingTime();
 
 		if (EnableSimpleRender)
 			AdjustInfiniteBitmapView(PrevFullMesh, PrevDir);
@@ -435,11 +435,14 @@ Error Stitcher::TransformFrameCoordsToGeo(gfx::Vec3d& geoOffset) {
 			Track.GetPositionAndVelocity(ptime, geoCenterPos, geoVel);
 			if (geoVel.size() == 0)
 				return ErrGeoVelocityZero;
+			if (geoVel.size() > 100)
+				return Error::Fmt("Speed is too fast (%v km/h). FrameTime: %.2f. Pos: (%.1f,%.1f)", geoVel.size() * (1000 / 3600.0), f0.FrameTime, geoCenterPos.x, geoCenterPos.y);
 			Vec2d  right                   = Vec2d(geoVel.y, -geoVel.x).normalized();
 			double meterDistanceFromCenter = pixelDistanceFromCenter * MetersPerPixel;
 			Vec3d  geoPos                  = geoCenterPos + sideOfCenter * meterDistanceFromCenter * Vec3d(right.x, right.y, 0);
 			if (mx == 0 && my == 0)
 				geoOffset = geoPos;
+			auto geoPosOrg = geoPos;
 			geoPos -= geoOffset;
 			vx.Pos = Vec2f(geoPos.x, geoPos.y);
 			//if (my == f0.Mesh.Height - 5)
@@ -453,7 +456,8 @@ Error Stitcher::DrawGeoMesh(gfx::Vec3d geoOffset) {
 	// Adjust our infinite bitmap view, if necessary
 	FrameObject& f       = Frames[0];
 	auto         boundsF = f.Mesh.PosBounds();
-	RectD        boundsM(boundsF.x1, boundsF.y1, boundsF.x2, boundsF.y2);
+	//f.Mesh.PrintPosX(Rect32(0, 0, f.Mesh.Width, f.Mesh.Height));
+	RectD boundsM(boundsF.x1, boundsF.y1, boundsF.x2, boundsF.y2);
 	boundsM.Offset(geoOffset.x, geoOffset.y);
 
 	double baseMetersPerPixel = BaseMapMetersPerPixel();
@@ -595,19 +599,57 @@ void Stitcher::TransformMeshIntoRendCoords(Mesh& mesh) {
 }
 
 Error Stitcher::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
+	int tilesX = Rend.FBWidth / InfBmp.TileSize;
+	int tilesY = Rend.FBHeight / InfBmp.TileSize;
+
+	//tsf::print("outRect: %v,%v,%v,%v\n", outRect.x1, outRect.y1, outRect.x2, outRect.y2);
+
 	if (outRect.x1 >= InfBmpView.x1 &&
 	    outRect.y1 >= InfBmpView.y1 &&
 	    outRect.x2 <= InfBmpView.x2 &&
 	    outRect.y2 <= InfBmpView.y2) {
-		// already OK
+		// viewport is OK
+
+		// modify the dirty matrix, so that we know which tiles are about to be touched
+		auto dirty = outRect;
+		dirty.Offset(-InfBmpView.x1, -InfBmpView.y1);
+		dirty.x1 = InfiniteBitmap::RoundDown64(dirty.x1, InfBmp.TileSize);
+		dirty.y1 = InfiniteBitmap::RoundDown64(dirty.y1, InfBmp.TileSize);
+		dirty.x2 = InfiniteBitmap::RoundUp64(dirty.x2, InfBmp.TileSize);
+		dirty.y2 = InfiniteBitmap::RoundUp64(dirty.y2, InfBmp.TileSize);
+		dirty.Divide(InfBmp.TileSize);
+
+		//tsf::print("Dirty Tiles: %v,%v - %v,%v\n", dirty.x1, dirty.y1, dirty.x2, dirty.y2);
+		IMQS_ASSERT(dirty.x1 >= 0 && dirty.y1 >= 0 && dirty.x2 <= tilesX && dirty.y2 <= tilesY);
+
+		for (int64_t y = dirty.y1; y < dirty.y2; y++) {
+			for (int64_t x = dirty.x1; x < dirty.x2; x++) {
+				*InfBmpDirty.At(x, y) = 255;
+			}
+		}
+
 		return Error();
 	}
 
 	// Persist current framebuffer
-	Image img;
+	Image oldImg;
 	if (!DryRun && InfBmpView.Width() != 0) {
-		Rend.CopyDeviceToImage(Rect32(0, 0, Rend.FBWidth, Rend.FBHeight), 0, 0, img);
-		auto err = InfBmp.Save(InfBmpView, img);
+		bool* sparse = new bool[tilesX * tilesY];
+		int   nwrite = 0;
+		for (int ty = 0; ty < tilesY; ty++) {
+			for (int tx = 0; tx < tilesX; tx++) {
+				sparse[ty * tilesX + tx] = *InfBmpDirty.At(tx, ty) != 0;
+				if (sparse[ty * tilesX + tx])
+					nwrite++;
+			}
+		}
+		if (PrintTileIOMessages)
+			tsf::print("Writing %v/%v tiles\n", nwrite, tilesX * tilesY);
+		Rend.CopyDeviceToImage(Rect32(0, 0, Rend.FBWidth, Rend.FBHeight), 0, 0, oldImg);
+		auto err = InfBmp.Save(BaseZoomLevel, InfBmpView, oldImg, sparse);
+		if (PrintTileIOMessages)
+			tsf::print("Writing complete\n");
+		delete[] sparse;
 		if (!err.OK())
 			return err;
 	}
@@ -637,15 +679,51 @@ Error Stitcher::AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect) {
 		                  outRect.Width(), outRect.Height());
 	}
 
-	img.Alloc(gfx::ImageFormat::RGBAP, Rend.FBWidth, Rend.FBHeight);
-	img.Fill(0);
+	Image newImg;
+	newImg.Alloc(gfx::ImageFormat::RGBAP, Rend.FBWidth, Rend.FBHeight);
+	newImg.Fill(Color8(0, 0, 0, 0));
 	if (!DryRun) {
-		auto err = InfBmp.Load(newView, img);
+		// Copy the existing tiles over from the previous image. It's wasteful to just rely on dumping & loading
+		// to restore state, so it's worthwhile doing this, especially over a (relatively) high latency system like GCS.
+		bool* sparse = new bool[tilesX * tilesY];
+		memset(sparse, 1, tilesX * tilesY);
+		int    nread = tilesX * tilesY;
+		Rect64 oldInNew64(0, 0, oldImg.Width, oldImg.Height);
+		oldInNew64.Offset(InfBmpView.x1 - newView.x1, InfBmpView.y1 - newView.y1);
+		if (abs(oldInNew64.x1) < 1 << 20 && abs(oldInNew64.y1) < 1 << 20) {
+			auto oldInNew = Rect64to32(oldInNew64);
+			//tsf::print("%.2f: Keeping %v,%v - %v,%v\n", VidStitcher.FrameTime, oldInNew.x1, oldInNew.y1, oldInNew.x2, oldInNew.y2);
+			newImg.CopyFrom(oldImg, Rect32(0, 0, oldImg.Width, oldImg.Height), oldInNew);
+
+			auto validTiles = oldInNew;
+			validTiles.CropTo(Rect32(0, 0, Rend.FBWidth, Rend.FBHeight));
+			validTiles.Divide(InfBmp.TileSize);
+
+			for (int ty = 0; ty < tilesY; ty++) {
+				for (int tx = 0; tx < tilesX; tx++) {
+					if (validTiles.IsInsideMe(tx, ty)) {
+						sparse[ty * tilesX + tx] = false;
+						nread--;
+					}
+				}
+			}
+		}
+
+		if (PrintTileIOMessages)
+			tsf::print("Reading %v/%v tiles\n", nread, tilesX * tilesY);
+
+		// load any tiles that were not in our previous view
+		auto err = InfBmp.Load(BaseZoomLevel, newView, newImg, sparse);
+		delete[] sparse;
+		if (PrintTileIOMessages)
+			tsf::print("Reading complete\n");
 		if (!err.OK())
 			return err;
 	}
 	Rend.Clear(ClearColor);
-	Rend.CopyImageToDevice(img, 0, 0);
+	Rend.CopyImageToDevice(newImg, 0, 0);
+	InfBmpDirty.Alloc(ImageFormat::Gray, tilesX, tilesY);
+	InfBmpDirty.Fill(Color8(0, 0, 0, 0));
 
 	InfBmpView = newView;
 
@@ -666,14 +744,14 @@ Error Stitcher::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirecti
 	Image img;
 	if (persistToInfBmp) {
 		Rend.CopyDeviceToImage(Rect32(0, 0, Rend.FBWidth, Rend.FBHeight), 0, 0, img);
-		auto err = InfBmp.Save(InfBmpView, img);
+		auto err = InfBmp.Save(BaseZoomLevel, InfBmpView, img);
 		if (!err.OK())
 			return err;
 	}
 
 	if (false) {
 		Image test;
-		auto  err = InfBmp.Load(InfBmpView, test);
+		auto  err = InfBmp.Load(BaseZoomLevel, InfBmpView, test);
 		test.SaveFile("test-inf-view-1.jpeg");
 	}
 
@@ -705,8 +783,8 @@ Error Stitcher::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirecti
 	}
 
 	if (persistToInfBmp) {
-		img.Fill(0);
-		auto err = InfBmp.Load(newView, img);
+		img.Fill(Color8(0, 0, 0, 0));
+		auto err = InfBmp.Load(BaseZoomLevel, newView, img);
 		if (!err.OK())
 			return err;
 		Rend.Clear(ClearColor);
@@ -732,11 +810,11 @@ Error Stitcher::AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirecti
 }
 
 int WebTiles(argparse::Args& args) {
-	string         bmpDir = args.Params[0];
+	string         storageSpec = args.Params[0];
 	InfiniteBitmap bmp;
-	auto           err = bmp.Initialize(bmpDir);
+	auto           err = bmp.Initialize(storageSpec);
 	if (err.OK())
-		err = bmp.CreateWebTiles();
+		err = bmp.CreateWebTiles(25);
 	if (!err.OK()) {
 		tsf::print("Error: %v\n", err.Message());
 		return 1;
@@ -753,7 +831,7 @@ int MeasureScale(argparse::Args& args) {
 	Stitcher s;
 	auto     err = s.DoMeasureScale(videoFiles, trackFile, zx, zy);
 	if (!err.OK()) {
-		tsf::print("Error: %v\n", err.Message());
+		tsf::print("Error measuring scale: %v\n", err.Message());
 		return 1;
 	}
 	return 0;
@@ -761,7 +839,7 @@ int MeasureScale(argparse::Args& args) {
 
 int Stitch(argparse::Args& args) {
 	auto   videoFiles     = strings::Split(args.Params[0], ',');
-	auto   bmpDir         = args.Params[1];
+	auto   storageSpec    = args.Params[1];
 	auto   trackFile      = args.Params[2];
 	float  zx             = atof(args.Params[3].c_str());
 	float  zy             = atof(args.Params[4].c_str());
@@ -772,9 +850,9 @@ int Stitch(argparse::Args& args) {
 	Stitcher s;
 	s.DryRun         = args.Has("dryrun");
 	s.MetersPerPixel = metersPerPixel;
-	auto err         = s.DoStitch(bmpDir, videoFiles, trackFile, zx, zy, seek, count);
+	auto err         = s.DoStitch(storageSpec, videoFiles, trackFile, zx, zy, seek, count);
 	if (!err.OK()) {
-		tsf::print("Error: %v\n", err.Message());
+		tsf::print("Error stitching: %v\n", err.Message());
 		return 1;
 	}
 	return 0;

@@ -146,6 +146,7 @@ public:
 
 class IMQS_TRAIN_API LabelTaxonomy {
 public:
+	int                     GridSize = 256;
 	std::vector<LabelClass> Classes;
 
 	ohash::map<std::string, int>                PatchClassToIndex() const;

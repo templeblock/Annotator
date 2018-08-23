@@ -21,7 +21,7 @@ static double  ImageStdDev(const Image& img, Rect32 crop);
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-OpticalFlow2::OpticalFlow2() {
+OpticalFlow::OpticalFlow() {
 }
 
 static Rect32 MakeBoxAroundPoint(int x, int y, int radius) {
@@ -452,7 +452,7 @@ int FixElementsTooFarFromGlobalBest(Mesh& warpMesh, Rect32 warpMeshValidRect, Ve
 // All pixels in stableImg are expected to be defined, but we allow blank (zero alpha) pixels
 // in warpImg, and we make sure that we don't try to align any grid cells that have
 // one or more blank pixels inside them.
-FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Image& _warpImg, const gfx::Image& _stableImg, gfx::Vec2f& bias) {
+FlowResult OpticalFlow::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Image& _warpImg, const gfx::Image& _stableImg, gfx::Vec2f& bias) {
 	FlowResult result;
 	int        frameNumber = HistorySize++;
 
@@ -701,9 +701,14 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 			dxMin          = -fineAdjust;
 			dxMax          = fineAdjust;
 		}
-		int   searchWindowSize = (dxMax - dxMin) * (dyMax - dyMin);
-		float allDiffSum       = 0;
-		for (auto& c : validCells) {
+		int     searchWindowSize = (dxMax - dxMin) * (dyMax - dyMin);
+		int64_t allDiffSum       = 0;
+		int     nValidCells      = validCells.size();
+		// omp parallel here takes us from 22 milliseconds to 6 milliseconds
+		//auto start = time::PerformanceCounter();
+#pragma omp parallel for
+		for (int iCell = 0; iCell < nValidCells; iCell++) {
+			auto& c = validCells[iCell];
 			//Vec2f  cSrc    = warpMesh.UVimg(warpImg.Width, warpImg.Height, c.x, c.y);
 			Vec2f  cSrc    = warpMesh.At(c.x, c.y).UV;
 			Vec2f  cDst    = warpMesh.At(c.x, c.y).Pos;
@@ -730,17 +735,20 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 					}
 				}
 			}
-			allDiffSum += (float) bestSum;
+#pragma omp atomic
+			allDiffSum += bestSum;
 			// I thought this would work well, indicating patches that have good detail for matching, but it doesn't work. No idea why not.
 			//warpMesh.At(c.x, c.y).DeltaStrength = float((double) avgSum / (double) searchWindowSize) / ((float) bestSum + 0.1f);
 			warpMesh.At(c.x, c.y).Pos += Vec2f(bestDx, bestDy);
 		}
+		//auto duration = time::PerformanceCounter() - start;
+		//tsf::print("flow time: %v microseconds\n", duration / 1000);
 		if (debugMedianFilter) {
 			warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
 			//warpMesh.PrintDeltaStrength(warpMeshValidRect);
 		}
 
-		result.Diff = allDiffSum / (float) validCells.size();
+		result.Diff = float((double) allDiffSum / (double) validCells.size());
 
 		//if (debugMedianFilter)
 		//	warpMesh.PrintDeltaPos(warpMeshValidRect, bias);
@@ -749,9 +757,8 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 			DrawMesh("mesh-prefilter-1.png", *warpImg, warpMesh, false);
 		}
 
-		int maxFilterPasses = 10;
-		//int       maxFilterPasses = 0;
-		int       nfilterPasses = 0;
+		int       maxFilterPasses = EnableMedianFilter ? 10 : 0;
+		int       nfilterPasses   = 0;
 		DeltaGrid dg;
 		CopyMeshToDelta(warpMesh, warpMeshValidRect, dg, bias);
 		for (int ifilter = 0; ifilter < maxFilterPasses; ifilter++) {
@@ -877,9 +884,9 @@ FlowResult OpticalFlow2::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::I
 	return result;
 }
 
-void OpticalFlow2::DrawMesh(std::string filename, const gfx::Image& img, const Mesh& mesh, bool isStable) {
+void OpticalFlow::DrawMesh(std::string filename, const gfx::Image& img, const Mesh& mesh, bool isStable) {
 	Canvas c(img.Width, img.Height);
-	*c.GetImage() = img;
+	c.GetImage()->CopyFrom(img);
 	for (int y = 0; y < mesh.Height; y++) {
 		for (int x = 0; x < mesh.Width; x++) {
 			auto& v = mesh.At(x, y);

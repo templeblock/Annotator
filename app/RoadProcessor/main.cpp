@@ -2,6 +2,7 @@
 #include "Globals.h"
 #include "Perspective.h"
 #include "MeshRenderer.h"
+#include "Bench.h"
 
 namespace imqs {
 namespace roadproc {
@@ -9,6 +10,7 @@ int Speed(argparse::Args& args);
 int MeasureScale(argparse::Args& args);
 int Stitch(argparse::Args& args);
 int WebTiles(argparse::Args& args);
+int Auto(argparse::Args& args);
 } // namespace roadproc
 } // namespace imqs
 
@@ -59,15 +61,27 @@ void TestBilinear() {
 
 int main(int argc, char** argv) {
 	using namespace imqs::roadproc;
+	imqs::Error err;
+
+	imqs::logging::SetupCrashHandler("RoadProcessor");
 
 	imqs::video::VideoFile::Initialize();
 	//imqs::gfx::raster::TestBilinear();
+
+	// This little chunk of code is very useful to verifying the sanity of our OpenGL system
 	//imqs::roadproc::MeshRenderer rend;
-	//rend.Initialize(800, 800);
+	//auto                         err = rend.Initialize(800, 800);
+	//if (!err.OK()) {
+	//	tsf::print("Error: %v\n", err.Message());
+	//	return 1;
+	//}
 	//rend.Clear(imqs::gfx::Color8(255, 255, 255, 255));
 	//rend.DrawTestLines();
 	//rend.SaveToFile("test.png");
 	//return 0;
+
+	imqs::gfx::Canvas cx(1916, 1330);
+	cx.Rect(imqs::gfx::Rect32(50, 50, 60, 60), imqs::gfx::Color8(255, 0, 0, 255), 1.0f);
 
 	argparse::Args args("Usage: RoadProcessor [options] <command>");
 	args.AddValue("e", "lensdb", "Camera/Lens database", "/usr/local/share/lensfun/version_2/");
@@ -75,7 +89,7 @@ int main(int argc, char** argv) {
 
 	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
 
-	auto speed = args.AddCommand("speed <zy> <video[,video2][...]>",
+	auto speed = args.AddCommand("speed <zy> <video[,video2,...]>",
 	                             "Compute car speed from interframe differences\nOne or more videos can be specified."
 	                             " Separate multiple videos with commas. This version uses optical flow on flattened images",
 	                             Speed);
@@ -94,10 +108,17 @@ int main(int argc, char** argv) {
 
 	auto webtiles = args.AddCommand("webtiles <infinite bitmap>", "Create web tiles from infinite bitmap", WebTiles);
 
+	auto cmdAuto = args.AddCommand("auto <username> <password> <infinite bitmap> <video[,video2,...]>", "Do everything to get stitched imagery out", Auto);
+	cmdAuto->AddValue("", "zy", "Perspective factor zy", "0");
+	cmdAuto->AddValue("", "speed", "Speed track (JSON)");
+	cmdAuto->AddValue("m", "mpp", "Meters per pixel", "0");
+
+	auto bench = args.AddCommand("bench", "Various internal benchmarks", Bench);
+
 	if (!args.Parse(argc, (const char**) argv))
 		return 1;
 
-	auto err = global::Initialize();
+	err = global::Initialize();
 	if (!err.OK()) {
 		tsf::print("Program initialization failed: %v\n", err.Message());
 		return 1;

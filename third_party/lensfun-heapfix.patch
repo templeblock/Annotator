@@ -1,0 +1,26 @@
+diff --git a/libs/lensfun/lens.cpp b/libs/lensfun/lens.cpp
+index 52b7665..ec99da4 100644
+--- a/libs/lensfun/lens.cpp
++++ b/libs/lensfun/lens.cpp
+@@ -130,7 +130,7 @@ void lfLens::AddMount (const char *val)
+ {
+     if (val)
+     {
+-        char* p = (char*)malloc(strlen(val));
++        char* p = (char*)malloc(strlen(val) + 1);
+         strcpy(p, val);
+         MountNames.push_back(p);
+ 
+diff --git a/libs/lensfun/mount.cpp b/libs/lensfun/mount.cpp
+index bd875ba..1df01db 100644
+--- a/libs/lensfun/mount.cpp
++++ b/libs/lensfun/mount.cpp
+@@ -60,7 +60,7 @@ void lfMount::AddCompat (const char *val)
+ {
+     if (val)
+     {
+-        char* p = (char*)malloc(strlen(val));
++        char* p = (char*)malloc(strlen(val) + 1);
+         strcpy(p, val);
+         MountCompat.push_back(p);
+ 

@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+#docker pull nvidia/cuda:9.2-cudnn7-devel-ubuntu18.04
+docker pull nvidia/cudagl:9.2-devel-ubuntu18.04
+docker build -t roads-cppbuild -f build/docker/roads-cppbuild/Dockerfile .

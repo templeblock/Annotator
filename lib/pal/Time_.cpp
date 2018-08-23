@@ -619,7 +619,7 @@ int64_t PerformanceCounter() {
 #else
 	timespec t;
 	clock_gettime(CLOCK_MONOTONIC, &t);
-	return (uint64_t) t.tv_sec + t.tv_nsec * (uint64_t) 1000000000;
+	return (uint64_t) t.tv_sec * (uint64_t) 1000000000 + (uint64_t) t.tv_nsec;
 #endif
 }
 

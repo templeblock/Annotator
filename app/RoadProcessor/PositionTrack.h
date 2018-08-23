@@ -25,6 +25,7 @@ public:
 	bool       GetPositionAndVelocity(double time, gfx::Vec3d& pos, gfx::Vec2d& vel2D) const; // Returns position in web mercator meters, velocity in meters/second
 	gfx::Vec3d GetPosition(double time) const;                                                // Returns position in web mercator meters
 	void       Dump(double start, double end, double interval) const;
+	void       DumpRaw(size_t start, size_t end) const;
 	void       ConvertToWebMercator();
 
 	// Simplify the positions with Douglas Puecker

@@ -85,6 +85,7 @@ Image& Image::operator=(Image&& b) {
 }
 
 void Image::Reset() {
+	IMQS_ASSERT(!Locked);
 	if (OwnData)
 		free(Data);
 	Width   = 0;
@@ -99,6 +100,8 @@ void Image::Alloc(ImageFormat format, int width, int height, int stride) {
 	if (stride == 0) {
 		stride = gfx::BytesPerPixel(format) * width;
 		stride = 4 * ((stride + 3) / 4); // round up to multiple of 4
+		if (stride != gfx::BytesPerPixel(format) * width)
+			tsf::print("stride up from %v to %v\n", gfx::BytesPerPixel(format) * width, stride);
 	}
 
 	IMQS_ASSERT(stride >= gfx::BytesPerPixel(format) * width);
@@ -132,20 +135,27 @@ Image Image::Window(Rect32 rect) const {
 	return Window(rect.x1, rect.y1, rect.Width(), rect.Height());
 }
 
-void Image::Fill(uint32_t color) {
+void Image::Fill(Color8 color) {
 	Fill(Rect32(0, 0, Width, Height), color);
 }
 
-void Image::Fill(Rect32 rect, uint32_t color) {
-	rect.x1 = math::Clamp(rect.x1, 0, Width);
-	rect.y1 = math::Clamp(rect.y1, 0, Height);
-	rect.x2 = math::Clamp(rect.x2, 0, Width);
-	rect.y2 = math::Clamp(rect.y2, 0, Height);
+void Image::Fill(Rect32 rect, Color8 color) {
+	rect.x1        = math::Clamp(rect.x1, 0, Width);
+	rect.y1        = math::Clamp(rect.y1, 0, Height);
+	rect.x2        = math::Clamp(rect.x2, 0, Width);
+	rect.y2        = math::Clamp(rect.y2, 0, Height);
+	uint8_t gray   = color.Lum();
+	bool    isGray = NumChannels() == 1;
 	for (int y = rect.y1; y < rect.y2; y++) {
 		uint32_t* dst = At32(rect.x1, y);
 		size_t    x2  = rect.x2;
-		for (size_t x = rect.x1; x < x2; x++)
-			*dst++ = color;
+		if (isGray) {
+			for (size_t x = rect.x1; x < x2; x++)
+				*dst++ = gray;
+		} else {
+			for (size_t x = rect.x1; x < x2; x++)
+				*dst++ = color.u;
+		}
 	}
 }
 
@@ -419,6 +429,10 @@ void Image::BoxBlur(int size, int iterations) {
 	free(buf2);
 }
 
+void Image::CopyFrom(const Image& src) {
+	CopyFrom(src, Rect32(0, 0, src.Width, src.Height), 0, 0);
+}
+
 void Image::CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect) {
 	IMQS_ASSERT(srcRect.Width() == dstRect.Width());
 	IMQS_ASSERT(srcRect.Height() == dstRect.Height());
@@ -437,7 +451,7 @@ void Image::CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect) {
 		srcRect.x2 = src.Width;
 	}
 	if (srcRect.y2 > src.Height) {
-		dstRect.y2 -= srcRect.x2 - src.Height;
+		dstRect.y2 -= srcRect.y2 - src.Height;
 		srcRect.y2 = src.Height;
 	}
 
@@ -454,12 +468,15 @@ void Image::CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect) {
 		dstRect.x2 = Width;
 	}
 	if (dstRect.y2 > Height) {
-		srcRect.y2 -= dstRect.x2 - Height;
+		srcRect.y2 -= dstRect.y2 - Height;
 		dstRect.y2 = Height;
 	}
 
-	if (srcRect.Width() < 0 || srcRect.Height() < 0)
+	if (srcRect.Width() <= 0 || srcRect.Height() <= 0)
 		return;
+
+	IMQS_ASSERT(srcRect.x1 >= 0 && srcRect.x2 <= src.Width && srcRect.y1 >= 0 && srcRect.y2 <= src.Height);
+	IMQS_ASSERT(dstRect.x1 >= 0 && dstRect.x2 <= Width && dstRect.y1 >= 0 && dstRect.y2 <= Height);
 
 	for (int y = 0; y < srcRect.Height(); y++)
 		memcpy(At(dstRect.x1, dstRect.y1 + y), src.At(srcRect.x1, srcRect.y1 + y), srcRect.Width() * BytesPerPixel());

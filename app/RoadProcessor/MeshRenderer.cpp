@@ -2,7 +2,7 @@
 #include "MeshRenderer.h"
 #include "LensCorrection.h"
 
-#include <glfw/deps/linmath.h>
+//#include <glfw/deps/linmath.h>
 
 using namespace imqs::gfx;
 using namespace std;
@@ -219,6 +219,7 @@ MeshRenderer::~MeshRenderer() {
 }
 
 Error MeshRenderer::Initialize(int fbWidth, int fbHeight) {
+	/*
 	glfwSetErrorCallback(myErrorCallback);
 
 	if (!glfwInit())
@@ -237,6 +238,52 @@ Error MeshRenderer::Initialize(int fbWidth, int fbHeight) {
 
 	glfwMakeContextCurrent(Window);
 	gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
+	*/
+	const EGLint configAttribs[] = {
+	    EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+	    EGL_BLUE_SIZE, 8,
+	    EGL_GREEN_SIZE, 8,
+	    EGL_RED_SIZE, 8,
+	    //EGL_DEPTH_SIZE, 8,
+	    EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+	    EGL_NONE};
+
+	/*
+	const int pbufferWidth  = 9;
+	const int pbufferHeight = 9;
+	const EGLint pbufferAttribs[] = {
+	    EGL_WIDTH,
+	    pbufferWidth,
+	    EGL_HEIGHT,
+	    pbufferHeight,
+	    EGL_NONE,
+	};
+	*/
+
+	// 1. Initialize EGL
+	Display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+	if (Display == nullptr)
+		return Error("eglGetDisplay failed");
+
+	EGLint major = 0, minor = 0;
+	eglInitialize(Display, &major, &minor);
+	const char* vendor  = eglQueryString(Display, EGL_VENDOR);
+	const char* version = eglQueryString(Display, EGL_VERSION);
+	//tsf::print("EGL %v.%v, %v %v\n", major, minor, vendor, version);
+
+	// 2. Select an appropriate configuration
+	EGLint    numConfigs = 0;
+	EGLConfig cfg;
+
+	eglChooseConfig(Display, configAttribs, &cfg, 1, &numConfigs);
+	eglBindAPI(EGL_OPENGL_API);
+
+	// 5. Create a context and make it current
+	Ctx = eglCreateContext(Display, cfg, EGL_NO_CONTEXT, nullptr);
+
+	eglMakeCurrent(Display, EGL_NO_SURFACE, EGL_NO_SURFACE, Ctx);
+
+	gladLoadGLLoader((GLADloadproc) eglGetProcAddress);
 
 	// The GLFW docs recommend that you use a framebuffer object instead of the Window, when rendering offscreen,
 	// so we follow that advice here.
@@ -292,12 +339,16 @@ Error MeshRenderer::ResizeFrameBuffer(int fbWidth, int fbHeight) {
 }
 
 void MeshRenderer::Destroy() {
-	if (Window) {
-		//MakeCurrent();
-		glfwDestroyWindow(Window);
+	//if (Window) {
+	//	//MakeCurrent();
+	//	glfwDestroyWindow(Window);
+	//}
+	if (Ctx) {
+		eglDestroyContext(Display, Ctx);
 	}
 	if (IsInitialized) {
-		glfwTerminate();
+		eglTerminate(Display);
+		//glfwTerminate();
 		IsInitialized = false;
 	}
 }
@@ -603,18 +654,20 @@ void MeshRenderer::RemovePerspective(const gfx::Image& camera, const gfx::Image*
 	if (!adjuster) {
 		nullAdjuster.Alloc(ImageFormat::RGBA, 2, 2);
 		int one = LensCorrector::VignetteGrayMultiplier;
-		nullAdjuster.Fill(Color8(one, one, one, one).u);
+		nullAdjuster.Fill(Color8(one, one, one, one));
 		adjuster = &nullAdjuster;
 	}
 
 	DrawMeshWithShader(RemovePerspectiveShader, m, camera, adjuster);
 }
 
-void MeshRenderer::RemovePerspectiveAndCopyOut(const gfx::Image& camera, const gfx::Image* adjuster, PerspectiveParams pp, gfx::Image& flat) {
+void MeshRenderer::RemovePerspectiveAndCopyOut(const gfx::Image& camera, const gfx::Image* adjuster, PerspectiveParams pp, gfx::Image& flat, gfx::Rect32 extractRect) {
 	MakeCurrent();
 	Clear(Color8(0, 0, 0, 0));
 	RemovePerspective(camera, adjuster, pp);
-	CopyDeviceToImage(Rect32(0, 0, FBWidth, FBHeight), 0, 0, flat);
+	if (extractRect.IsInverted())
+		extractRect = Rect32(0, 0, FBWidth, FBHeight);
+	CopyDeviceToImage(extractRect, 0, 0, flat);
 }
 
 void MeshRenderer::SaveToFile(std::string filename) {
@@ -625,6 +678,7 @@ void MeshRenderer::SaveToFile(std::string filename) {
 }
 
 Error MeshRenderer::DrawHelloWorldTriangle() {
+	/*
 	MakeCurrent();
 	GLuint vertex_buffer, vertex_shader, fragment_shader, program;
 	GLint  mvp_location, vpos_location, vcol_location;
@@ -690,11 +744,10 @@ Error MeshRenderer::DrawHelloWorldTriangle() {
 #endif
 
 	// Write image Y-flipped because OpenGL
-	/*
-	stbi_write_png("offscreen.png",
-	               width, height, 4,
-	               buffer + (width * 4 * (height - 1)),
-	               -width * 4);*/
+	//stbi_write_png("offscreen.png",
+	//               width, height, 4,
+	//               buffer + (width * 4 * (height - 1)),
+	//               -width * 4);
 	gfx::ImageIO imgIO;
 	imgIO.SavePngFile("offscreen.png", true, width, height, -width * 4, buffer + (width * 4 * (height - 1)), 1);
 
@@ -703,7 +756,7 @@ Error MeshRenderer::DrawHelloWorldTriangle() {
 #else
 	free(buffer);
 #endif
-
+	*/
 	return Error();
 }
 
@@ -731,7 +784,8 @@ static Error CheckShaderCompilation(const std::string& shaderSrc, GLuint shader)
 }
 
 void MeshRenderer::MakeCurrent() {
-	glfwMakeContextCurrent(Window);
+	//glfwMakeContextCurrent(Window);
+	eglMakeCurrent(Display, EGL_NO_SURFACE, EGL_NO_SURFACE, Ctx);
 }
 
 Error MeshRenderer::CompileShader(std::string vertexSrc, std::string fragSrc, GLuint& shader) {

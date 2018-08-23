@@ -29,11 +29,11 @@ struct FlowResult {
 	float Diff = 0;
 };
 
-class OpticalFlow2 {
+class OpticalFlow {
 public:
 	int GridW       = 0;
 	int GridH       = 0;
-	int MatchRadius = 12; // we match a square of 16x16, centered around a pixel crack
+	int MatchRadius = 12; // we match a square of MatchRadius x MatchRadius pixels,
 
 	int AbsMinHSearch = -20; // minimum horizontal displacement for alignment points
 	int AbsMaxHSearch = 20;  // maximum horizontal displacement for alignment points
@@ -46,8 +46,9 @@ public:
 
 	bool UseRGB                  = true;  // If false, then convert images to gray before performing optical flow
 	bool ExtrapolateInvalidCells = false; // If true, then extrapolate valid cells to all of the other cells which were not aligned
+	bool EnableMedianFilter      = true;
 
-	OpticalFlow2();
+	OpticalFlow();
 
 	FlowResult Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Image& warpImg, const gfx::Image& stableImg, gfx::Vec2f& bias);
 

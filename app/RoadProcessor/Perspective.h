@@ -40,6 +40,7 @@ gfx::Vec2f CameraToFlat(int frameWidth, int frameHeight, gfx::Vec2f cam, Perspec
 void       RemovePerspective(const gfx::Image& camera, gfx::Image& flat, float z1, float zx, float zy, float originX, float originY);
 void       RemovePerspective(const gfx::Image& camera, gfx::Image& flat, PerspectiveParams pp, float originX, float originY);
 void       FitQuadratic(const std::vector<std::pair<double, double>>& xy, double& a, double& b, double& c);
+Error      DoPerspective(std::vector<std::string> videoFiles, float& zy);
 int        Perspective(argparse::Args& args);
 
 } // namespace roadproc

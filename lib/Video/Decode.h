@@ -1,5 +1,7 @@
 #pragma once
 
+#include "IVideo.h"
+
 namespace imqs {
 namespace video {
 
@@ -30,7 +32,7 @@ struct IMQS_VIDEO_API VideoMetadata {
 	time::Time CreationTime;
 };
 
-class IMQS_VIDEO_API VideoFile {
+class IMQS_VIDEO_API VideoFile : public IVideo {
 public:
 	static void Initialize();
 
@@ -41,7 +43,6 @@ public:
 
 	void            Close();
 	bool            IsOpen() const { return Filename != ""; }
-	Error           OpenFile(std::string filename);
 	std::string     GetFilename() const { return Filename; }
 	VideoStreamInfo GetVideoStreamInfo();
 	VideoMetadata   Metadata();
@@ -52,7 +53,10 @@ public:
 	Error           SeekToMicrosecond(int64_t microsecond, unsigned flags = Seek::None);
 	double          LastFrameTimeSeconds() const;
 	int64_t         LastFrameTimeMicrosecond() const;
-	Error           DecodeFrameRGBA(int width, int height, void* buf, int stride);
+
+	// IVideo
+	Error OpenFile(std::string filename) override;
+	Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) override;
 
 	void Dimensions(int& width, int& height) const;
 
@@ -65,12 +69,13 @@ private:
 	AVCodecContext*  VideoDecCtx    = nullptr;
 	AVStream*        VideoStream    = nullptr;
 	int              VideoStreamIdx = -1;
-	AVFrame*         Frame          = nullptr;
-	SwsContext*      SwsCtx         = nullptr;
-	int              SwsDstW        = 0;
-	int              SwsDstH        = 0;
-	int64_t          LastFramePTS   = 0;  // PTS = presentation time stamp (ie time when frame should be shown to user)
-	int64_t          LastSeekPTS    = -1; // Set to a value other than -1, if we have just executed a seek operation
+	AVPacket         Pkt;
+	AVFrame*         Frame        = nullptr;
+	SwsContext*      SwsCtx       = nullptr;
+	int              SwsDstW      = 0;
+	int              SwsDstH      = 0;
+	int64_t          LastFramePTS = 0;  // PTS = presentation time stamp (ie time when frame should be shown to user)
+	int64_t          LastSeekPTS  = -1; // Set to a value other than -1, if we have just executed a seek operation
 
 	static Error TranslateErr(int ret, const char* whileBusyWith = nullptr);
 	static Error OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, int& stream_idx, AVCodecContext*& dec_ctx);

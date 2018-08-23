@@ -2,6 +2,7 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 
 #include <lib/pal/pal.h>
+#include <lib/gfx/gfx.h>
 
 extern "C" {
 #include <libavutil/motion_vector.h>

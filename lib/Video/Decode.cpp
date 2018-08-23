@@ -23,6 +23,7 @@ void VideoFile::Initialize() {
 }
 
 VideoFile::VideoFile() {
+	memset(&Pkt, 0, sizeof(Pkt));
 }
 
 VideoFile::~VideoFile() {
@@ -32,6 +33,7 @@ VideoFile::~VideoFile() {
 void VideoFile::Close() {
 	FlushCachedFrames();
 
+	av_packet_unref(&Pkt);
 	sws_freeContext(SwsCtx);
 	avcodec_free_context(&VideoDecCtx);
 	avformat_close_input(&FmtCtx);
@@ -75,6 +77,10 @@ Error VideoFile::OpenFile(std::string filename) {
 		Close();
 		return Error("Out of memory allocating frame");
 	}
+
+	av_init_packet(&Pkt);
+	Pkt.data = nullptr;
+	Pkt.size = 0;
 
 	Filename = filename;
 	return Error();
@@ -181,7 +187,7 @@ int64_t VideoFile::LastFrameAVTime() const {
 }
 */
 
-Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
+Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds) {
 	// Allow for multiple attempts, if we have just performed a seek.
 	// After performing a seek, the codec will often emit what looks like a previously buffered
 	// frame. If the first frame that we receive is not the one that we seeked to, then
@@ -192,8 +198,10 @@ Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
 
 	for (int attempt = 0; attempt < 200; attempt++) {
 		bool haveFrame = false;
+		int  nReceive  = 0;
 		while (!haveFrame) {
 			int r = avcodec_receive_frame(VideoDecCtx, Frame);
+			nReceive++;
 			switch (r) {
 			case 0:
 				haveFrame = true;
@@ -258,6 +266,13 @@ Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride) {
 	}
 
 	LastSeekPTS = -1;
+	if (timeSeconds)
+		*timeSeconds = LastFrameTimeSeconds();
+
+	if (width == 0 || height == 0 || buf == nullptr) {
+		// caller is not interested in actual frame pixels
+		return Error();
+	}
 
 	if (SwsCtx && ((SwsDstW != width) || (SwsDstH != height))) {
 		sws_freeContext(SwsCtx);
@@ -329,7 +344,7 @@ Error VideoFile::OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, in
 	//	if (decHW)
 	//		dec = decHW;
 	//}
-	//tsf::print("Using decoder: %v (%v)\n", dec->name, dec->long_name);
+	tsf::print("Using decoder: %v (%v)\n", dec->name, dec->long_name);
 
 	// Allocate a codec context for the decoder
 	dec_ctx = avcodec_alloc_context3(dec);

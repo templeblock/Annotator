@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "InfiniteBitmap.h"
+#include "Storage/GCSStorage.h"
+#include "Storage/LocalFileStorage.h"
 
 using namespace std;
 using namespace imqs::gfx;
@@ -7,12 +9,32 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
-Error InfiniteBitmap::Initialize(std::string rootDir) {
-	RootDir = rootDir;
-	return os::MkDirAll(rootDir);
+Error InfiniteBitmap::Initialize(std::string storageSpec) {
+	if (storageSpec.find("gcs://") == 0) {
+		auto parts = strings::Split(storageSpec.substr(6), ':');
+		if (parts.size() != 2)
+			return Error::Fmt("Invalid storage spec. Must be gcs://bucketName:apiKey");
+		auto storage = make_shared<GCSStorage>();
+		auto err     = storage->Initialize(parts[0], parts[1]);
+		if (!err.OK())
+			return err;
+		Initialize(storage);
+		return Error();
+	} else {
+		auto storage = make_shared<LocalFileStorage>();
+		auto err     = storage->Initialize(storageSpec);
+		if (!err.OK())
+			return err;
+		Initialize(storage);
+		return Error();
+	}
 }
 
-Error InfiniteBitmap::Load(gfx::Rect64 rect, gfx::Image& img) const {
+void InfiniteBitmap::Initialize(std::shared_ptr<IFileStorage> rawStorage) {
+	RawStorage = rawStorage;
+}
+
+Error InfiniteBitmap::Load(int zoomLevel, gfx::Rect64 rect, gfx::Image& img, bool* sparseLoadMatrix) const {
 	IMQS_ASSERT(rect.x1 % TileSize == 0);
 	IMQS_ASSERT(rect.y1 % TileSize == 0);
 	IMQS_ASSERT(rect.x2 % TileSize == 0);
@@ -23,10 +45,19 @@ Error InfiniteBitmap::Load(gfx::Rect64 rect, gfx::Image& img) const {
 	size_t   encBufSize   = StripsPerTile * (sizeof(uint32_t) + LZ4_compressBound(TileSize * StripSize * 4)) + 1; // +1 so we can detect spurious conditions, see comment below
 	uint8_t* encBuf       = (uint8_t*) malloc(encBufSize);
 	uint8_t* decBuf       = (uint8_t*) malloc(rawStripSize);
-	for (int64_t x = RoundDown64(rect.x1, TileSize); x < rect.x2 && err.OK(); x += TileSize) {
-		for (int64_t y = RoundDown64(rect.y1, TileSize); y < rect.y2 && err.OK(); y += TileSize) {
-			os::File f;
-			err = f.Open(PathOfTile(x / TileSize, y / TileSize));
+	for (int64_t x = rect.x1; x < rect.x2 && err.OK(); x += TileSize) {
+		for (int64_t y = rect.y1; y < rect.y2 && err.OK(); y += TileSize) {
+			if (sparseLoadMatrix) {
+				int tx = int((x - rect.x1) / TileSize);
+				int ty = int((y - rect.y1) / TileSize);
+				int tw = int((rect.x2 - rect.x1) / TileSize);
+				if (!sparseLoadMatrix[ty * tw + tx])
+					continue;
+			}
+			//os::File f;
+			//err = f.Open(PathOfTile(x / TileSize, y / TileSize));
+			io::Reader* reader = nullptr;
+			err                = RawStorage->Open(PathOfTile(zoomLevel, x / TileSize, y / TileSize), reader);
 			if (os::IsNotExist(err)) {
 				err = Error();
 				//img.Fill(Rect32(x - rect.x1, y - rect.y1, x - rect.x1 + TileSize, y - rect.y1 + TileSize), 0);
@@ -35,7 +66,7 @@ Error InfiniteBitmap::Load(gfx::Rect64 rect, gfx::Image& img) const {
 				break;
 			}
 			size_t nRead = encBufSize;
-			err          = f.Read(encBuf, nRead);
+			err          = reader->Read(encBuf, nRead);
 			if (!err.OK())
 				break;
 			if (nRead == encBufSize) {
@@ -64,7 +95,12 @@ Error InfiniteBitmap::Load(gfx::Rect64 rect, gfx::Image& img) const {
 	return err;
 }
 
-Error InfiniteBitmap::Save(gfx::Rect64 rect, const gfx::Image& img) const {
+// Note: When this function only supported plain old files on the local filesystem, then it was
+// more efficient than it is right now, because it would stream the strips out to the file,
+// as it compressed them. However, in order to support GCS, we need to just batch up all writes
+// into a single API call. I never measured the performance loss due to this change, but I
+// suspect it's negligible.
+Error InfiniteBitmap::Save(int zoomLevel, gfx::Rect64 rect, const gfx::Image& img, bool* sparseSaveMatrix) const {
 	IMQS_ASSERT(rect.x1 % TileSize == 0);
 	IMQS_ASSERT(rect.y1 % TileSize == 0);
 	IMQS_ASSERT(rect.x2 % TileSize == 0);
@@ -77,14 +113,26 @@ Error InfiniteBitmap::Save(gfx::Rect64 rect, const gfx::Image& img) const {
 	uint8_t*  encBuf       = (uint8_t*) malloc(encBufSize);
 	uint8_t*  decBuf       = (uint8_t*) malloc(rawStripSize);
 	uint32_t* strips       = new uint32_t[StripsPerTile];
-	for (int64_t x = RoundDown64(rect.x1, TileSize); x < rect.x2 && err.OK(); x += TileSize) {
-		for (int64_t y = RoundDown64(rect.y1, TileSize); y < rect.y2 && err.OK(); y += TileSize) {
-			os::File f;
-			err = f.Create(PathOfTile(x / TileSize, y / TileSize));
-			if (!err.OK())
-				break;
-			// this is just a seek
-			err = f.Write(strips, sizeof(uint32_t) * StripsPerTile);
+	//ohash::map<string, string> headers      = {
+	//    {"Content-Type", "road-tile-1"},
+	//};
+	io::Buffer writeBuf;
+	for (int64_t x = rect.x1; x < rect.x2 && err.OK(); x += TileSize) {
+		for (int64_t y = rect.y1; y < rect.y2 && err.OK(); y += TileSize) {
+			if (sparseSaveMatrix) {
+				int tx = int((x - rect.x1) / TileSize);
+				int ty = int((y - rect.y1) / TileSize);
+				int tw = int((rect.x2 - rect.x1) / TileSize);
+				if (!sparseSaveMatrix[ty * tw + tx])
+					continue;
+			}
+			//os::File f;
+			//err = f.Create(PathOfTile(x / TileSize, y / TileSize));
+			//if (!err.OK())
+			//	break;
+			writeBuf.Len = 0;
+			// this is just a seek (we come back at the end and write the actual values)
+			err = writeBuf.Write(strips, sizeof(uint32_t) * StripsPerTile);
 			if (!err.OK())
 				break;
 			for (int strip = 0; strip < StripsPerTile; strip++) {
@@ -95,15 +143,19 @@ Error InfiniteBitmap::Save(gfx::Rect64 rect, const gfx::Image& img) const {
 				IMQS_ASSERT(r > 0);
 				//IMQS_ASSERT(r > 0 && r <= 65535);
 				strips[strip] = (uint32_t) r;
-				err           = f.Write(encBuf, r);
+				err           = writeBuf.Write(encBuf, r);
 				if (!err.OK())
 					break;
 			}
 			// write the final strip size values
-			err = f.Seek(0, io::SeekWhence::Begin);
-			if (!err.OK())
-				break;
-			err = f.Write(strips, sizeof(uint32_t) * StripsPerTile);
+			//err = f.Seek(0, io::SeekWhence::Begin);
+			//if (!err.OK())
+			//	break;
+			//err = f.Write(strips, sizeof(uint32_t) * StripsPerTile);
+			//if (!err.OK())
+			//	break;
+			memcpy(writeBuf.Buf, strips, sizeof(uint32_t) * StripsPerTile);
+			err = RawStorage->Create(PathOfTile(zoomLevel, x / TileSize, y / TileSize), FileStorageClass::Regional, writeBuf.Buf, writeBuf.Len);
 			if (!err.OK())
 				break;
 		}
@@ -114,7 +166,8 @@ Error InfiniteBitmap::Save(gfx::Rect64 rect, const gfx::Image& img) const {
 	return err;
 }
 
-Error InfiniteBitmap::CreateWebTiles() {
+Error InfiniteBitmap::CreateWebTiles(int zoomLevel) {
+	string                   RootDir = "foobar"; // HACK to get this compiling during refactor
 	vector<os::FindFileItem> all;
 	auto                     err = os::FindFiles(RootDir, [&all](const os::FindFileItem& item) -> bool {
         if (item.IsDir)
@@ -129,7 +182,7 @@ Error InfiniteBitmap::CreateWebTiles() {
 	int webTileSize = 256;
 
 	// first zoom level
-	int firstLevel = 25;
+	//int firstLevel = 25;
 
 	int          jpegQuality  = 90;
 	JpegSampling jpegSampling = JpegSampling::Samp422;
@@ -155,7 +208,7 @@ Error InfiniteBitmap::CreateWebTiles() {
 		auto  ensureLoaded = [&]() -> Error {
             lock_guard<mutex> lock(loadLock);
             if (!isLoaded) {
-                auto err = Load(Rect64(x * TileSize, y * TileSize, (x + 1) * TileSize, (y + 1) * TileSize), img);
+                auto err = Load(zoomLevel, Rect64(x * TileSize, y * TileSize, (x + 1) * TileSize, (y + 1) * TileSize), img);
                 if (!err.OK())
                     return err;
             }
@@ -194,7 +247,7 @@ Error InfiniteBitmap::CreateWebTiles() {
 			int     cy         = chunks[i].y;
 			int64_t absX       = absMacroX + cx;
 			int64_t absY       = absMacroY + cy;
-			string  outTileDir = path::Join(outDir, ItoA(firstLevel), ItoA(absX));
+			string  outTileDir = path::Join(outDir, ItoA(zoomLevel), ItoA(absX));
 			auto    e          = os::MkDirAll(outTileDir);
 			if (!e.OK()) {
 				setLockedError(e);
@@ -228,8 +281,8 @@ Error InfiniteBitmap::CreateWebTiles() {
 	return Error();
 }
 
-std::string InfiniteBitmap::PathOfTile(int64_t tx, int64_t ty) const {
-	return path::Join(RootDir, tsf::fmt("t-%08d-%08d.lz4", tx, ty));
+std::string InfiniteBitmap::PathOfTile(int zoomLevel, int64_t tx, int64_t ty) const {
+	return tsf::fmt("t-%02d-%08d-%08d.lz4", zoomLevel, tx, ty);
 }
 
 int64_t InfiniteBitmap::RoundDown64(int64_t x, int32_t y) {

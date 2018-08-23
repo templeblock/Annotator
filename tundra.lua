@@ -86,6 +86,7 @@ Build {
 	Units = {
 		"units.lua",
 	},
+	ScriptDirs = { "build" },
 	Passes= {
 		PchGen = { Name = "Precompiled Header Generation", BuildOrder = 1 },
 	},
@@ -108,19 +109,19 @@ Build {
 			Name = "linux-clang",
 			DefaultOnHost = "linux",
 			Inherit = unix_common,
-			Tools = { "clang" },
+			Tools = { "clang", "cuda" },
 		},
 		{
 			Name = "win32-msvc2015",
 			SupportedHosts = { "windows" },
 			Inherit = win_common,
-			Tools = { {"msvc-vs2015"; TargetArch = "x86"} },
+			Tools = { {"msvc-vs2015"; TargetArch = "x86"}, "cuda" },
 		},
 		{
 			Name = "win64-msvc2015",
 			DefaultOnHost = "windows",
 			Inherit = win_common,
-			Tools = { {"msvc-vs2015"; TargetArch = "x64"} },
+			Tools = { {"msvc-vs2015"; TargetArch = "x64"}, "cuda" },
 		},
 	},
 	IdeGenerationHints = {
