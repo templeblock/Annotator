@@ -128,7 +128,7 @@ static unsigned long GetNumDecodeSurfaces(cudaVideoCodec eCodec, unsigned int nW
 */
 int NvDecoder::HandleVideoSequence(CUVIDEOFORMAT *pVideoFormat)
 {
-    START_TIMER
+    //START_TIMER
     m_videoInfo.str("");
     m_videoInfo.clear();
     m_videoInfo << "Video Input Information" << std::endl
@@ -266,7 +266,7 @@ int NvDecoder::HandleVideoSequence(CUVIDEOFORMAT *pVideoFormat)
     CUDA_DRVAPI_CALL(cuCtxPushCurrent(m_cuContext));
     NVDEC_API_CALL(cuvidCreateDecoder(&m_hDecoder, &videoDecodeCreateInfo));
     CUDA_DRVAPI_CALL(cuCtxPopCurrent(NULL));
-    STOP_TIMER("Session Initialization Time: ");
+    //STOP_TIMER("Session Initialization Time: ");
     return nDecodeSurface;
 }
 

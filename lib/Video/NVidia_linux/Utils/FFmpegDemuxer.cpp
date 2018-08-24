@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "FFmpegDemuxer.h"
+#include "../../IVideo.h"
 
 namespace imqs {
 namespace video {
@@ -39,7 +40,7 @@ Error FFmpegDemuxer::Open(AVFormatContext* _fmtc) {
 	if (!fmtc)
 		return Error("No AVFormatContext provided.");
 
-	LOG(INFO) << "Media format: " << fmtc->iformat->long_name << " (" << fmtc->iformat->name << ")";
+	//LOG(INFO) << "Media format: " << fmtc->iformat->long_name << " (" << fmtc->iformat->name << ")";
 
 	ck(avformat_find_stream_info(fmtc, NULL));
 	iVideoStream = av_find_best_stream(fmtc, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
@@ -131,7 +132,11 @@ Error FFmpegDemuxer::CreateFormatContext(const char* szFilePath, AVFormatContext
 	}
 	avformat_network_init();
 
-	return cuErr(avformat_open_input(&ctx, szFilePath, NULL, NULL));
+	int r = avformat_open_input(&ctx, szFilePath, NULL, NULL);
+	if (r < 0)
+		return IVideo::TranslateAvErr(r, tsf::fmt("Could not open video file %v", szFilePath).c_str());
+
+	return Error();
 }
 
 bool FFmpegDemuxer::Demux(uint8_t** ppVideo, int* pnVideoBytes, int64_t* pts) {

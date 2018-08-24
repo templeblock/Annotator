@@ -39,7 +39,7 @@ Error NVVideo::Initialize(int iGPU) {
 	err |= cuErr(cuDeviceGet(&cuDevice, iGPU));
 	char szDeviceName[80];
 	err |= cuErr(cuDeviceGetName(szDeviceName, sizeof(szDeviceName), cuDevice));
-	tsf::print("GPU in use: %v\n", szDeviceName);
+	//tsf::print("GPU in use: %v\n", szDeviceName);
 	err = cuErr(cuCtxCreate(&CUCtx, CU_CTX_SCHED_BLOCKING_SYNC, cuDevice));
 	if (!err.OK())
 		return err;
@@ -63,6 +63,11 @@ Error NVVideo::OpenFile(std::string filename) {
 	if (!err.OK())
 		return err;
 	return Error();
+}
+
+void NVVideo::Info(int& width, int& height) {
+	width  = Width();
+	height = Height();
 }
 
 void NVVideo::Close() {
@@ -98,13 +103,16 @@ Error NVVideo::DecodeFrameRGBA(int width, int height, void* buf, int stride, dou
 			DecodeThreadFunc();
 		});
 	} else if (DecodeState == DecodeStateFinished) {
-		return ErrEOF;
+		if (HostTail == HostHead)
+			return ErrEOF;
+		// else.. the decoder has finished, but the queue is not empty, so drain it
 	}
 
-	// decode thread is running
 	SemDecode->wait();
-	if (DecodeState == DecodeStateFinished)
+	if (HostTail == HostHead) {
+		IMQS_ASSERT(DecodeState == DecodeStateFinished);
 		return ErrEOF;
+	}
 
 	IMQS_ASSERT(HostTail < HostHead);
 
@@ -121,6 +129,10 @@ Error NVVideo::DecodeFrameRGBA(int width, int height, void* buf, int stride, dou
 
 	HostTail++;
 	return Error();
+}
+
+Error NVVideo::SeekToMicrosecond(int64_t microsecond, unsigned flags) {
+	return Error("Seeking is not supported in NVVideo");
 }
 
 Error NVVideo::InitBuffers() {

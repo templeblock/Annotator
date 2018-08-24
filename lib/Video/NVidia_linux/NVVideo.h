@@ -18,7 +18,7 @@ public:
 		DecodeStateFinished,
 	};
 	NVVideo();
-	~NVVideo();
+	~NVVideo() override;
 	Error Initialize(int iGPU = 0);
 	void  Close();
 	int   Width();
@@ -26,7 +26,9 @@ public:
 
 	// IVideo
 	Error OpenFile(std::string filename) override;
+	void  Info(int& width, int& height) override;
 	Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) override;
+	Error SeekToMicrosecond(int64_t microsecond, unsigned flags = Seek::None) override;
 
 private:
 	struct DeviceFrame {

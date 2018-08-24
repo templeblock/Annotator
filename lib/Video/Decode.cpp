@@ -4,8 +4,6 @@
 namespace imqs {
 namespace video {
 
-StaticError VideoFile::ErrNeedMoreData("Codec needs more data");
-
 double VideoStreamInfo::DurationSeconds() const {
 	return (double) Duration / (double) AV_TIME_BASE;
 }
@@ -54,12 +52,12 @@ Error VideoFile::OpenFile(std::string filename) {
 
 	int r = avformat_open_input(&FmtCtx, filename.c_str(), NULL, NULL);
 	if (r < 0)
-		return TranslateErr(r, tsf::fmt("Could not open video file %v", filename).c_str());
+		return TranslateAvErr(r, tsf::fmt("Could not open video file %v", filename).c_str());
 
 	r = avformat_find_stream_info(FmtCtx, NULL);
 	if (r < 0) {
 		Close();
-		return TranslateErr(r, "Could not find stream information");
+		return TranslateAvErr(r, "Could not find stream information");
 	}
 
 	auto err = OpenCodecContext(FmtCtx, AVMEDIA_TYPE_VIDEO, VideoStreamIdx, VideoDecCtx);
@@ -84,6 +82,11 @@ Error VideoFile::OpenFile(std::string filename) {
 
 	Filename = filename;
 	return Error();
+}
+
+void VideoFile::Info(int& width, int& height) {
+	width  = Width();
+	height = Height();
 }
 
 VideoStreamInfo VideoFile::GetVideoStreamInfo() {
@@ -216,18 +219,18 @@ Error VideoFile::DecodeFrameRGBA(int width, int height, void* buf, int stride, d
 				pkt.size = 0;
 				r        = av_read_frame(FmtCtx, &pkt);
 				if (r != 0)
-					return TranslateErr(r, "av_read_frame");
+					return TranslateAvErr(r, "av_read_frame");
 				r = avcodec_send_packet(VideoDecCtx, &pkt);
 				av_packet_unref(&pkt);
 				if (r == AVERROR_INVALIDDATA) {
 					// skip over invalid data, and keep trying
 				} else if (r != 0) {
-					return TranslateErr(r, "avcodec_send_packet");
+					return TranslateAvErr(r, "avcodec_send_packet");
 				}
 				break;
 			}
 			default:
-				return TranslateErr(r, "avcodec_receive_frame");
+				return TranslateAvErr(r, "avcodec_receive_frame");
 			}
 		}
 		IMQS_ASSERT(haveFrame);
@@ -300,22 +303,7 @@ Error VideoFile::RecvFrame() {
 	int ret = avcodec_receive_frame(VideoDecCtx, Frame);
 	if (ret == 0)
 		return Error();
-	return TranslateErr(ret, "avcodec_receive_frame");
-}
-
-Error VideoFile::TranslateErr(int ret, const char* whileBusyWith) {
-	char errBuf[AV_ERROR_MAX_STRING_SIZE + 1];
-
-	switch (ret) {
-	case AVERROR_EOF: return ErrEOF;
-	case AVERROR(EAGAIN): return ErrNeedMoreData;
-	default:
-		av_strerror(ret, errBuf, sizeof(errBuf));
-		if (whileBusyWith)
-			return Error::Fmt("%v: %v", whileBusyWith, errBuf);
-		else
-			return Error::Fmt("AVERROR %v", errBuf);
-	}
+	return TranslateAvErr(ret, "avcodec_receive_frame");
 }
 
 Error VideoFile::OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, int& stream_idx, AVCodecContext*& dec_ctx) {

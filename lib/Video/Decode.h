@@ -5,18 +5,6 @@
 namespace imqs {
 namespace video {
 
-enum Seek {
-	None = 0,               // seek to nearest keyframe
-	Any  = AVSEEK_FLAG_ANY, // seek to any frame, even non-keyframes
-
-	// Note: ffmpeg has these:
-	// AVSEEK_FLAG_BACKWARD 1 ///< seek backward
-	// AVSEEK_FLAG_BYTE     2 ///< seeking based on position in bytes
-	// AVSEEK_FLAG_ANY      4 ///< seek to any frame, even non-keyframes
-	// AVSEEK_FLAG_FRAME    8 ///< seeking based on frame number
-	// We can add support for them if/when we figure out their exact behaviour
-};
-
 struct IMQS_VIDEO_API VideoStreamInfo {
 	int64_t    Duration  = 0; // AVFormatContext.duration
 	int64_t    NumFrames = 0; // AvStream.nb_frames
@@ -36,10 +24,8 @@ class IMQS_VIDEO_API VideoFile : public IVideo {
 public:
 	static void Initialize();
 
-	static StaticError ErrNeedMoreData; // Codec needs more data before it can deliver a frame/audio
-
 	VideoFile();
-	~VideoFile();
+	~VideoFile() override;
 
 	void            Close();
 	bool            IsOpen() const { return Filename != ""; }
@@ -50,13 +36,14 @@ public:
 	Error           SeekToFrame(int64_t frame, unsigned flags = Seek::None);
 	Error           SeekToFraction(double fraction_0_to_1, unsigned flags = Seek::None);
 	Error           SeekToSecond(double second, unsigned flags = Seek::None);
-	Error           SeekToMicrosecond(int64_t microsecond, unsigned flags = Seek::None);
 	double          LastFrameTimeSeconds() const;
 	int64_t         LastFrameTimeMicrosecond() const;
 
 	// IVideo
 	Error OpenFile(std::string filename) override;
+	void  Info(int& width, int& height) override;
 	Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) override;
+	Error SeekToMicrosecond(int64_t microsecond, unsigned flags = Seek::None) override;
 
 	void Dimensions(int& width, int& height) const;
 

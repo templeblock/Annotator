@@ -925,14 +925,14 @@ local CameraCalibrator = Program {
 local FrameServer = Program {
 	Name = "FrameServer",
 	Depends = {
-		winCrt, Video, Train, phttp, uberlog, tsf, gfx, pal, libjpeg_turbo, png, lz4
+		winCrt, Video, CUDA, Train, phttp, uberlog, tsf, gfx, pal, libjpeg_turbo, png, lz4
 	},
 	Env = {
 		PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 	},
 	Libs = { 
 		{ "Ws2_32.lib"; Config = winFilter },
-		{ "m", "rt", "stdc++"; Config = linuxFilter },
+		{ "omp", "m", "rt", "stdc++"; Config = linuxFilter },
 	},
 	PrecompiledHeader = {
 		Source = "app/FrameServer/pch.cpp",

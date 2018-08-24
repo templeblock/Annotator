@@ -114,7 +114,7 @@ Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string rootDir
 
 	for (size_t i = 0; i < videoFiles.size(); i++) {
 		auto progress = [&](size_t pos, size_t total) -> bool {
-			tsf::print("Video %v/%v. File %v/%v\r", i + 1, videoFiles.size(), pos + 1, total);
+			tsf::print("Video %v. File %v/%v\r", videoFiles[i], pos + 1, total);
 			fflush(stdout);
 			return true;
 		};
@@ -125,6 +125,7 @@ Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string rootDir
 		err = ExportLabeledImagePatches_Video(type, videoFiles[i], taxonomy, labels, progress);
 		if (!err.OK())
 			return err;
+		tsf::print("\n");
 	}
 	tsf::print("\n");
 	return Error();
@@ -136,7 +137,13 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 	if (!err.OK())
 		return err;
 
+#ifdef _WIN32
 	video::VideoFile video;
+	bool             enableSeek = true;
+#else
+	video::NVVideo video;
+	bool           enableSeek = false;
+#endif
 	err = video.OpenFile(videoFilename);
 	if (!err.OK())
 		return err;
@@ -145,9 +152,8 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 
 	int64_t lastFrameTime = 0;
 	int64_t micro         = 1000000;
-	bool    abort         = false;
 
-	for (size_t i = 0; i < labels.Frames.size() && !abort; i++) {
+	for (size_t i = 0; i < labels.Frames.size(); i++) {
 		const auto& frame = labels.Frames[i];
 		if (type == ExportTypes::Segmentation && !frame.HasPolygons())
 			continue;
@@ -155,7 +161,7 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 			continue;
 
 		// Only seek if frame is more than 20 seconds into the future. Haven't measured optimal metric to use here.
-		if (frame.Time - lastFrameTime > 20 * micro) {
+		if (enableSeek && frame.Time - lastFrameTime > 20 * micro) {
 			int64_t buffer = 5 * micro; // seek 5 seconds behind frame target
 			err            = video.SeekToMicrosecond(frame.Time - buffer);
 			if (!err.OK())
@@ -163,31 +169,34 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 		}
 
 		while (true) {
-			err = video.DecodeFrameRGBA(img.Width, img.Height, img.Data, img.Stride);
+			double frameSeconds = 0;
+			err                 = video.DecodeFrameRGBA(img.Width, img.Height, img.Data, img.Stride, &frameSeconds);
 			if (!err.OK())
-				return err;
-			int64_t pts   = video.LastFrameTimeMicrosecond();
+				break;
+			//int64_t pts   = video.LastFrameTimeMicrosecond();
+			int64_t pts   = frameSeconds * 1000000;
 			lastFrameTime = pts;
 			if (pts == frame.Time) {
 				// found our frame
-				//if (type == ExportTypes::Segmentation)
-				//	err = ExportLabeledImagePatches_Frame_Polygons(dir, frame.Time, frame, img);
-				//else
-				//	err = ExportLabeledImagePatches_Frame_Rect(type, dir, frame.Time, frame, img);
-				//if (!err.OK())
-				//	return err;
+				if (type == ExportTypes::Segmentation)
+					err = ExportLabeledImagePatches_Frame_Polygons(dir, frame.Time, frame, img);
+				else
+					err = ExportLabeledImagePatches_Frame_Rect(type, dir, frame.Time, frame, img);
+				if (!err.OK())
+					break;
 
 				if (prog != nullptr) {
-					if (!prog(i, labels.Frames.size())) {
-						abort = true;
-						break;
-					}
+					if (!prog(i, labels.Frames.size()))
+						err = Error("Cancelled");
 				}
 				break;
 			} else if (pts > frame.Time) {
-				tsf::print("Fail to find frame %v\n", frame.Time);
+				err = Error::Fmt("Fail to find frame %v", frame.Time);
 				break;
 			}
+		}
+		if (!err.OK()) {
+			return Error::Fmt("Error while finding frame %v: %v", frame.Time, err.Message());
 		}
 	}
 

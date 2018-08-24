@@ -629,11 +629,15 @@ void UI::DrawLabelBoxes() {
 			float centx = 0.5f * (rscaled.Left + rscaled.Right);
 			float centy = 0.5f * (rscaled.Top + rscaled.Bottom);
 			cx->StrokeRect(rscaled, xo::Color::RGBA(200, 0, 0, 150), 1);
-			float       fontSize  = 24;
-			auto        color     = xo::Color(180, 0, 0, 180);
-			const char* font      = "Segoe UI Bold";
-			bool        isLabeled = true;
-			string      labelStr;
+			float fontSize = 24;
+			auto  color    = xo::Color(180, 0, 0, 180);
+#ifdef _WIN32
+			const char* font = "Segoe UI Bold";
+#else
+			const char* font = "Ubuntu";
+#endif
+			bool   isLabeled = true;
+			string labelStr;
 			if (label.Classes.size() == 0) {
 				labelStr  = "u";
 				isLabeled = false;

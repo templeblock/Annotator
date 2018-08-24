@@ -57,7 +57,7 @@ static void EncodeFrame(string codec, const void* buf, int width, int height, in
 	} else if (codec == "jpeg") {
 		itype = gfx::ImageType::Jpeg;
 		w.SetHeader("Content-Type", "image/jpeg");
-		err = io.SaveJpeg(width, height, stride, buf, quality != -1 ? quality : 95, encbuf, encsize);
+		err = io.SaveJpeg(width, height, stride, buf, quality != -1 ? quality : 95, gfx::JpegSampling::Samp444, encbuf, encsize);
 	} else if (codec == "imqs") {
 		w.SetHeader("Content-Type", "image/x-imqs");
 		IMQS_ASSERT(stride == width * 4);
@@ -169,7 +169,7 @@ static void HandleHttp(SessionStore& sessions, phttp::Response& w, phttp::Reques
 		if (r.QueryVal("quality") == "")
 			quality = -1;
 		if (hasMicros) {
-			auto err = ses->Video.SeekToMicrosecond(micros);
+			auto err = ses->Video.SeekToMicrosecond(micros, video::Seek::Any);
 			if (!err.OK()) {
 				w.SetStatusAndBody(phttp::Status400_Bad_Request, tsf::fmt("Seek to %v microseconds failed: %v", micros, err.Message()));
 				return;

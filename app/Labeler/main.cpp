@@ -77,6 +77,20 @@ void xoMain(xo::SysWnd* wnd) {
 	}
 	*/
 
+	if (true) {
+		// rsync -av /home/ben/win/t/Temp/ML/labels/ /home/ben/mldata/train/labels/
+		tsf::print("Exporting patches...\n");
+		using namespace imqs::train;
+		auto taxonomy = CreateTaxonomy(false);
+		auto err      = ExportLabeledImagePatches_Video_Bulk(ExportTypes::Jpeg, "/home/ben/mldata/train", taxonomy);
+		if (!err.OK()) {
+			tsf::print("Error: %v\n", err.Message());
+			return;
+		}
+		tsf::print("Done exporting patches\n");
+		return;
+	}
+
 	wnd->SetTitle("IMQS Video Labeler");
 	wnd->Doc()->ClassParse("font-medium", "font-size: 14ep");
 	wnd->Doc()->ClassParse("shortcut", "font-size: 15ep; color: #000; width: 1em");
@@ -94,7 +108,8 @@ void xoMain(xo::SysWnd* wnd) {
 	//ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
 	//ui->VideoFilename = "C:\\mldata\\DSCF3022.MOV";
 	//ui->VideoFilename = "T:\\IMQS8_Data\\ML\\DSCF3022.MOV";
-	ui->VideoFilename = "/home/ben/mldata/mthata/Day3-11.MOV";
+	//ui->VideoFilename = "/home/ben/mldata/mthata/Day3-11.MOV";
+	ui->VideoFilename = "/home/ben/win/t/Temp/ML/ORT Day1 (2).MOV";
 	//ui->VideoFilename = "LOAD FILE";
 	if (!ui->OpenVideo())
 		ui->Render();
@@ -103,6 +118,7 @@ void xoMain(xo::SysWnd* wnd) {
 // On Windows, you must uncomment the line:
 //   PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 // inside units.lua, for "Labeler" project
+/*
 int main(int argc, char** argv) {
 	using namespace imqs::train;
 
@@ -121,3 +137,4 @@ int main(int argc, char** argv) {
 
 	return 1;
 }
+*/

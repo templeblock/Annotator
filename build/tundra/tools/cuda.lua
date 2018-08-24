@@ -49,11 +49,11 @@ end
 function apply(env, options)
   env:add_setup_function(cuda_setup)
 
-  cuda_path = native.getenv("CUDA_PATH")
-
   if platform.host_platform() == "windows" then
+    cuda_path = native.getenv("CUDA_PATH")
     nvcc = '"' .. cuda_path .. '\\bin\\nvcc.exe"'
   else
+    cuda_path = "/usr/local/cuda"
     nvcc = "/usr/local/cuda/bin/nvcc"
   end
 
