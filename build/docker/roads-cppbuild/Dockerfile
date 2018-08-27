@@ -34,7 +34,7 @@ RUN mv /build/fmmpeg /build/ffmpeg
 
 RUN cd /build/ffmpeg \
  && ./configure --enable-pic --disable-static --enable-shared --enable-cuda --enable-cuvid --enable-nvenc --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 \
- && make \
+ && make -j \
  && make install
 
 RUN git clone --depth 1 --branch 3.4.1 https://github.com/opencv/opencv.git /build/opencv \
