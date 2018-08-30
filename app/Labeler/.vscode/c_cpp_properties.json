@@ -13,7 +13,7 @@
             "includePath": [
                 "${workspaceFolder}",
                 "${workspaceFolder}/../..",
-                "${workspaceFolder}/../../third_party",
+                "${workspaceFolder}/../../third_party"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",

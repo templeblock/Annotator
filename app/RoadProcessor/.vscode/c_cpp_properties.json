@@ -14,7 +14,8 @@
                 "${workspaceFolder}",
                 "${workspaceFolder}/../..",
                 "${workspaceFolder}/../../third_party",
-                "${workspaceFolder}/../../third_party/glfw/deps"
+                "${workspaceFolder}/../../third_party/glfw/deps",
+                "/usr/local/cuda/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",

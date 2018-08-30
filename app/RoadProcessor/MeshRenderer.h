@@ -50,6 +50,7 @@ private:
 	void  MakeCurrent();
 	Error CompileShader(std::string vertexSrc, std::string fragSrc, GLuint& shader);
 	void  SetTextureLinearFilter();
+	void  SetTexture2D(const gfx::Image& img, bool sRGB);
 };
 
 } // namespace roadproc

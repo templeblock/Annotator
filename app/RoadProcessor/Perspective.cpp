@@ -9,6 +9,8 @@
 
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /home/ben/mldata/DSCF3040.MOV
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /home/ben/mldata/mthata/Day3-4.MOV
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective '/home/ben/mldata/train/ORT Day1 (2).MOV'
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective '/home/ben/mldata/train/Day5 (17).MOV'
 // docker run --runtime=nvidia --rm -v /home/ben/mldata:/mldata roadprocessor --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' perspective /mldata/DSCF3040.MOV
 
 // 7 samples per iteration, 10x1 grid
@@ -87,7 +89,9 @@ float NewtonSearch(float x, float dx, float desiredY, float stopAtPrecision, int
 		float y0   = func(x - dx);
 		float y1   = func(x + dx);
 		float grad = (y1 - y0) / (dx * 2);
-		x          = x - (y - desiredY) / grad;
+		if (grad == 0)
+			break;
+		x = x - (y - desiredY) / grad;
 	}
 	return x;
 }
@@ -192,6 +196,52 @@ gfx::Vec2f CameraToFlat(int frameWidth, int frameHeight, gfx::Vec2f cam, Perspec
 	return CameraToFlat(frameWidth, frameHeight, cam, pp.Z1, pp.ZX, pp.ZY);
 }
 
+// Given a camera sensor size, and perspective parameters, compute a crop of the sensor that
+// we will use, which will limit the width of the flattened image to 4096.
+// The scaling parameter pp.Z1 is also modified, so that the scale at the bottom of the frame remains 1.0
+gfx::Rect32 ComputeSensorCrop(int frameWidth, int frameHeight, PerspectiveParams& pp, int maxFlattenedWidth) {
+	auto widthAt = [=](float croppedHeight) -> float {
+		// This is a newton search INSIDE a newton search
+		PerspectiveParams ptemp = pp;
+		ptemp.Z1                = FindZ1ForIdentityScaleAtBottom(frameWidth, croppedHeight, ptemp.ZX, ptemp.ZY);
+		Frustum f               = ComputeFrustum(frameWidth, croppedHeight, ptemp);
+		return f.Width;
+	};
+	// There is a giant discontinuity in the computed frustum width, if pp.ZY is large enough to cause the horizon to
+	// be visible. What happens is that you end up with a divide by zero (or very close to zero), and this is what causes
+	// the discontinuity. You can see it in action in CameraToFlat, inside the division that computes computes yf.
+	// So, we need to make sure that we're always on the "correct" side of that cliff. The way to tell if we've crossed
+	// over that cliff, is to run ComputeFrustum, and check if the width is negative. If the width is negative, it means
+	// we're on the wrong side of the cliff.
+	// So our first step here, is to reduce our initial frameHeight, so that we're on the ride side of the cliff.
+	int croppedHeight = frameHeight;
+	while (true) {
+		Frustum f = ComputeFrustum(frameWidth, croppedHeight, pp);
+		if (f.Width > 0)
+			break;
+		croppedHeight -= 32;
+	}
+
+	// this iteration tends to just get stuck on an integer that can't bring it within 0.1 of the desired maxFlattenedWidth,
+	// but that's only because our objective function 'ComputeFrustum' takes integer inputs. But it's all OK - we just end up
+	// rounding down, and we're well within our limits (maxFlattenedWidth is not a hard limit).
+	croppedHeight = (int) NewtonSearch(croppedHeight, 1, maxFlattenedWidth, 0.1, 6, widthAt);
+	croppedHeight = min(croppedHeight, frameHeight);
+	pp.Z1         = FindZ1ForIdentityScaleAtBottom(frameWidth, croppedHeight, pp.ZX, pp.ZY);
+	Frustum fTest = ComputeFrustum(frameWidth, croppedHeight, pp);
+
+	// Has the newton search taken us back onto the other side of the cliff?
+	IMQS_ASSERT(fTest.Width > 0);
+
+	return Rect32(0, frameHeight - croppedHeight, frameWidth, frameHeight);
+}
+
+// For the time being (August 2018), it's OK to hardcode this limit to 4096. It makes our code
+// simpler if we can just bake this constant in right here.
+gfx::Rect32 ComputeSensorCropDefault(int frameWidth, int frameHeight, PerspectiveParams& pp) {
+	return ComputeSensorCrop(frameWidth, frameHeight, pp, 4096);
+}
+
 // Given a camera frame width and height, compute a frustum such that the bottom edge of the frustum
 // has the exact same resolution as the bottom edge of the camera frame.
 Frustum ComputeFrustum(int frameWidth, int frameHeight, float z1, float zx, float zy) {
@@ -211,6 +261,10 @@ Frustum ComputeFrustum(int frameWidth, int frameHeight, PerspectiveParams pp) {
 	return ComputeFrustum(frameWidth, frameHeight, pp.Z1, pp.ZX, pp.ZY);
 }
 
+Frustum ComputeFrustum(gfx::Rect32 sensorCrop, PerspectiveParams pp) {
+	return ComputeFrustum(sensorCrop.Width(), sensorCrop.Height(), pp);
+}
+
 // Use an iterative solution to find a value for Z1 (ie scale), which produces a 1:1 scale at
 // the bottom of our flattened space.
 float FindZ1ForIdentityScaleAtBottom(int frameWidth, int frameHeight, float zx, float zy) {
@@ -218,7 +272,7 @@ float FindZ1ForIdentityScaleAtBottom(int frameWidth, int frameHeight, float zx, 
 		auto f = ComputeFrustum(frameWidth, frameHeight, x, zx, zy);
 		return (f.X2 - f.X1) / frameWidth;
 	};
-	return NewtonSearch(1.0, 0.001, 1.0, 1e-6, 50, scale);
+	return NewtonSearch(1.0, 0.001, 1.0, 1e-6, 10, scale);
 }
 
 static void PrintCamToFlat(int frameWidth, int frameHeight, float z1, float zx, float zy, Vec2f cam) {
@@ -228,23 +282,29 @@ static void PrintCamToFlat(int frameWidth, int frameHeight, float z1, float zx, 
 }
 
 static void TestPerspectiveAndFrustum(float z1, float zx, float zy) {
-	int frameWidth  = 1920;
-	int frameHeight = 1080;
+	PerspectiveParams pp(z1, zx, zy);
+	int               frameWidth  = 1920;
+	int               frameHeight = 1080;
 	// compute raw numbers on z1, z2
-	auto f = ComputeFrustum(frameWidth, frameHeight, z1, zx, zy);
-	f.DebugPrintParams(z1, zx, zy, frameWidth, frameHeight);
+	auto f = ComputeFrustum(frameWidth, frameHeight, pp);
+	f.DebugPrintParams(pp.Z1, pp.ZX, pp.ZY, frameWidth, frameHeight);
 
 	// auto compute frustum
-	z1 = FindZ1ForIdentityScaleAtBottom(frameWidth, frameHeight, zx, zy);
-	f  = ComputeFrustum(frameWidth, frameHeight, z1, zx, zy);
-	f.DebugPrintParams(z1, zx, zy, frameWidth, frameHeight);
+	pp.Z1 = FindZ1ForIdentityScaleAtBottom(frameWidth, frameHeight, pp.ZX, pp.ZY);
+	f     = ComputeFrustum(frameWidth, frameHeight, pp);
+	f.DebugPrintParams(pp.Z1, pp.ZX, pp.ZY, frameWidth, frameHeight);
 
 	int w = frameWidth;
 	int h = frameHeight;
-	PrintCamToFlat(w, h, z1, zx, zy, Vec2f(0, 0));
-	PrintCamToFlat(w, h, z1, zx, zy, Vec2f(w, 0));
-	PrintCamToFlat(w, h, z1, zx, zy, Vec2f(0, h));
-	PrintCamToFlat(w, h, z1, zx, zy, Vec2f(w, h));
+	PrintCamToFlat(w, h, pp.Z1, pp.ZX, pp.ZY, Vec2f(0, 0));
+	PrintCamToFlat(w, h, pp.Z1, pp.ZX, pp.ZY, Vec2f(w, 0));
+	PrintCamToFlat(w, h, pp.Z1, pp.ZX, pp.ZY, Vec2f(0, h));
+	PrintCamToFlat(w, h, pp.Z1, pp.ZX, pp.ZY, Vec2f(w, h));
+
+	auto crop = ComputeSensorCropDefault(frameWidth, frameHeight, pp);
+	f         = ComputeFrustum(frameWidth, crop.Height(), pp);
+	tsf::print("Sensor crop: %v,%v - %v,%v (%v x %v)\n", crop.x1, crop.y1, crop.x2, crop.y2, crop.Width(), crop.Height());
+	f.DebugPrintParams(pp.Z1, pp.ZX, pp.ZY, frameWidth, crop.Height());
 
 	tsf::print("\n");
 }
@@ -428,14 +488,53 @@ static ImageDiffResult ImageDiff(MeshRenderer& rend, const Image& img1, const Im
 	return res;
 }
 
-static ImageDiffResult ImageDiffOptFlow(MeshRenderer& rend, const Image& img1, const Image& img2, Image& flat1, Image& flat2, float zx, float zy) {
+static ImageDiffResult MatchSingleBigBlock(const Image& img1, const Image& img2) {
+	// local contrast is essential for uniformly gray roads (ie good roads)
+	Image norm1 = img1;
+	Image norm2 = img2;
+	LocalContrast(norm1, 1, 5);
+	LocalContrast(norm2, 1, 5);
+
+	// 0.6 is a thumbsuck. we don't want too much travel (ie vehicle must not travel too fast, frame to frame).
+	int maxYDelta = img1.Height * 0.6;
+	int maxXDelta = 20;
+	// these sizes are arbitrary. bigger = more accurate. smaller = faster.
+	int mWidth  = img1.Width * 0.5;
+	mWidth      = (mWidth / 8) * 8; // ensure we're 8 pixel aligned, which makes us 8*4 = 32 byte aligned (for SIMD in DiffSum) (VERY IMPORTANT for performance!!)
+	int mHeight = 20;
+	// "If the vehicle is moving forward, then r2 moves UP to find it's match in r1".
+	Rect32 r2((img1.Width - mWidth) / 2, img1.Height - mHeight, 0, 0);
+	r2.x2 = r2.x1 + mWidth;
+	r2.y2 = r2.y1 + mHeight;
+	IMQS_ASSERT(r2.x1 >= 0 && r2.y1 >= 0 && r2.x2 <= img1.Width && r2.y2 <= img1.Height);
+	maxYDelta       = min<int>(maxYDelta, r2.y1);
+	int64_t bestSum = INT64_MAX;
+	for (int dx = -maxXDelta; dx <= maxXDelta; dx++) {
+		for (int dy = -maxYDelta; dy <= 0; dy++) {
+			Rect32 r1 = r2;
+			r1.Offset(dx, dy);
+			IMQS_ASSERT(r1.x1 >= 0 && r1.y1 >= 0 && r1.x2 <= img1.Width && r1.y2 <= img1.Height);
+			int64_t sum = DiffSum(norm1, norm2, r1, r2);
+			if (sum < bestSum)
+				bestSum = sum;
+		}
+	}
+	ImageDiffResult res;
+	res.OptFlowDiff = (float) bestSum;
+	res.MatchCount  = 101;
+	res.XVar        = (float) bestSum;
+	//tsf::print("diff: %f\n", (double) bestSum);
+	return res;
+}
+
+static ImageDiffResult ImageDiffOptFlow(MeshRenderer& rend, const Image& img1, const Image& img2, Image& flat1, Image& flat2, Rect32 sensorCrop, PerspectiveParams pp) {
 	bool debug = false;
 
-	float z1         = FindZ1ForIdentityScaleAtBottom(img1.Width, img1.Height, zx, zy);
-	auto  f          = ComputeFrustum(img1.Width, img1.Height, z1, zx, zy);
-	auto  flatOrigin = CameraToFlat(img1.Width, img1.Height, Vec2f(0, 0), z1, zx, zy);
-	int   orgX       = (int) flatOrigin.x;
-	int   orgY       = (int) flatOrigin.y;
+	//float z1         = FindZ1ForIdentityScaleAtBottom(img1.Width, img1.Height, zx, zy);
+	auto f          = ComputeFrustum(sensorCrop, pp);
+	auto flatOrigin = CameraToFlat(img1.Width, img1.Height, Vec2f(0, 0), pp);
+	int  orgX       = (int) flatOrigin.x;
+	int  orgY       = (int) flatOrigin.y;
 
 	int fX1     = f.Width / 2 + f.X1 + 2;
 	int fX2     = f.Width / 2 + f.X2 - 2;
@@ -448,18 +547,34 @@ static ImageDiffResult ImageDiffOptFlow(MeshRenderer& rend, const Image& img1, c
 	flat1.Alloc(ImageFormat::RGBA, fWidth, fHeight);
 	flat2.Alloc(ImageFormat::RGBA, fWidth, fHeight);
 
-	rend.RemovePerspectiveAndCopyOut(img1, nullptr, PerspectiveParams(z1, zx, zy), flat1, Rect32(fX1, fY1, fX2, fY2));
-	rend.RemovePerspectiveAndCopyOut(img2, nullptr, PerspectiveParams(z1, zx, zy), flat2, Rect32(fX1, fY1, fX2, fY2));
+	rend.RemovePerspectiveAndCopyOut(img1.Window(sensorCrop), nullptr, pp, flat1, Rect32(fX1, fY1, fX2, fY2));
+	rend.RemovePerspectiveAndCopyOut(img2.Window(sensorCrop), nullptr, pp, flat2, Rect32(fX1, fY1, fX2, fY2));
 
-	//flat1.SaveJpeg("/home/ben/p1.jpeg");
-	//flat2.SaveJpeg("/home/ben/p2.jpeg");
+	bool useOneBigBlock = true;
 
+	//img1.Window(sensorCrop).SaveFile("/home/ben/r1.png");
+	//img2.Window(sensorCrop).SaveFile("/home/ben/r2.png");
+	//flat1.SaveFile("/home/ben/p1.png");
+	//flat2.SaveFile("/home/ben/p2.png");
+
+	if (useOneBigBlock)
+		return MatchSingleBigBlock(flat1, flat2);
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// DEAD CODE BELOW
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	int         bottomOffset = 30;
 	OpticalFlow opt;
 	opt.EnableMedianFilter = false;
+	opt.SetupSearchDistances(img1.Width);
+	// 0.7 is thumbsuck. we don't want frame-to-frame distances to be 0.7 of the frame height. that's too much movement.
+	opt.AbsMinVSearch = max(opt.AbsMinVSearch, -int((sensorCrop.Height() - bottomOffset - opt.MatchRadius * 2) * 0.7));
 	Mesh mesh;
 	mesh.Initialize(10, 2);
 	float spacing = opt.MatchRadius * 2.5f;
-	int   mY      = flat1.Height - 30 - mesh.Height * spacing;
+	int   mY      = flat1.Height - bottomOffset - mesh.Height * spacing;
+
 	for (int y = 0; y < mesh.Height; y++) {
 		for (int x = 0; x < mesh.Width; x++) {
 			float    xf = ((float) x / (float) (mesh.Width - 1));
@@ -501,7 +616,7 @@ static ImageDiffResult ImageDiffOptFlow(MeshRenderer& rend, const Image& img1, c
 	auto ystats = math::MeanAndVariance<float, float>(ydiff);
 
 	ImageDiffResult res;
-	res.MatchCount  = 101;
+	res.MatchCount  = 101; // bogus value to satisfy the "good enough match" criteria
 	res.XMean       = avg.x;
 	res.YMean       = -avg.y; // negate, so that positive numbers indicate forward travel
 	res.XVar        = 10 * sqrt(xstats.second) + sqrt(ystats.second) + flow.Diff / 200.0f;
@@ -511,14 +626,33 @@ static ImageDiffResult ImageDiffOptFlow(MeshRenderer& rend, const Image& img1, c
 	return res;
 }
 
+// Downscale the two images a lot, and then return true if their diff exceeds a threshold
+// This can incorrectly return FALSE if the road is extremely uniform.
+bool IsVehicleMoving(const gfx::Image& img1, const gfx::Image& img2) {
+	auto i1 = img1.HalfSizeCheap();
+	auto i2 = img2.HalfSizeCheap();
+	for (int i = 0; i < 4; i++) {
+		i1 = i1.HalfSizeCheap();
+		i2 = i2.HalfSizeCheap();
+	}
+	//i1.SaveJpeg("/home/ben/move1.jpeg");
+	//i2.SaveJpeg("/home/ben/move2.jpeg");
+	Rect32 r(0, 0, i1.Width, i1.Height);
+	double diff = DiffSum(i1, i2, r, r) / (double) (i1.Width * i1.Height);
+	// This constant of 4 here was determined by observing a few videos of Mthata.
+	// To see stationary examples, find a video where the car was left idling for a while, before
+	// it starts to move.
+	return diff > 4;
+}
+
 static StaticError ErrTooFewGoodFrames("Too few good frames");
 
 // If we have less than this number of valid (ie decent quality) frame pairs, then the entire process is considered a failure
-static const int MinValidSamples = 40;
+static const int MinValidSamples = 7;
 
 // we store nSamples many pairs of frames in memory
 // A 1920x1080 RGBA image takes 8 MB memory. So 20 pairs is 316 MB, 100 pairs is 1.6 GB
-static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEstimate) {
+static Error EstimateZY(vector<string> videoFiles, int nSamples, FlattenParams& bestParams) {
 	video::VideoFile video;
 	auto             err = video.OpenFile(videoFiles[0]);
 	if (!err.OK())
@@ -529,11 +663,11 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 	// seconds apart each sample
 	double spacing = video.GetVideoStreamInfo().DurationSeconds() / (nSamples + 1);
 
-	int width  = video.Width();
-	int height = video.Height();
+	int videoWidth  = video.Width();
+	int videoHeight = video.Height();
 
 	if (global::Lens != nullptr) {
-		err = global::Lens->InitializeDistortionCorrect(video.Width(), video.Height());
+		err = global::Lens->InitializeDistortionCorrect(videoWidth, videoHeight);
 		if (!err.OK())
 			return err;
 	}
@@ -547,10 +681,10 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 		if (!err.OK())
 			return err;
 		pair<Image, Image> sample;
-		sample.first.Alloc(gfx::ImageFormat::RGBA, width, height);
-		sample.second.Alloc(gfx::ImageFormat::RGBA, width, height);
-		err = video.DecodeFrameRGBA(width, height, sample.first.Data, sample.second.Stride);
-		err |= video.DecodeFrameRGBA(width, height, sample.second.Data, sample.second.Stride);
+		sample.first.Alloc(gfx::ImageFormat::RGBA, videoWidth, videoHeight);
+		sample.second.Alloc(gfx::ImageFormat::RGBA, videoWidth, videoHeight);
+		err = video.DecodeFrameRGBA(videoWidth, videoHeight, sample.first.Data, sample.second.Stride);
+		err |= video.DecodeFrameRGBA(videoWidth, videoHeight, sample.second.Data, sample.second.Stride);
 		if (!err.OK())
 			return err;
 		samples.push_back(std::move(sample));
@@ -579,11 +713,18 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 		// pairs of zy and X match variance, which we fit a parabola to.
 		vector<pair<double, double>> zyAndVar;
 
-		int nsteps = 7;
+		int nsteps = 9;
 		for (int step = 0; step < nsteps; step++) {
-			float zy = zy_min + step * (zy_max - zy_min) / (nsteps - 1);
-			float z1 = FindZ1ForIdentityScaleAtBottom(samples[0].first.Width, samples[0].first.Height, zx, zy);
-			auto  f  = ComputeFrustum(samples[0].first.Width, samples[0].first.Height, z1, zx, zy);
+			PerspectiveParams pp;
+			pp.ZY = zy_min + step * (zy_max - zy_min) / (nsteps - 1);
+			//tsf::print("zy: %.10f\n", pp.ZY);
+			//pp.ZY = -0.0009;
+
+			// This sensor crop value must be consistent with the final value that the code uses, down below.
+			auto sensorCrop = ComputeSensorCropDefault(videoWidth, videoHeight, pp);
+			// downscale image
+			pp.Z1 *= 0.5;
+			auto f = ComputeFrustum(sensorCrop, pp);
 
 			err = rend.ResizeFrameBuffer(f.Width, f.Height);
 			if (!err.OK())
@@ -600,12 +741,18 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 				if (tooFew[i] >= 5 || tooSlow[i] >= 5) {
 					continue;
 				}
-				const auto&     sample = samples[i];
+				const auto& sample = samples[i];
+
+				if (!IsVehicleMoving(sample.first, sample.second)) {
+					tooFew[i]++;
+					continue;
+				}
+
 				ImageDiffResult diff;
 				if (useOpticalFlow)
-					diff = ImageDiffOptFlow(rend, sample.first, sample.second, flat1, flat2, zx, zy);
+					diff = ImageDiffOptFlow(rend, sample.first, sample.second, flat1, flat2, sensorCrop, pp);
 				else
-					diff = ImageDiff(rend, sample.first, sample.second, zx, zy);
+					diff = ImageDiff(rend, sample.first, sample.second, pp.ZX, pp.ZY);
 
 				if (diff.MatchCount < 100) {
 					tooFew[i]++;
@@ -614,16 +761,18 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 					//nsample++;
 					//tsf::print("%3d, %5d, X:(%8.3f, %8.3f), Y(%8.3f, %8.3f) Flow(%8.3f)\n", i, diff.MatchCount, diff.XMean, diff.XVar, diff.YMean, diff.YVar, diff.OptFlowDiff);
 					// We need to be moving forward, and YMean predicts this. Typical road speed is around 100 to 300 pixels.
-					if (diff.YMean < 20) {
-						tooSlow[i]++;
-					} else {
-						stats.emplace_back(diff.XVar, diff.YVar);
-						flowDiff += diff.OptFlowDiff;
-					}
+					// [UPDATE] Gigantic perspective factors such as -0.0027 will masquerade here as a zero Y speed, so we can no longer
+					// use this as a metric to say that the vehicle is not moving fast enough.
+					//if (diff.YMean < 20) {
+					//	tooSlow[i]++;
+					//} else {
+					stats.emplace_back(diff.XVar, diff.YVar);
+					flowDiff += diff.OptFlowDiff;
+					//}
 				}
 			}
 			if (stats.size() < MinValidSamples) {
-				tsf::print("Too few valid frames (z1 = %.8f, frames = %v/%v)\n", z1, stats.size(), samples.size());
+				tsf::print("Too few valid frames (z1 = %.8f, frames = %v/%v)\n", pp.Z1, stats.size(), samples.size());
 				return ErrTooFewGoodFrames;
 			}
 			sort(stats.begin(), stats.end(), [](Vec2d a, Vec2d b) { return a.size() < b.size(); });
@@ -636,26 +785,12 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 			double nsample = stats.size() - 2 * burn;
 			score /= nsample;
 			flowDiff /= nsample;
-			zyAndVar.emplace_back(zy, score);
+			zyAndVar.emplace_back(pp.ZY, score);
 			if (debugPrint)
-				tsf::print("%.6f,%.3f,%v,%v,%v,[flow diff: %v]\n", zy, score, nsample, f.Width, f.Height, flowDiff);
+				tsf::print("%.6f,%.3f,%v,%v,%v,[flow diff: %v]\n", pp.ZY, score, nsample, f.Width, f.Height, flowDiff);
 			//z2 += 0.00005;
 		}
 
-		/*
-		// scale and bias the zy values so that the quadratic fit has better conditioned numbers
-		//float zyFitBias  = 0.0009;
-		//float zyFitScale = 1000000;
-		float zyFitBias  = 0;
-		float zyFitScale = 1;
-		for (auto& p : zyAndVar)
-			p.first = (p.first + zyFitBias) * zyFitScale;
-
-		double a, b, c;
-		FitQuadratic(zyAndVar, a, b, c);
-		double bestZY = -b / (2 * a);
-		zy_estimate   = bestZY / zyFitScale - zyFitBias;
-		*/
 		double a, b, c;
 		FitQuadratic(zyAndVar, a, b, c);
 		zy_quadratic = -b / (2 * a);
@@ -675,12 +810,14 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 		return Error();
 	};
 
-	//double zy_min = -0.0011;
-	//double zy_max = -0.0002;
-	double zy_min             = -0.0012;
-	double zy_max             = -0.0002;
+	double zy_abs_min = -0.0027;
+	//double zy_abs_min = -0.001;
+	double zy_abs_max = -0.0001;
+
+	double zy_min             = zy_abs_min;
+	double zy_max             = zy_abs_max;
 	double radiusShrinkFactor = 0.3; // On every iteration, narrow the search window by this much
-	for (int iter = 0; iter < 3; iter++) {
+	for (int iter = 0; iter < 5; iter++) {
 		double zyBest      = 0;
 		double zyQuadratic = 0;
 		auto   err         = estimate(zy_min, zy_max, zyBest, zyQuadratic);
@@ -691,35 +828,28 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, float& bestZYEs
 			tsf::print("estimate: %.6f, %.6f (%v)\n", zyBest, zyQuadratic, quadraticGood ? "match" : "no match");
 		if (quadraticGood)
 			zyBest = zyQuadratic;
-		if (zyBest < -0.0012) {
-			if (debugPrint)
-				tsf::print("Clamping to -0.0012\n");
-			zyBest = -0.0012;
-		}
-		double radius  = radiusShrinkFactor * (zy_max - zy_min) / 2;
-		zy_min         = zyBest - radius;
-		zy_max         = zyBest + radius;
-		bestZYEstimate = (float) zyBest;
-		/*
-		if (quadraticGood && iter >= 2) {
-			//bestZYEstimate = (float) zyQuadratic;
-			if (debugPrint)
-				tsf::print("quadratic and min agree, so picking quadratic and stopping\n");
-			break;
-		}
-		*/
+		zyBest        = math::Clamp(zyBest, zy_abs_min, zy_abs_max);
+		double radius = radiusShrinkFactor * (zy_max - zy_min) / 2;
+		zy_min        = zyBest - radius;
+		zy_max        = zyBest + radius;
+		zy_min        = max(zy_min, zy_abs_min);
+		zy_max        = min(zy_max, zy_abs_max);
+		// The call here to ComputeSensorCropDefault() must match the call inside estimate()
+		bestParams.PP         = PerspectiveParams();
+		bestParams.PP.ZY      = (float) zyBest;
+		bestParams.SensorCrop = ComputeSensorCropDefault(videoWidth, videoHeight, bestParams.PP);
 	}
 
 	return Error();
 }
 
 Error DoPerspective(std::vector<std::string> videoFiles, float& zy) {
-	zy           = 0;
-	int nSamples = (int) (MinValidSamples * 1.5);
+	FlattenParams fp;
+	int           nSamples = (int) (MinValidSamples * 1.5);
 	//int   nSamples = 30;
 	Error err;
 	for (; nSamples < 200; nSamples = int(nSamples * 1.5)) {
-		err = EstimateZY(videoFiles, nSamples, zy);
+		err = EstimateZY(videoFiles, nSamples, fp);
 		if (err.OK())
 			break;
 		else if (err == ErrTooFewGoodFrames)
@@ -730,12 +860,29 @@ Error DoPerspective(std::vector<std::string> videoFiles, float& zy) {
 	if (!err.OK())
 		return err;
 
-	tsf::print("ZY: %.6f\n", zy);
+	tsf::print("Z1:%.6f, ZY:%.6f, SensorCrop:%v,%v,%v,%v\n", fp.PP.Z1, fp.PP.ZY, fp.SensorCrop.x1, fp.SensorCrop.y1, fp.SensorCrop.x2, fp.SensorCrop.y2);
 	return Error();
 }
 
 int Perspective(argparse::Args& args) {
-	//TestPerspectiveAndFrustum(1, 0, -0.0007);
+	//auto f1 = ComputeFrustum(1920, 1080, 1, 0, -0.00180);
+	//auto f2 = ComputeFrustum(1920, 1080, 1, 0, -0.00185);
+	//auto f3 = ComputeFrustum(1920, 1080, 1, 0, -0.00190);
+	//for (float zy = -0.0025f; zy <= 0; zy += 0.0001f) {
+	//	auto f = ComputeFrustum(1920, 1080, 1, 0, zy);
+	//	tsf::print("%.6f: %v\n", zy, f.Width);
+	//}
+	/*
+	{
+		PerspectiveParams pp(1, 0, -0.0028);
+		auto              sensorCrop = ComputeSensorCropDefault(1280, 720, pp);
+		auto              f1         = ComputeFrustum(sensorCrop, pp);
+		f1.DebugPrintParams(pp.Z1, pp.ZX, pp.ZY, sensorCrop.Width(), sensorCrop.Height());
+	}
+	TestPerspectiveAndFrustum(1, 0, -0.0025);
+	TestPerspectiveAndFrustum(1, 0, -0.0013);
+	TestPerspectiveAndFrustum(1, 0, -0.0007);
+	*/
 	//TestPerspectiveAndFrustum(1, 0.00001, -0.0007);
 	auto  videoFiles = strings::Split(args.Params[0], ',');
 	float zy         = 0;

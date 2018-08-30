@@ -13,15 +13,23 @@ namespace roadproc {
 // this is just to make things easier to see when debugging images, but results are identical. we actually want 1x scale to minimize clipping
 const int DebugBrightenLocalContrast = 1;
 
-static void    LocalContrast(Image& img, int size, int iterations);
-static int32_t DiffSum(const Image& img1, const Image& img2, Rect32 rect1, Rect32 rect2);
-static double  ImageStdDev(const Image& img, Rect32 crop);
+static double ImageStdDev(const Image& img, Rect32 crop);
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 OpticalFlow::OpticalFlow() {
+}
+
+void OpticalFlow::SetupSearchDistances(int rawVideoWidth) {
+	double scale       = (double) rawVideoWidth / (double) 1920;
+	AbsMinHSearch      = int(-20 * scale);
+	AbsMaxHSearch      = int(20 * scale);
+	AbsMinVSearch      = int(-350 * scale);
+	AbsMaxVSearch      = int(10 * scale);
+	StableHSearchRange = int(10 * scale);
+	StableVSearchRange = int(10 * scale);
 }
 
 static Rect32 MakeBoxAroundPoint(int x, int y, int radius) {
@@ -453,6 +461,9 @@ int FixElementsTooFarFromGlobalBest(Mesh& warpMesh, Rect32 warpMeshValidRect, Ve
 // in warpImg, and we make sure that we don't try to align any grid cells that have
 // one or more blank pixels inside them.
 FlowResult OpticalFlow::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Image& _warpImg, const gfx::Image& _stableImg, gfx::Vec2f& bias) {
+	// Have you called SetupSearchDistances()?
+	IMQS_ASSERT(AbsMinVSearch != 0);
+
 	FlowResult result;
 	int        frameNumber = HistorySize++;
 
@@ -566,6 +577,7 @@ FlowResult OpticalFlow::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Im
 			}
 		}
 	}
+	IMQS_ASSERT(validCells.size() != 0);
 	warpMeshValidRect.x2++;
 	warpMeshValidRect.y2++;
 	IMQS_ASSERT(warpMeshValidRect.x1 >= 0);
@@ -631,7 +643,7 @@ FlowResult OpticalFlow::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Im
 						IMQS_ASSERT(false); // WarpScore brute force algo assumes all delta positions are populated.
 						continue;
 					}
-					int32_t sum = DiffSum(*warpImg, *stableImg, rect1, r2);
+					int32_t sum = (int32_t) DiffSum(*warpImg, *stableImg, rect1, r2);
 					IMQS_ASSERT(sum >= 0);
 					scores.At(c.x - warpMeshValidRect.x1, c.y - warpMeshValidRect.y1, dx - dxMin, dy - dyMin) = sum;
 				}
@@ -726,7 +738,7 @@ FlowResult OpticalFlow::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Im
 						// skip invalid rectangle which is outside of stableImg
 						continue;
 					}
-					int32_t sum = DiffSum(*warpImg, *stableImg, rect1, r2);
+					int32_t sum = (int32_t) DiffSum(*warpImg, *stableImg, rect1, r2);
 					//avgSum += sum;
 					if (sum < bestSum) {
 						bestSum = sum;
@@ -905,14 +917,16 @@ void OpticalFlow::DrawMesh(std::string filename, const gfx::Image& img, const Me
 }
 
 // Compute sum of absolute differences
-static int32_t DiffSum(const Image& img1, const Image& img2, Rect32 rect1, Rect32 rect2) {
+int64_t DiffSum(const Image& img1, const Image& img2, Rect32 rect1, Rect32 rect2) {
 	IMQS_ASSERT(img1.Format == img2.Format);
 	IMQS_ASSERT(img1.NumChannels() == 1 || img1.NumChannels() == 4);
 	IMQS_ASSERT(rect1.Width() == rect2.Width());
 	IMQS_ASSERT(rect1.Height() == rect2.Height());
-	int     w   = rect1.Width();
-	int     h   = rect1.Height();
-	int32_t sum = 0;
+	int     w      = rect1.Width();
+	int     h      = rect1.Height();
+	int64_t sum    = 0;
+	__m128i sum128 = {0};
+	__m256i sum256 = {0};
 	for (int y = 0; y < h; y++) {
 		if (img1.NumChannels() == 1) {
 			const uint8_t* p1 = img1.At(rect1.x1, rect1.y1 + y);
@@ -924,13 +938,42 @@ static int32_t DiffSum(const Image& img1, const Image& img2, Rect32 rect1, Rect3
 		} else {
 			const Color8* p1 = (const Color8*) img1.At(rect1.x1, rect1.y1 + y);
 			const Color8* p2 = (const Color8*) img2.At(rect2.x1, rect2.y1 + y);
-			for (int x = 0; x < w; x++) {
-				int r = abs((int) p1[x].r - (int) p2[x].r);
-				int g = abs((int) p1[x].g - (int) p2[x].g);
-				int b = abs((int) p1[x].b - (int) p2[x].b);
-				sum += r + g + b;
+			if (w % 8 == 0) {
+				__m256i lineSum = {0};
+				int     niter   = w / 8;
+				for (int x = 0; x < niter; x++, p1 += 8, p2 += 8) {
+					auto c1 = _mm256_loadu_si256((const __m256i*) p1);
+					auto c2 = _mm256_loadu_si256((const __m256i*) p2);
+					lineSum += _mm256_sad_epu8(c1, c2);
+				}
+				sum256 += lineSum;
+			} else if (w % 4 == 0) {
+				__m128i lineSum = {0};
+				int     niter   = w / 4;
+				for (int x = 0; x < niter; x++, p1 += 4, p2 += 4) {
+					auto c1 = _mm_loadu_si128((const __m128i*) p1);
+					auto c2 = _mm_loadu_si128((const __m128i*) p2);
+					lineSum += _mm_sad_epu8(c1, c2);
+				}
+				sum128 += lineSum;
+			} else {
+				for (int x = 0; x < w; x++) {
+					int r = abs((int) p1[x].r - (int) p2[x].r);
+					int g = abs((int) p1[x].g - (int) p2[x].g);
+					int b = abs((int) p1[x].b - (int) p2[x].b);
+					sum += r + g + b;
+				}
 			}
 		}
+	}
+	if (w % 8 == 0) {
+		sum += _mm256_extract_epi64(sum256, 0);
+		sum += _mm256_extract_epi64(sum256, 1);
+		sum += _mm256_extract_epi64(sum256, 2);
+		sum += _mm256_extract_epi64(sum256, 3);
+	} else if (w % 4 == 0) {
+		sum += _mm_extract_epi64(sum128, 0);
+		sum += _mm_extract_epi64(sum128, 1);
 	}
 	return sum;
 }
@@ -955,7 +998,7 @@ static double ImageStdDev(const Image& img, Rect32 crop) {
 	return dvar;
 }
 
-static void LocalContrast(Image& img, int size, int iterations) {
+void LocalContrast(Image& img, int size, int iterations) {
 	Image blur = img;
 	blur.BoxBlur(size, iterations);
 	//blur.SaveFile("blur.png");

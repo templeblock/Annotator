@@ -33,3 +33,6 @@
 
 // proj4
 #include <proj_api.h>
+
+// intrinsics for SSE,AVX,etc
+#include <x86intrin.h>

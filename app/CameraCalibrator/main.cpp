@@ -100,7 +100,12 @@ void xoMain(xo::SysWnd* wnd) {
 
 	//string       src = "C:\\Users\\benh\\Pictures\\perspective-1.png";
 	//string       src = "/home/ben/Pictures/vlcsnap-2018-06-22-14h33m23s250.png";
-	string       src = "/home/ben/Pictures/snappy.png";
+	//string       src = "/home/ben/Pictures/snappy.png";
+	//string src = "/home/ben/Pictures/vlcsnap-2018-08-27-15h11m17s398-bottom-half.png";
+	//string src = "/home/ben/Pictures/vlcsnap-2018-08-27-15h11m17s398-bottom-2-thirds.png";
+	//string       src = "/home/ben/Pictures/vlcsnap-2018-08-27-15h11m17s398-FHD.png";
+	//string       src = "/home/ben/Pictures/vlcsnap-2018-08-28-16h56m07s892-002704-325-crop.png";
+	string       src = "/home/ben/Pictures/vlcsnap-2018-08-30-10h18m24s551.png";
 	string       srcRaw;
 	gfx::ImageIO imgIO;
 	os::ReadWholeFile(src, srcRaw);
@@ -127,8 +132,8 @@ void xoMain(xo::SysWnd* wnd) {
 	root->OnMouseMove([=](xo::Event& ev) -> void {
 		if (!Manipulate)
 			return;
-		ZFactor1 = 1.0 + (ev.PointsRel[0].x - 500) * 0.001f;
-		ZFactor2 = (ev.PointsRel[0].y - 500) * 0.000002f;
+		ZFactor1 = 1.0 + (ev.PointsRel[0].x - 500) * 0.0015f;
+		ZFactor2 = (ev.PointsRel[0].y - 800) * 0.000003f;
 		zfactor1->SetText(tsf::fmt("%8.6f", ZFactor1).c_str());
 		zfactor2->SetText(tsf::fmt("%8.6f", ZFactor2).c_str());
 		auto c2d = canvas->GetCanvas2D();

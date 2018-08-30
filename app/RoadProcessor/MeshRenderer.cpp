@@ -418,16 +418,15 @@ void MeshRenderer::DrawMeshWithShader(GLuint shader, const Mesh& m, const gfx::I
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, tex[0]);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, img1.Width, img1.Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img1.Data);
+	// this texture is always real world colors, so it's sRGB
+	SetTexture2D(img1, true);
 	SetTextureLinearFilter();
 
 	if (img2) {
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, tex[1]);
-		if (img2->NumChannels() == 4)
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img2->Width, img2->Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img2->Data);
-		else if (img2->Format == ImageFormat::Gray)
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, img2->Width, img2->Height, 0, GL_RED, GL_UNSIGNED_BYTE, img2->Data);
+		// this is used as an adjustment texture (lens correction), so it's linear, not sRGB
+		SetTexture2D(*img2, false);
 		SetTextureLinearFilter();
 	}
 
@@ -614,6 +613,23 @@ void MeshRenderer::DrawLines(size_t nlines, const gfx::Vec2f* linevx, gfx::Color
 	glDisableVertexAttribArray(locvExtra);
 
 	IMQS_ASSERT(glGetError() == GL_NO_ERROR);
+}
+
+void MeshRenderer::SetTexture2D(const gfx::Image& img, bool sRGB) {
+	GLint internalFormat;
+	GLint format;
+	if (img.NumChannels() == 1) {
+		internalFormat = GL_R8;
+		format         = GL_RED;
+	} else if (img.NumChannels() == 4) {
+		internalFormat = sRGB ? GL_SRGB8_ALPHA8 : GL_RGBA8;
+		format         = GL_RGBA;
+	} else {
+		IMQS_ASSERT(false);
+	}
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, img.Stride / img.BytesPerPixel());
+	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, img.Width, img.Height, 0, format, GL_UNSIGNED_BYTE, img.Data);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 }
 
 void MeshRenderer::SetTextureLinearFilter() {

@@ -30,13 +30,14 @@ local unix_common = {
 			{ "-fPIC" },
 			{ "-ggdb" },
 			{ "-O3"; Config = "linux-*-release-*" },
-			--{ "-mavx2"; Config = "linux-*-release-*" },
+			{ "-mavx2" },
 			{ "-fopenmp=libomp" },
 		},
 		CCOPTS = {
 			{ "-fPIC" },
 			{ "-ggdb" },
 			{ "-O3"; Config = "linux-*-release-*" },
+			{ "-mavx2" },
 			{ "-fopenmp=libomp" },
 		},
 	}

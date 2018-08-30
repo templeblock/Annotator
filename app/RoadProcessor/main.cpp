@@ -63,7 +63,8 @@ int main(int argc, char** argv) {
 	using namespace imqs::roadproc;
 	imqs::Error err;
 
-	imqs::logging::SetupCrashHandler("RoadProcessor");
+	// You'll want to disable this if you're running under valgrind or ASAN
+	//imqs::logging::SetupCrashHandler("RoadProcessor");
 
 	imqs::video::VideoFile::Initialize();
 	//imqs::gfx::raster::TestBilinear();
