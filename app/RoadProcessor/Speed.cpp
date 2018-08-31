@@ -21,6 +21,8 @@
 // build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.000411 /home/ben/mldata/mthata/Day3-4.MOV 2>/dev/null
 // build/run-roadprocessor --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.000411 /home/ben/mldata/mthata/Day3-4.MOV
 // Day3-11: ZY: -0.000794
+// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed '{"z1":1.311900, "zy":-0.000578, "sensorCrop":[0,0,1920,1080]}' -o speed.json \
+   '/home/ben/mldata/train/ORT Day1 (3).MOV,/home/ben/mldata/train/ORT Day1 (4).MOV,/home/ben/mldata/train/ORT Day1 (5).MOV,/home/ben/mldata/train/ORT Day1 (6).MOV,/home/ben/mldata/train/ORT Day1 (7).MOV,/home/ben/mldata/train/ORT Day1 (8).MOV' 2>/dev/null
 
 using namespace std;
 using namespace imqs::gfx;
@@ -28,7 +30,7 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
-Error DoSpeed(vector<string> videoFiles, float zy, double startTime, SpeedOutputMode outputMode, string outputFile) {
+Error DoSpeed(vector<string> videoFiles, FlattenParams fp, double startTime, SpeedOutputMode outputMode, string outputFile) {
 	FILE* outf = stdout;
 	if (outputFile != "stdout") {
 		outf = fopen(outputFile.c_str(), "w");
@@ -41,7 +43,7 @@ Error DoSpeed(vector<string> videoFiles, float zy, double startTime, SpeedOutput
 
 	VideoStitcher stitcher;
 	stitcher.StartVideoAt = startTime;
-	auto err              = stitcher.Start(videoFiles, zy);
+	auto err              = stitcher.Start(videoFiles, fp);
 	if (!err.OK())
 		return err;
 
@@ -85,10 +87,14 @@ Error DoSpeed(vector<string> videoFiles, float zy, double startTime, SpeedOutput
 }
 
 int Speed(argparse::Args& args) {
-	auto zy         = atof(args.Params[0].c_str());
+	auto flattenStr = args.Params[0].c_str();
 	auto videoFiles = strings::Split(args.Params[1], ',');
 	auto startTime  = atof(args.Get("start").c_str());
-	auto err        = DoSpeed(videoFiles, zy, startTime, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
+
+	FlattenParams fp;
+	auto          err = fp.ParseJson(flattenStr);
+	if (err.OK())
+		err = DoSpeed(videoFiles, fp, startTime, args.Has("csv") ? SpeedOutputMode::CSV : SpeedOutputMode::JSON, args.Get("outfile"));
 	if (!err.OK()) {
 		tsf::print(stderr, "Error: %v\n", err.Message());
 		tsf::print("Error measuring speed: %v\n", err.Message());

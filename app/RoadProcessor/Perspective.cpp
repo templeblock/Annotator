@@ -66,6 +66,39 @@ using namespace imqs::gfx;
 namespace imqs {
 namespace roadproc {
 
+Frustum FlattenParams::ComputeFrustum() const {
+	return roadproc::ComputeFrustum(SensorCrop, PP);
+}
+
+std::string FlattenParams::ToJson() const {
+	return tsf::fmt(R"({"z1":%.6f, "zx":%.6f, "zy":%.6f, "sensorCrop":[%v,%v,%v,%v]})", PP.Z1, PP.ZX, PP.ZY, SensorCrop.x1, SensorCrop.y1, SensorCrop.x2, SensorCrop.y2);
+}
+
+Error FlattenParams::ParseJson(const std::string& s) {
+	*this = FlattenParams();
+	nlohmann::json j;
+	auto           err = nj::ParseString(s, j);
+	if (!err.OK()) {
+		return Error::Fmt("Error parsing flattening JSON: %v", err.Message());
+	}
+	PP.Z1     = nj::GetDouble(j, "z1", 1);
+	PP.ZX     = nj::GetDouble(j, "zx", 0);
+	PP.ZY     = nj::GetDouble(j, "zy", 0);
+	auto crop = j.find("sensorCrop");
+	if (crop != j.end()) {
+		auto& cropv = *crop;
+		if (crop->is_array() && crop->size() == 4) {
+			SensorCrop.x1 = cropv[0].get<double>();
+			SensorCrop.y1 = cropv[1].get<double>();
+			SensorCrop.x2 = cropv[2].get<double>();
+			SensorCrop.y2 = cropv[3].get<double>();
+		} else {
+			return Error("Invalid sensorCrop. Must be an array of 4 numbers");
+		}
+	}
+	return Error();
+}
+
 void Frustum::DebugPrintParams(float z1, float zx, float zy, int frameWidth, int frameHeight) const {
 	tsf::print("%.4f %10f %10f => %v x %v   %6.1f .. %6.1f (bottom scale %v, top scale %v)\n", z1, zx, zy, Width, Height, X1, X2, (X2 - X1) / frameWidth, (float) Width / frameWidth);
 }
@@ -652,13 +685,11 @@ static const int MinValidSamples = 7;
 
 // we store nSamples many pairs of frames in memory
 // A 1920x1080 RGBA image takes 8 MB memory. So 20 pairs is 316 MB, 100 pairs is 1.6 GB
-static Error EstimateZY(vector<string> videoFiles, int nSamples, FlattenParams& bestParams) {
+static Error EstimateZY(vector<string> videoFiles, int nSamples, bool verbose, FlattenParams& bestParams) {
 	video::VideoFile video;
 	auto             err = video.OpenFile(videoFiles[0]);
 	if (!err.OK())
 		return err;
-
-	bool debugPrint = true;
 
 	// seconds apart each sample
 	double spacing = video.GetVideoStreamInfo().DurationSeconds() / (nSamples + 1);
@@ -672,7 +703,7 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, FlattenParams& 
 			return err;
 	}
 
-	if (debugPrint)
+	if (verbose)
 		tsf::print("Loading camera frames\n");
 	vector<pair<Image, Image>> samples;
 	for (int i = 0; i < nSamples; i++) {
@@ -706,7 +737,7 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, FlattenParams& 
 	if (!err.OK())
 		return err;
 
-	if (debugPrint)
+	if (verbose)
 		tsf::print("Estimating on %v samples...\n", nSamples);
 
 	auto estimate = [&](double zy_min, double zy_max, double& zy_best, double& zy_quadratic) -> Error {
@@ -786,7 +817,7 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, FlattenParams& 
 			score /= nsample;
 			flowDiff /= nsample;
 			zyAndVar.emplace_back(pp.ZY, score);
-			if (debugPrint)
+			if (verbose)
 				tsf::print("%.6f,%.3f,%v,%v,%v,[flow diff: %v]\n", pp.ZY, score, nsample, f.Width, f.Height, flowDiff);
 			//z2 += 0.00005;
 		}
@@ -794,7 +825,7 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, FlattenParams& 
 		double a, b, c;
 		FitQuadratic(zyAndVar, a, b, c);
 		zy_quadratic = -b / (2 * a);
-		if (debugPrint)
+		if (verbose)
 			tsf::print("quadratic best: %.6f\n", zy_quadratic);
 
 		double lowestZY  = 0;
@@ -824,7 +855,7 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, FlattenParams& 
 		if (!err.OK())
 			return err;
 		bool quadraticGood = fabs(zyBest / zyQuadratic - 1) < 0.1;
-		if (debugPrint)
+		if (verbose)
 			tsf::print("estimate: %.6f, %.6f (%v)\n", zyBest, zyQuadratic, quadraticGood ? "match" : "no match");
 		if (quadraticGood)
 			zyBest = zyQuadratic;
@@ -843,13 +874,12 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, FlattenParams& 
 	return Error();
 }
 
-Error DoPerspective(std::vector<std::string> videoFiles, float& zy) {
-	FlattenParams fp;
-	int           nSamples = (int) (MinValidSamples * 1.5);
+Error DoPerspective(std::vector<std::string> videoFiles, bool verbose, FlattenParams& fp) {
+	int nSamples = (int) (MinValidSamples * 1.5);
 	//int   nSamples = 30;
 	Error err;
 	for (; nSamples < 200; nSamples = int(nSamples * 1.5)) {
-		err = EstimateZY(videoFiles, nSamples, fp);
+		err = EstimateZY(videoFiles, nSamples, verbose, fp);
 		if (err.OK())
 			break;
 		else if (err == ErrTooFewGoodFrames)
@@ -860,7 +890,9 @@ Error DoPerspective(std::vector<std::string> videoFiles, float& zy) {
 	if (!err.OK())
 		return err;
 
-	tsf::print("Z1:%.6f, ZY:%.6f, SensorCrop:%v,%v,%v,%v\n", fp.PP.Z1, fp.PP.ZY, fp.SensorCrop.x1, fp.SensorCrop.y1, fp.SensorCrop.x2, fp.SensorCrop.y2);
+	tsf::print(R"({"z1":%.6f, "zy":%.6f, "sensorCrop":[%v,%v,%v,%v]})"
+	           "\n",
+	           fp.PP.Z1, fp.PP.ZY, fp.SensorCrop.x1, fp.SensorCrop.y1, fp.SensorCrop.x2, fp.SensorCrop.y2);
 	return Error();
 }
 
@@ -884,9 +916,10 @@ int Perspective(argparse::Args& args) {
 	TestPerspectiveAndFrustum(1, 0, -0.0007);
 	*/
 	//TestPerspectiveAndFrustum(1, 0.00001, -0.0007);
-	auto  videoFiles = strings::Split(args.Params[0], ',');
-	float zy         = 0;
-	auto  err        = DoPerspective(videoFiles, zy);
+	auto          videoFiles = strings::Split(args.Params[0], ',');
+	auto          verbose    = args.Has("verbose");
+	FlattenParams fp;
+	auto          err = DoPerspective(videoFiles, verbose, fp);
 	if (!err.OK()) {
 		tsf::print("Error measuring perspective: %v\n", err.Message());
 		return 1;

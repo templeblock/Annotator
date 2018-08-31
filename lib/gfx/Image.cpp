@@ -315,6 +315,7 @@ inline Color16 operator-(Color16 x, Color16 y) {
 }
 
 static void BoxBlurGray(uint8_t* src, uint8_t* dst, int width, int blurSize, int iterations) {
+	IMQS_ASSERT(blurSize == 1); // just haven't bothered to code up other sizes, and it's only a hassle because of the left/right edge cases
 	for (int iter = 0; iter < iterations; iter++) {
 		unsigned sum = 0;
 		if (blurSize == 1) {
@@ -336,37 +337,55 @@ static void BoxBlurGray(uint8_t* src, uint8_t* dst, int width, int blurSize, int
 	}
 }
 
-static void BoxBlurRGBA(Color8* src, Color8* dst, int width, int blurSize, int iterations) {
+static void BlurRGBAPixel(int n, Color8* src, Color8* dst, libdivide::divider<int>& divider) {
+	auto sum = _mm_setzero_si128();
+	for (int i = 0; i < n; i++)
+		sum += _mm_cvtepu8_epi32(_mm_cvtsi32_si128((int) src[i].u));
+	sum /= divider;
+	sum      = _mm_packs_epi32(sum, _mm_setzero_si128());
+	sum      = _mm_packus_epi16(sum, _mm_setzero_si128());
+	dst[0].u = _mm_cvtsi128_si32(sum);
+}
+
+static void BoxBlurRGBA(Color8* src, Color8* dst, int width, int blurSize, int iterations, libdivide::divider<int>* dividers) {
 	for (int iter = 0; iter < iterations; iter++) {
-		Color16 sum(0, 0, 0, 0);
-		if (blurSize == 1) {
-			dst[0] = (Color16(src[0]) + Color16(src[1])) / 2;
-			dst[1] = (Color16(src[0]) + Color16(src[1]) + Color16(src[2])) / 3;
-			sum    = Color16(src[0]) + Color16(src[1]) + Color16(src[2]);
+		for (int i = 0; i < blurSize + 1; i++) {
+			BlurRGBAPixel(i + 2, src, dst + i, dividers[i + 2]);
 		}
-		size_t x = blurSize + 1;
-		size_t w = width - blurSize;
+		__m128i sum = _mm_setzero_si128();
+		for (int i = 0; i < 2 * blurSize + 1; i++) {
+			sum += _mm_cvtepu8_epi32(_mm_cvtsi32_si128((int) src[i].u));
+		}
+		size_t      x           = blurSize + 1;
+		size_t      w           = width - blurSize;
+		const auto& mainDivider = dividers[1 + blurSize * 2];
 		for (; x < w; x++) {
-			sum = sum - Color16(src[x - 2]) + Color16(src[x + 1]);
-			//sum.r = sum.r - src[x - 2].r + src[x + 1].r;
-			//sum.g = sum.g - src[x - 2].g + src[x + 1].g;
-			//sum.b = sum.b - src[x - 2].b + src[x + 1].b;
-			//sum.a = sum.a - src[x - 2].a + src[x + 1].a;
-			dst[x] = sum / 3;
+			auto vOld = _mm_cvtsi32_si128((int) src[x - blurSize - 1].u);
+			auto vNew = _mm_cvtsi32_si128((int) src[x + blurSize].u);
+			vOld      = _mm_cvtepu8_epi32(vOld);
+			vNew      = _mm_cvtepu8_epi32(vNew);
+			sum       = sum - vOld; // subtract outgoing value, and add incoming value
+			sum       = sum + vNew; // subtract outgoing value, and add incoming value
+			auto out  = sum;
+			out       = out / mainDivider; // divide by blurSize
+			out       = _mm_packs_epi32(out, _mm_setzero_si128());
+			out       = _mm_packus_epi16(out, _mm_setzero_si128());
+			dst[x].u  = _mm_cvtsi128_si32(out);
 		}
-		if (blurSize == 1) {
-			sum    = sum - src[x - 2] + src[w - 1];
-			dst[x] = sum / 3;
+		//dst[x] = (Color16(src[w - 2]) + Color16(src[w - 1])) / 2;
+		//BlurRGBAPixel(2, src + w - 2, dst + width - 1, dividers[2]);
+		//BlurRGBAPixel(3, src + w - 3, dst + width - 2, dividers[3]);
+		for (int i = 0; i < blurSize; i++) {
+			BlurRGBAPixel(i + 2, src + w - blurSize - 1 - i, dst + width - 1 - i, dividers[i + 2]);
 		}
 		std::swap(src, dst);
 	}
-}
+} // namespace gfx
 
 void Image::BoxBlur(int size, int iterations) {
 	IMQS_ASSERT(NumChannels() == 1 || NumChannels() == 4);
 	IMQS_ASSERT(Width >= size * 2 + 1);
 	IMQS_ASSERT(Height >= size * 2 + 1);
-	IMQS_ASSERT(size == 1); // just haven't bothered to code up other sizes, and it's only a hassle because of the left/right edge cases
 	bool isRGBA = NumChannels() == 4;
 
 	uint8_t* buf1 = (uint8_t*) imqs_malloc_or_die((max(Width, Height) + 1) * NumChannels());
@@ -378,10 +397,18 @@ void Image::BoxBlur(int size, int iterations) {
 
 	bool evenIterations = (unsigned) iterations % 2 == 0;
 
+	// dividers[2] divides by 2
+	// dividers[3] divides by 3, etc
+	int                      maxDivider = size * 2 + 1;
+	libdivide::divider<int>* dividers   = new libdivide::divider<int>[maxDivider + 1];
+	for (int i = 2; i <= maxDivider; i++) {
+		dividers[i] = libdivide::divider<int>(i);
+	}
+
 	for (int y = 0; y < Height; y++) {
 		uint8_t* src = Line(y);
 		if (isRGBA)
-			BoxBlurRGBA((Color8*) src, (Color8*) buf1, Width, size, iterations);
+			BoxBlurRGBA((Color8*) src, (Color8*) buf1, Width, size, iterations, dividers);
 		else
 			BoxBlurGray(src, buf1, Width, size, iterations);
 		if (!evenIterations)
@@ -404,7 +431,7 @@ void Image::BoxBlur(int size, int iterations) {
 		}
 
 		if (isRGBA)
-			BoxBlurRGBA((Color8*) buf1, (Color8*) buf2, Height, size, iterations);
+			BoxBlurRGBA((Color8*) buf1, (Color8*) buf2, Height, size, iterations, dividers);
 		else
 			BoxBlurGray(buf1, buf2, Height, size, iterations);
 
@@ -484,6 +511,20 @@ void Image::CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect) {
 
 void Image::CopyFrom(const Image& src, Rect32 srcRect, int dstX, int dstY) {
 	CopyFrom(src, srcRect, Rect32(dstX, dstY, dstX + srcRect.Width(), dstY + srcRect.Height()));
+}
+
+Error Image::LoadFile(const std::string& filename) {
+	ImageIO io;
+	string  raw;
+	auto    err = os::ReadWholeFile(filename, raw);
+	int     w   = 0;
+	int     h   = 0;
+	void*   buf = nullptr;
+	err         = io.Load(raw.data(), raw.size(), w, h, buf);
+	if (!err.OK())
+		return err;
+	*this = Image(ImageFormat::RGBA, ConstructTakeOwnership, w * 4, buf, w, h);
+	return Error();
 }
 
 Error Image::SavePng(const std::string& filename, bool withAlpha, int zlibLevel) const {

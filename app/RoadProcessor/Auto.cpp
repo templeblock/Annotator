@@ -52,22 +52,27 @@ Error DoAuto(argparse::Args& args) {
 	auto  password       = args.Params[1];
 	auto  storageSpec    = args.Params[2];
 	auto  videoFiles     = strings::Split(args.Params[3], ',');
-	float zy             = args.GetDouble("zy");
+	auto  flattenStr     = args.Get("flatten");
 	auto  speedFile      = args.Get("speed");
 	float metersPerPixel = args.GetDouble("mpp");
 
-	float  zx          = 0;
 	string datasetName = path::ChangeExtension(path::Filename(videoFiles[0]), "");
 	string sessionCookie;
 
-	if (zy == 0) {
-		err = DoPerspective(videoFiles, zy);
+	FlattenParams fp;
+	if (flattenStr != "") {
+		err = fp.ParseJson(flattenStr);
+		if (!err.OK())
+			return err;
+	} else {
+		err = DoPerspective(videoFiles, true, fp);
 		if (!err.OK())
 			return err;
 	}
+
 	if (speedFile == "") {
 		speedFile = tsf::fmt("speed-%v.json", datasetName);
-		err       = DoSpeed(videoFiles, zy, 0, SpeedOutputMode::JSON, speedFile);
+		err       = DoSpeed(videoFiles, fp, 0, SpeedOutputMode::JSON, speedFile);
 		if (!err.OK())
 			return err;
 	}
@@ -84,7 +89,7 @@ Error DoAuto(argparse::Args& args) {
 
 	if (metersPerPixel == 0) {
 		Stitcher s;
-		err = s.DoMeasureScale(videoFiles, speedFile, zx, zy);
+		err = s.DoMeasureScale(videoFiles, speedFile, fp);
 		if (!err.OK())
 			return err;
 	}
@@ -92,7 +97,7 @@ Error DoAuto(argparse::Args& args) {
 	Stitcher s;
 	s.MetersPerPixel = metersPerPixel;
 	s.BaseZoomLevel  = 25;
-	err              = s.DoStitch(storageSpec, videoFiles, trackFile, zx, zy, 0, -1);
+	err              = s.DoStitch(storageSpec, videoFiles, trackFile, fp, 0, -1);
 	if (!err.OK())
 		return err;
 

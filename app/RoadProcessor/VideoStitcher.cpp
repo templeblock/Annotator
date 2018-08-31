@@ -11,7 +11,7 @@ namespace roadproc {
 
 const double RAD2DEG = 180.0 / IMQS_PI;
 
-Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiveZY) {
+Error VideoStitcher::Start(std::vector<std::string> videoFiles, FlattenParams fp) {
 	// Before we start this potentially lengthy process, make sure we can open every one of the video files specified.
 	// Also, count their total time, and extract the creation time of the first video
 	VideoWidth             = 0;
@@ -51,10 +51,9 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiv
 			return err;
 	}
 
-	PP.ZX   = 0;
-	PP.ZY   = perspectiveZY;
-	PP.Z1   = FindZ1ForIdentityScaleAtBottom(VideoWidth, VideoHeight, PP.ZX, PP.ZY);
-	Frustum = ComputeFrustum(VideoWidth, VideoHeight, PP);
+	FP = fp;
+	//PP.Z1   = FindZ1ForIdentityScaleAtBottom(VideoWidth, VideoHeight, PP.ZX, PP.ZY);
+	Frustum = FP.ComputeFrustum();
 
 	//Frustum.Width = (int) (Frustum.Width * (1.0 - BlackenPercentage)); -- it's not this simple.. and I'm not going to fuss with it now... reverting back to cheap hack
 
@@ -88,24 +87,7 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, float perspectiv
 			return err;
 	}
 
-	// This little formulation was just worked out by observation, but we really ought to measure this, and
-	// adjust dynamically, as we go.
-	/*
-	BrightnessAdjuster.Alloc(ImageFormat::RGBA, 8, 8);
-	BrightnessAdjuster.Fill(Color8(127, 127, 127, 127).u);
-	for (int x = 0; x < BrightnessAdjuster.Width; x++) {
-		int edge = abs(x - BrightnessAdjuster.Width / 2);
-		int b    = 141 + int(edge * 2.5);
-
-		*BrightnessAdjuster.At32(x, BrightnessAdjuster.Height - 1) = Color8(b, b, b, 127).u;
-	}
-	*/
-
-	// When doing the initial Stellenbosch tar roads work, these values could be 10,10, and we had good
-	// tracking. However, the massive engine shake on the bakkies in Mthata forced me to raise this up
-	// to 18,22.
-	Flow.StableHSearchRange = 18;
-	Flow.StableVSearchRange = 22;
+	Flow.SetupSearchDistances(VideoWidth);
 
 	auto err = Rewind();
 	if (!err.OK())
@@ -218,14 +200,15 @@ void VideoStitcher::RemovePerspective() {
 	// GPU with copyback to CPU:	6:00     -- the culprit is glReadPixels/GPU latency.
 	// Only decode video:			2:40
 
-	Rect32 cropRect = CropRectFromFullFlat();
+	auto   croppedSensorFrame = Frame.Window(FP.SensorCrop);
+	Rect32 flatCropRect       = CropRectFromFullFlat();
 
 	if (EnableCPUPerspectiveRemoval) {
 		// CPU
-		auto flatOrigin = CameraToFlat(VideoWidth, VideoHeight, Vec2f(0, 0), PP);
+		auto flatOrigin = CameraToFlat(VideoWidth, VideoHeight, Vec2f(0, 0), FP.PP);
 		//roadproc::RemovePerspective(Frame, Flat, PP, flatOrigin.x, flatOrigin.y);
-		roadproc::RemovePerspective(Frame, Splat, PP, flatOrigin.x, flatOrigin.y);
-		Flat.CopyFrom(Splat, cropRect, 0, 0);
+		roadproc::RemovePerspective(croppedSensorFrame, Splat, FP.PP, flatOrigin.x, flatOrigin.y);
+		Flat.CopyFrom(Splat, flatCropRect, 0, 0);
 		//Flat.SaveJpeg("speed2-flat-CPU.jpeg");
 		if (EnableFullFlatOutput) {
 			// This is a wasteful copy. But I don't see us using the CPU path in production
@@ -234,15 +217,15 @@ void VideoStitcher::RemovePerspective() {
 	} else {
 		// GPU:
 		Rend.Clear(Color8(0, 0, 0, 0));
-		Rend.RemovePerspective(Frame, &BrightnessAdjuster, PP);
+		Rend.RemovePerspective(croppedSensorFrame, &BrightnessAdjuster, FP.PP);
 		//rend.CopyDeviceToImage(Rect32(0, 0, frustum.Width, frustum.Height), 0, 0, flat);
 		//flat.SaveJpeg("speed2-flat-GPU.jpeg");
 		//exit(1);
 		if (EnableFullFlatOutput) {
 			Rend.CopyDeviceToImage(Rect32(0, 0, FullFlat.Width, FullFlat.Height), 0, 0, FullFlat);
-			Flat.CopyFrom(FullFlat, cropRect, 0, 0);
+			Flat.CopyFrom(FullFlat, flatCropRect, 0, 0);
 		} else {
-			Rend.CopyDeviceToImage(cropRect, 0, 0, Flat);
+			Rend.CopyDeviceToImage(flatCropRect, 0, 0, Flat);
 		}
 	}
 
@@ -318,6 +301,7 @@ void VideoStitcher::CheckSyncRestart(FlowResult& absFlowResult, bool& didReset) 
 		SetupMesh(mesh);
 		Vec2f       bias(0, 0);
 		OpticalFlow flowAbs;
+		flowAbs.SetupSearchDistances(VideoWidth);
 		absFlowResult       = flowAbs.Frame(mesh, roadproc::Frustum(), Flat, FlatPrev, bias);
 		auto  disp          = mesh.AvgValidDisplacement();
 		float absDivergence = (disp - FlowBias).size();

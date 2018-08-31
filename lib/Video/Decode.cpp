@@ -332,7 +332,7 @@ Error VideoFile::OpenCodecContext(AVFormatContext* fmt_ctx, AVMediaType type, in
 	//	if (decHW)
 	//		dec = decHW;
 	//}
-	tsf::print("Using decoder: %v (%v)\n", dec->name, dec->long_name);
+	//tsf::print("Using decoder: %v (%v)\n", dec->name, dec->long_name);
 
 	// Allocate a codec context for the decoder
 	dec_ctx = avcodec_alloc_context3(dec);

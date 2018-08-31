@@ -95,6 +95,7 @@ public:
 	void  CopyFrom(const Image& src, Rect32 srcRect, Rect32 dstRect);     // Source and destination rectangles are clipped before copying, but they must be equal in size
 	void  CopyFrom(const Image& src, Rect32 srcRect, int dstX, int dstY); // Source rectangle is clipped before copying
 
+	Error LoadFile(const std::string& filename);
 	Error SavePng(const std::string& filename, bool withAlpha = true, int zlibLevel = 5) const;
 	Error SaveJpeg(const std::string& filename, int quality = 90, JpegSampling sampling = JpegSampling::Samp422) const;
 	Error SaveFile(const std::string& filename) const;

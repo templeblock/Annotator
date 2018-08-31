@@ -2,6 +2,7 @@
 #include "Globals.h"
 #include "Perspective.h"
 #include "MeshRenderer.h"
+#include "OpticalFlow.h"
 #include "Bench.h"
 
 namespace imqs {
@@ -69,6 +70,16 @@ int main(int argc, char** argv) {
 	imqs::video::VideoFile::Initialize();
 	//imqs::gfx::raster::TestBilinear();
 
+	imqs::gfx::Image img;
+	//img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-30-10h09m46s586.png");
+	//img.LoadFile("/home/ben/Pictures/vlcsnap-2018-06-22-14h33m23s250.png");
+	//img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-30-10h18m24s551.png");
+	img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-28-16h56m07s892.png");
+	//img.BoxBlur(2, 3);
+	imqs::roadproc::LocalContrast(img, 3, 3);
+	img.SaveFile("/home/ben/Pictures/blur.jpeg");
+	return 1;
+
 	// This little chunk of code is very useful to verifying the sanity of our OpenGL system
 	//imqs::roadproc::MeshRenderer rend;
 	//auto                         err = rend.Initialize(800, 800);
@@ -81,16 +92,14 @@ int main(int argc, char** argv) {
 	//rend.SaveToFile("test.png");
 	//return 0;
 
-	imqs::gfx::Canvas cx(1916, 1330);
-	cx.Rect(imqs::gfx::Rect32(50, 50, 60, 60), imqs::gfx::Color8(255, 0, 0, 255), 1.0f);
-
 	argparse::Args args("Usage: RoadProcessor [options] <command>");
 	args.AddValue("e", "lensdb", "Camera/Lens database", "/usr/local/share/lensfun/version_2/");
 	args.AddValue("l", "lens", "Lens correction (eg 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS'");
 
-	auto perspective = args.AddCommand("perspective <video>", "Compute perspective projection parameters zx and zy.", Perspective);
+	auto perspective = args.AddCommand("perspective <video>", "Compute perspective flattening parameters - final output line is JSON.", Perspective);
+	perspective->AddSwitch("v", "verbose", "Show progress");
 
-	auto speed = args.AddCommand("speed <zy> <video[,video2,...]>",
+	auto speed = args.AddCommand("speed <flatten JSON> <video[,video2,...]>",
 	                             "Compute car speed from interframe differences\nOne or more videos can be specified."
 	                             " Separate multiple videos with commas. This version uses optical flow on flattened images",
 	                             Speed);
@@ -98,9 +107,9 @@ int main(int argc, char** argv) {
 	speed->AddValue("o", "outfile", "Write output to file", "stdout");
 	speed->AddValue("s", "start", "Start time in seconds (for debugging)", "0");
 
-	auto measureScale = args.AddCommand("measure-scale <video> <position track> <zx> <zy>", "Measure scale, in meters per pixel.", MeasureScale);
+	auto measureScale = args.AddCommand("measure-scale <video> <position track> <flatten JSON>", "Measure scale, in meters per pixel.", MeasureScale);
 
-	auto stitch = args.AddCommand("stitch <video> <bitmap dir> <position track> <zx> <zy>", "Unproject video frames and stitch together.", Stitch);
+	auto stitch = args.AddCommand("stitch <video> <bitmap dir> <position track> <flatten JSON>", "Unproject video frames and stitch together.", Stitch);
 
 	stitch->AddValue("n", "number", "Number of frames", "-1");
 	stitch->AddValue("s", "start", "Start time in seconds", "0");
@@ -110,7 +119,7 @@ int main(int argc, char** argv) {
 	auto webtiles = args.AddCommand("webtiles <infinite bitmap>", "Create web tiles from infinite bitmap", WebTiles);
 
 	auto cmdAuto = args.AddCommand("auto <username> <password> <infinite bitmap> <video[,video2,...]>", "Do everything to get stitched imagery out", Auto);
-	cmdAuto->AddValue("", "zy", "Perspective factor zy", "0");
+	cmdAuto->AddValue("", "flatten", "Flatten parameters definition (JSON)", "");
 	cmdAuto->AddValue("", "speed", "Speed track (JSON)");
 	cmdAuto->AddValue("m", "mpp", "Meters per pixel", "0");
 

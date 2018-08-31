@@ -21,8 +21,8 @@ public:
 
 	Stitcher();
 
-	Error DoMeasureScale(std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy);
-	Error DoStitch(std::string storageSpec, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count);
+	Error DoMeasureScale(std::vector<std::string> videoFiles, std::string trackFile, FlattenParams fp);
+	Error DoStitch(std::string storageSpec, std::vector<std::string> videoFiles, std::string trackFile, FlattenParams fp, double seconds, int count);
 
 private:
 	struct FrameObject {
@@ -49,7 +49,7 @@ private:
 	const static int         NVignette          = 3;
 	float                    Vignetting[NVignette];
 
-	Error  Initialize(std::string storageSpec, std::vector<std::string> videoFiles, float zx, float zy, double seconds);
+	Error  Initialize(std::string storageSpec, std::vector<std::string> videoFiles, FlattenParams fp, double seconds);
 	Error  LoadTrack(std::string trackFile);
 	Error  AdjustInfiniteBitmapView(const Mesh& m, gfx::Vec2f travelDirection);
 	Error  AdjustInfiniteBitmapViewForGeo(gfx::Rect64 outRect);

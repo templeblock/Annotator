@@ -23,13 +23,16 @@ OpticalFlow::OpticalFlow() {
 }
 
 void OpticalFlow::SetupSearchDistances(int rawVideoWidth) {
-	double scale       = (double) rawVideoWidth / (double) 1920;
-	AbsMinHSearch      = int(-20 * scale);
-	AbsMaxHSearch      = int(20 * scale);
-	AbsMinVSearch      = int(-350 * scale);
-	AbsMaxVSearch      = int(10 * scale);
-	StableHSearchRange = int(10 * scale);
-	StableVSearchRange = int(10 * scale);
+	double scale  = (double) rawVideoWidth / (double) 1920;
+	AbsMinHSearch = int(-20 * scale);
+	AbsMaxHSearch = int(20 * scale);
+	AbsMinVSearch = int(-350 * scale);
+	AbsMaxVSearch = int(10 * scale);
+	// When doing the initial Stellenbosch tar roads work, these values could be 10,10, and we had good
+	// tracking. However, the massive engine shake on the bakkies in Mthata forced me to raise this up
+	// to 18,22.
+	StableHSearchRange = int(18 * scale);
+	StableVSearchRange = int(22 * scale);
 }
 
 static Rect32 MakeBoxAroundPoint(int x, int y, int radius) {
@@ -598,8 +601,10 @@ FlowResult OpticalFlow::Frame(Mesh& warpMesh, Frustum warpFrustum, const gfx::Im
 	warpRectBuffer.CropTo(Rect32(0, 0, warpImg->Width, warpImg->Height));
 	auto stableImgValid = stableImg->Window(stableRectBuffer);
 	auto warpImgValid   = warpImg->Window(warpRectBuffer);
-	LocalContrast(warpImgValid, 1, 5);
-	LocalContrast(stableImgValid, 1, 5);
+	//LocalContrast(warpImgValid, 1, 5);
+	//LocalContrast(stableImgValid, 1, 5);
+	LocalContrast(warpImgValid, 3, 3);
+	LocalContrast(stableImgValid, 3, 3);
 
 	if (drawDebugImages) {
 		_warpImg.SaveFile("imgRawWarp.png");

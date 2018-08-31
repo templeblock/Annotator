@@ -13,13 +13,6 @@ struct PerspectiveParams {
 	PerspectiveParams(float z1, float zx, float zy) : Z1(z1), ZX(zx), ZY(zy) {}
 };
 
-// These are all the viewport parameters that are taken into account when flattening
-// the camera frames, via our naive constant-angle system.
-struct FlattenParams {
-	PerspectiveParams PP;
-	gfx::Rect32       SensorCrop;
-};
-
 // A frustum that is oriented like an upside-down triangle. The top edge of the frustum
 // touches the top-left and top-right corners of the image. The bottom edge of the frustum
 // touches the bottom edge of the image, and it's X coordinates are X1 and X2.
@@ -33,6 +26,18 @@ struct Frustum {
 	void Polygon(gfx::Vec2f poly[4], float expandX = 0, float expandY = 0);
 	int  X1FullFrame() const { return Width / 2 + X1; }
 	int  X2FullFrame() const { return Width / 2 + X2; }
+};
+
+// These are all the viewport parameters that are taken into account when flattening
+// the camera frames, via our naive constant-angle system.
+struct FlattenParams {
+	PerspectiveParams PP;
+	gfx::Rect32       SensorCrop;
+
+	Frustum ComputeFrustum() const;
+
+	std::string ToJson() const;
+	Error       ParseJson(const std::string& s);
 };
 
 float       FindZ1ForIdentityScaleAtBottom(int frameWidth, int frameHeight, float zx, float zy);
@@ -50,7 +55,7 @@ gfx::Vec2f  CameraToFlat(int frameWidth, int frameHeight, gfx::Vec2f cam, Perspe
 void        RemovePerspective(const gfx::Image& camera, gfx::Image& flat, float z1, float zx, float zy, float originX, float originY);
 void        RemovePerspective(const gfx::Image& camera, gfx::Image& flat, PerspectiveParams pp, float originX, float originY);
 void        FitQuadratic(const std::vector<std::pair<double, double>>& xy, double& a, double& b, double& c);
-Error       DoPerspective(std::vector<std::string> videoFiles, float& zy);
+Error       DoPerspective(std::vector<std::string> videoFiles, bool verbose, FlattenParams& fp);
 int         Perspective(argparse::Args& args);
 
 } // namespace roadproc

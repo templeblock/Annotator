@@ -42,14 +42,14 @@ Stitcher::Stitcher() {
 		Vignetting[i] = 1;
 }
 
-Error Stitcher::Initialize(std::string storageSpec, std::vector<std::string> videoFiles, float zx, float zy, double seconds) {
+Error Stitcher::Initialize(std::string storageSpec, std::vector<std::string> videoFiles, FlattenParams fp, double seconds) {
 	if (storageSpec != "")
 		InfBmp.Initialize(storageSpec);
 
 	VidStitcher.BlackenPercentage    = 0.15;
 	VidStitcher.EnableFullFlatOutput = true;
 	VidStitcher.StartVideoAt         = seconds;
-	auto err                         = VidStitcher.Start(videoFiles, zy);
+	auto err                         = VidStitcher.Start(videoFiles, fp);
 	if (!err.OK())
 		return err;
 
@@ -87,11 +87,11 @@ Error Stitcher::LoadTrack(std::string trackFile) {
 	return Error();
 }
 
-Error Stitcher::DoMeasureScale(std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy) {
+Error Stitcher::DoMeasureScale(std::vector<std::string> videoFiles, std::string trackFile, FlattenParams fp) {
 	auto err = LoadTrack(trackFile);
 	if (!err.OK())
 		return err;
-	err = Initialize("", videoFiles, zx, zy, 0);
+	err = Initialize("", videoFiles, fp, 0);
 	if (!err.OK())
 		return err;
 
@@ -109,13 +109,13 @@ Error Stitcher::DoMeasureScale(std::vector<std::string> videoFiles, std::string 
 	return Error();
 }
 
-Error Stitcher::DoStitch(std::string storageSpec, std::vector<std::string> videoFiles, std::string trackFile, float zx, float zy, double seconds, int count) {
+Error Stitcher::DoStitch(std::string storageSpec, std::vector<std::string> videoFiles, std::string trackFile, FlattenParams fp, double seconds, int count) {
 	//os::RemoveAll(bitmapDir);
 	//os::MkDirAll(bitmapDir);
 
 	auto err = LoadTrack(trackFile);
 
-	err = Initialize(storageSpec, videoFiles, zx, zy, seconds);
+	err = Initialize(storageSpec, videoFiles, fp, seconds);
 	if (!err.OK())
 		return err;
 
@@ -823,13 +823,16 @@ int WebTiles(argparse::Args& args) {
 }
 
 int MeasureScale(argparse::Args& args) {
-	auto  videoFiles = strings::Split(args.Params[0], ',');
-	auto  trackFile  = args.Params[1];
-	float zx         = atof(args.Params[2].c_str());
-	float zy         = atof(args.Params[3].c_str());
+	auto videoFiles = strings::Split(args.Params[0], ',');
+	auto trackFile  = args.Params[1];
+	auto flattenStr = args.Params[2];
 
-	Stitcher s;
-	auto     err = s.DoMeasureScale(videoFiles, trackFile, zx, zy);
+	FlattenParams fp;
+	auto          err = fp.ParseJson(flattenStr);
+	if (err.OK()) {
+		Stitcher s;
+		err = s.DoMeasureScale(videoFiles, trackFile, fp);
+	}
 	if (!err.OK()) {
 		tsf::print("Error measuring scale: %v\n", err.Message());
 		return 1;
@@ -841,16 +844,19 @@ int Stitch(argparse::Args& args) {
 	auto   videoFiles     = strings::Split(args.Params[0], ',');
 	auto   storageSpec    = args.Params[1];
 	auto   trackFile      = args.Params[2];
-	float  zx             = atof(args.Params[3].c_str());
-	float  zy             = atof(args.Params[4].c_str());
+	auto   flattenStr     = args.Params[3];
 	int    count          = args.GetInt("number");
 	double seek           = args.GetDouble("start");
 	double metersPerPixel = args.GetDouble("mpp");
 
-	Stitcher s;
-	s.DryRun         = args.Has("dryrun");
-	s.MetersPerPixel = metersPerPixel;
-	auto err         = s.DoStitch(storageSpec, videoFiles, trackFile, zx, zy, seek, count);
+	FlattenParams fp;
+	auto          err = fp.ParseJson(flattenStr);
+	if (err.OK()) {
+		Stitcher s;
+		s.DryRun         = args.Has("dryrun");
+		s.MetersPerPixel = metersPerPixel;
+		err              = s.DoStitch(storageSpec, videoFiles, trackFile, fp, seek, count);
+	}
 	if (!err.OK()) {
 		tsf::print("Error stitching: %v\n", err.Message());
 		return 1;
