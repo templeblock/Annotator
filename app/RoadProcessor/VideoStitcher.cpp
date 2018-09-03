@@ -44,7 +44,7 @@ Error VideoStitcher::Start(std::vector<std::string> videoFiles, FlattenParams fp
 
 	if (global::Lens != nullptr) {
 		// 32/18 = 16/9
-		auto err           = global::Lens->ComputeVignetting(32, 18, VignetteAdjust);
+		auto err           = global::Lens->ComputeCorrection(32, 18, VignetteAdjust, DistortionAdjust, nullptr);
 		BrightnessAdjuster = VignetteAdjust;
 		err                = global::Lens->InitializeDistortionCorrect(VideoWidth, VideoHeight);
 		if (!err.OK())

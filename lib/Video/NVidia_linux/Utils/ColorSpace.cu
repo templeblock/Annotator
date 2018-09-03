@@ -93,10 +93,12 @@ __device__ inline Rgb YuvToRgbForPixel(YuvUnit y, YuvUnit u, YuvUnit v) {
         rgb.c.r = r >> nShift;
         rgb.c.g = g >> nShift;
         rgb.c.b = b >> nShift;
+        rgb.c.a = decltype(rgb.c.a)(-1);
     } else {
         rgb.c.r = r << nShift;
         rgb.c.g = g << nShift;
         rgb.c.b = b << nShift;
+        rgb.c.a = decltype(rgb.c.a)(-1);
     }
     return rgb;
 }

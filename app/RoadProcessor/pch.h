@@ -1,6 +1,8 @@
 #define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES 1
 #define _CRT_SECURE_NO_WARNINGS 1
 
+#define IMQS_ROADPROC_PCH_INCLUDED
+
 #include <lib/pal/pal.h>
 #include <lib/Video/Video.h>
 #include <lib/gfx/gfx.h>
@@ -36,3 +38,6 @@
 
 // intrinsics for SSE,AVX,etc
 #include <x86intrin.h>
+
+#include <cuda.h>
+#include <cuda_runtime_api.h>

@@ -1,10 +1,9 @@
 #include "pch.h"
-#include <cuda.h>
-#include <iostream>
+//#include <iostream>
 #include "NVVideo.h"
 #include "Utils/NvCodecUtils.h"
 #include "Utils/ImqsUtils.h"
-#include <cuda_runtime_api.h>
+//#include <cuda_runtime_api.h>
 //#include "FramePresenterGL.h"
 //#include "../Common/AppDecUtils.h"
 
@@ -78,14 +77,18 @@ void NVVideo::Close() {
 		cudaFreeHost(f.Img.Data);
 	HostFrames.resize(0);
 	for (auto f : DeviceFrames)
-		cuMemFree(f.Frame);
+		cudaFree(f.Frame);
 	DeviceFrames.resize(0);
 	ExitSignaled = 0;
 	HostHead     = 0;
 	HostTail     = 0;
-	delete SemDecode;
-	SemDecode   = nullptr;
-	DecodeState = DecodeStateNotStarted;
+	delete SemHostFramesReady;
+	SemHostFramesReady = nullptr;
+	delete SemDeviceFramesFree;
+	SemDeviceFramesFree = nullptr;
+	delete SemDeviceFramesReady;
+	SemDeviceFramesReady = nullptr;
+	DecodeState          = DecodeStateNotStarted;
 }
 
 int NVVideo::Width() {
@@ -97,6 +100,7 @@ int NVVideo::Height() {
 }
 
 Error NVVideo::DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds) {
+	IMQS_ASSERT(OutputMode == OutputCPU);
 	if (DecodeState == DecodeStateNotStarted) {
 		DecodeState  = DecodeStateRunning;
 		DecodeThread = std::thread([&]() -> void {
@@ -108,7 +112,7 @@ Error NVVideo::DecodeFrameRGBA(int width, int height, void* buf, int stride, dou
 		// else.. the decoder has finished, but the queue is not empty, so drain it
 	}
 
-	SemDecode->wait();
+	SemHostFramesReady->wait();
 	if (HostTail == HostHead) {
 		IMQS_ASSERT(DecodeState == DecodeStateFinished);
 		return ErrEOF;
@@ -131,13 +135,51 @@ Error NVVideo::DecodeFrameRGBA(int width, int height, void* buf, int stride, dou
 	return Error();
 }
 
+Error NVVideo::DecodeFrameRGBA_GPU(CudaFrame& frame) {
+	IMQS_ASSERT(OutputMode == OutputGPU);
+	if (DecodeState == DecodeStateNotStarted) {
+		DecodeState  = DecodeStateRunning;
+		DecodeThread = std::thread([&]() -> void {
+			DecodeThreadFunc();
+		});
+	} else if (DecodeState == DecodeStateFinished) {
+		if (DeviceTail == DeviceHead)
+			return ErrEOF;
+		// else.. the decoder has finished, but the queue is not empty, so drain it
+	}
+
+	SemDeviceFramesReady->wait();
+	if (DeviceTail == DeviceHead) {
+		IMQS_ASSERT(DecodeState == DecodeStateFinished);
+		return ErrEOF;
+	}
+
+	IMQS_ASSERT(DeviceTail < DeviceHead);
+
+	DeviceFrame& f   = DeviceFrames[DeviceTail % DeviceBufferSize];
+	frame.Frame      = f.Frame;
+	frame.Stride     = f.Stride;
+	frame.Pts        = f.Pts;
+	frame.PtsSeconds = Demuxer.PtsToSeconds(f.Pts);
+
+	// the consumer now owns the pointer, so we need to allocate more memory for the next frame
+	f.Frame  = nullptr;
+	auto err = cuErr(cudaMalloc(&f.Frame, FrameSize));
+	if (!err.OK())
+		return err;
+
+	SemDeviceFramesFree->signal();
+
+	return Error();
+}
+
 Error NVVideo::SeekToMicrosecond(int64_t microsecond, unsigned flags) {
 	return Error("Seeking is not supported in NVVideo");
 }
 
 Error NVVideo::InitBuffers() {
-	DecodeState = DecodeStateNotStarted;
-	SemDecode   = new Semaphore();
+	DecodeState        = DecodeStateNotStarted;
+	SemHostFramesReady = new Semaphore();
 
 	FrameSize = Width() * Height() * 4;
 
@@ -157,22 +199,26 @@ Error NVVideo::InitBuffers() {
 
 	DeviceFrames.resize(DeviceBufferSize);
 	for (int i = 0; i < DeviceBufferSize; i++) {
-		auto err = cuErr(cuMemAlloc(&DeviceFrames[i].Frame, FrameSize));
+		auto err = cuErr(cudaMalloc(&DeviceFrames[i].Frame, FrameSize));
 		if (!err.OK())
 			return err;
 	}
+	SemDeviceFramesFree = new Semaphore();
+	SemDeviceFramesFree->signal(DeviceFrames.size());
+	SemDeviceFramesReady = new Semaphore();
+
 	return Error();
 }
 
 void NVVideo::DecodeThreadFunc() {
 	int nFrame = 0;
-	int dTail  = 0; // device ring buffer tail
-	int dHead  = 0; // device ring buffer head
+	DeviceTail = 0;
+	DeviceHead = 0;
 
 	auto sendFramesToHost = [&]() {
 		//cudaDeviceSynchronize(); // not sure if we need this
 		//int nPost = 0;
-		for (; dTail != dHead; dTail++) {
+		for (; DeviceTail != DeviceHead; DeviceTail++) {
 			for (int spin = 0; HostHead - HostTail == HostBufferSize; spin++) {
 				// Obviously sleeping is never great, but I don't know how to do this correctly. I just feel
 				// like there is some kind of deadlock going on if we also use a semaphore from the reading
@@ -182,18 +228,18 @@ void NVVideo::DecodeThreadFunc() {
 				if (ExitSignaled)
 					break;
 			}
-			auto& dFrame = DeviceFrames[dTail % DeviceBufferSize];
+			auto& dFrame = DeviceFrames[DeviceTail % DeviceBufferSize];
 			auto& hFrame = HostFrames[HostHead % HostBufferSize];
 			//auto& hFrame = HostFrames[(HostHead + nPost) % HostBufferSize];
 			cudaMemcpy(hFrame.Img.Data, (const void*) dFrame.Frame, FrameSize, cudaMemcpyDeviceToHost);
 			hFrame.Pts = dFrame.Pts;
 			HostHead++;
-			SemDecode->signal();
+			SemHostFramesReady->signal();
 			//nPost++;
 		}
 		//cudaDeviceSynchronize();
 		//HostHead += nPost;
-		//SemDecode.signal(nPost);
+		//SemHostFramesReady.signal(nPost);
 	};
 
 	int maxNFrames = 0;
@@ -204,9 +250,11 @@ void NVVideo::DecodeThreadFunc() {
 		uint8_t*  pVideo         = nullptr;
 		uint8_t** ppFrame;
 		int64_t   pts = 0;
-		Demuxer.Demux(&pVideo, &videoBytes, &pts);
+		bool      ok  = Demuxer.Demux(&pVideo, &videoBytes, &pts);
+		IMQS_ASSERT(ok);
 		// error handling!
-		Decoder->Decode(pVideo, videoBytes, &ppFrame, &nFrameReturned, 0, &timeStamps, pts);
+		ok = Decoder->Decode(pVideo, videoBytes, &ppFrame, &nFrameReturned, 0, &timeStamps, pts);
+		IMQS_ASSERT(ok);
 		//if (!nFrame && nFrameReturned)
 		//	LOG(INFO) << dec.GetVideoInfo();
 
@@ -217,29 +265,36 @@ void NVVideo::DecodeThreadFunc() {
 		//	tsf::print("max nframes: %v\n", maxNFrames);
 		//}
 
-		if (nFrameReturned + (dHead - dTail) > DeviceBufferSize) {
-			// if we cannot fit nFrameReturned into our device buffer, then flush all remaining device frames to host
-			//tsf::print("too much!\n");
-			sendFramesToHost();
+		if (OutputMode == OutputCPU) {
+			if (nFrameReturned + (DeviceHead - DeviceTail) > DeviceBufferSize) {
+				// if we cannot fit nFrameReturned into our device buffer, then flush all remaining device frames to host
+				//tsf::print("too much!\n");
+				sendFramesToHost();
+			}
+			IMQS_ASSERT(nFrameReturned + (DeviceHead - DeviceTail) <= DeviceBufferSize);
 		}
-
-		IMQS_ASSERT(nFrameReturned + (dHead - dTail) <= DeviceBufferSize);
 
 		for (int i = 0; i < nFrameReturned; i++) {
-			auto& dFrame = DeviceFrames[dHead % DeviceBufferSize];
-			//presenter.GetDeviceFrameBuffer(&dpFrame, &nPitch);
-			int stride = Decoder->GetWidth() * 4;
+			// SemDeviceFramesFree is only used when decoding to GPU. Every time a frame is removed from the DeviceFrames ring,
+			// the SemDeviceFramesFree is increased. Once it drops to zero, we pause here, to wait for the consumer to drain DeviceFrames.
+			SemDeviceFramesFree->wait();
+			auto& dFrame  = DeviceFrames[DeviceHead % DeviceBufferSize];
+			dFrame.Stride = Decoder->GetWidth() * 4;
+			//tsf::print("Decoding to %p (device)\n", dFrame.Frame);
 			if (Decoder->GetBitDepth() == 8)
-				Nv12ToRgba32((uint8_t*) ppFrame[i], Decoder->GetWidth(), (uint8_t*) dFrame.Frame, stride, Decoder->GetWidth(), Decoder->GetHeight());
+				Nv12ToRgba32((uint8_t*) ppFrame[i], Decoder->GetWidth(), (uint8_t*) dFrame.Frame, dFrame.Stride, Decoder->GetWidth(), Decoder->GetHeight());
 			else
-				P016ToRgba32((uint8_t*) ppFrame[i], 2 * Decoder->GetWidth(), (uint8_t*) dFrame.Frame, stride, Decoder->GetWidth(), Decoder->GetHeight());
+				P016ToRgba32((uint8_t*) ppFrame[i], 2 * Decoder->GetWidth(), (uint8_t*) dFrame.Frame, dFrame.Stride, Decoder->GetWidth(), Decoder->GetHeight());
 			dFrame.Pts = timeStamps[i];
-			dHead++;
+			DeviceHead++;
+			SemDeviceFramesReady->signal();
 		}
 
-		// we want to flush frames before we hit our limit, otherwise the reader thread will stall, while waiting for frames from us
-		if (dHead - dTail >= DeviceBufferSize - 5)
-			sendFramesToHost();
+		if (OutputMode == OutputCPU) {
+			// we want to flush frames before we hit our limit, otherwise the reader thread will stall, while waiting for frames from us
+			if (DeviceHead - DeviceTail >= DeviceBufferSize - 5)
+				sendFramesToHost();
+		}
 
 		nFrame += nFrameReturned;
 		if (videoBytes == 0)
@@ -247,7 +302,7 @@ void NVVideo::DecodeThreadFunc() {
 	};
 
 	DecodeState = DecodeStateFinished;
-	SemDecode->signal(); // wake up thread that's waiting for a result from us
+	SemHostFramesReady->signal(); // wake up thread that's waiting for a result from us
 }
 
 } // namespace video

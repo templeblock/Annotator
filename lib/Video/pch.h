@@ -10,6 +10,9 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+
 #ifdef _MSC_VER
 #define IMQS_VIDEO_API __declspec(dllexport)
 #else

@@ -29,7 +29,11 @@ public:
 	Error LoadCameraAndLens(std::string camera, std::string lens);
 
 	Error InitializeDistortionCorrect(int width, int height);
-	Error ComputeVignetting(int width, int height, gfx::Image& img);
+
+	// vignetting: Gray uint8 image. Divide uint8 value by VignetteGrayMultiplier to get brightness multiplier
+	// distortion: RG float32 image. Normalized to 0..1.
+	// (optional) combined: RGB float32 image. channel 0 is raw vignette multiplier. channel 1 and 2 are distortion channels, normalized 0..1
+	Error ComputeCorrection(int width, int height, gfx::Image& vignetting, gfx::Image& distortion, gfx::Image* combined);
 
 	// After running this function, you can get the coordinates for the XY RGB coordinates out of InterpPos
 	void ComputeDistortionForLine(int y);

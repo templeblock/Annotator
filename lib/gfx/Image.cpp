@@ -99,7 +99,7 @@ void Image::Reset() {
 void Image::Alloc(ImageFormat format, int width, int height, int stride) {
 	if (stride == 0) {
 		stride = gfx::BytesPerPixel(format) * width;
-		stride = 4 * ((stride + 3) / 4); // round up to multiple of 4
+		stride = 4 * ((stride + 3) / 4); // round up to multiple of 4 bytes
 		if (stride != gfx::BytesPerPixel(format) * width)
 			tsf::print("stride up from %v to %v\n", gfx::BytesPerPixel(format) * width, stride);
 	}
@@ -140,6 +140,7 @@ void Image::Fill(Color8 color) {
 }
 
 void Image::Fill(Rect32 rect, Color8 color) {
+	IMQS_ASSERT(ChannelType() == ChannelTypes::Uint8);
 	rect.x1        = math::Clamp(rect.x1, 0, Width);
 	rect.y1        = math::Clamp(rect.y1, 0, Height);
 	rect.x2        = math::Clamp(rect.x2, 0, Width);

@@ -4,6 +4,7 @@
 #include "MeshRenderer.h"
 #include "OpticalFlow.h"
 #include "Bench.h"
+#include "Experiments/CudaLearn.h"
 
 namespace imqs {
 namespace roadproc {
@@ -70,15 +71,15 @@ int main(int argc, char** argv) {
 	imqs::video::VideoFile::Initialize();
 	//imqs::gfx::raster::TestBilinear();
 
-	imqs::gfx::Image img;
-	//img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-30-10h09m46s586.png");
-	//img.LoadFile("/home/ben/Pictures/vlcsnap-2018-06-22-14h33m23s250.png");
-	//img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-30-10h18m24s551.png");
-	img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-28-16h56m07s892.png");
-	//img.BoxBlur(2, 3);
-	imqs::roadproc::LocalContrast(img, 3, 3);
-	img.SaveFile("/home/ben/Pictures/blur.jpeg");
-	return 1;
+	//imqs::gfx::Image img;
+	////img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-30-10h09m46s586.png");
+	////img.LoadFile("/home/ben/Pictures/vlcsnap-2018-06-22-14h33m23s250.png");
+	////img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-30-10h18m24s551.png");
+	//img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-28-16h56m07s892.png");
+	////img.BoxBlur(2, 3);
+	//imqs::roadproc::LocalContrast(img, 3, 3);
+	//img.SaveFile("/home/ben/Pictures/blur.jpeg");
+	//return 1;
 
 	// This little chunk of code is very useful to verifying the sanity of our OpenGL system
 	//imqs::roadproc::MeshRenderer rend;
@@ -147,6 +148,10 @@ int main(int argc, char** argv) {
 			return 1;
 		}
 	}
+
+	// testing...
+	imqs::roadproc::TestCuda();
+	return 1;
 
 	int ret = args.ExecCommand();
 

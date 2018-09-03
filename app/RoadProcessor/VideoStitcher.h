@@ -33,6 +33,7 @@ public:
 	gfx::Image       FullFlat;           // If EnableFullFlatOutput is true, then FullFlat contains the entire frustum, with perspective removed
 	gfx::Image       BrightnessAdjuster; // This is dynamically adjusted
 	gfx::Image       VignetteAdjust;     // This is computed during initialization, and then held constant
+	gfx::Image       DistortionAdjust;   // This is computed during initialization, and then held constant
 	video::VideoFile Video;
 	video::NVVideo   NVVid;
 	video::IVideo*   ActiveVideo = nullptr;

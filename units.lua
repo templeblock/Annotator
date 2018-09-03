@@ -109,7 +109,7 @@ local function makeGlob(dir, options)
 
 	return FGlob {
 		Dir = dir,
-		Extensions = { ".c", ".cpp", ".h" },
+		Extensions = { ".c", ".cpp", ".cu", ".h" },
 		Filters = filters,
 	}
 end
@@ -792,7 +792,7 @@ local Video = SharedLibrary {
 	},
 	Sources = {
 		makeGlob("lib/Video", {}),
-		"lib/Video/NVidia_linux/Utils/ColorSpace.cu"
+		--"lib/Video/NVidia_linux/Utils/ColorSpace.cu"
 	},
 	IdeGenerationHints = ideHintLibrary,
 }

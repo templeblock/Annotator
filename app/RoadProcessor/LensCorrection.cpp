@@ -107,25 +107,53 @@ Error LensCorrector::InitializeDistortionCorrect(int width, int height) {
 	return Error();
 }
 
-Error LensCorrector::ComputeVignetting(int width, int height, gfx::Image& img) {
+struct DistortionEl {
+	float Rx, Ry;
+	float Gx, Gy;
+	float Bx, By;
+};
+
+Error LensCorrector::ComputeCorrection(int width, int height, gfx::Image& vignetting, gfx::Image& distortion, gfx::Image* combined) {
+	bool debugPrint    = false;
+	int  maxDebugPrint = 20;
 	// The Fuji X-T2 sensor is 23.6mm x 15.6 mm.
 	// Assuming LensFun emits values for the entire sensor, but we're doing 16x9 shooting (FHD),
-	// then we need to chop off some of the left/right results.
+	// then we need to chop off some of the top/bottom results.
 	// 23.6 / 15.6 = 1.5128
 	// 16 / 9 = 1.7777
-	// Ooops - the sensor is actually more square than 16/9. So we should actually be throwing away
-	// bottom/top results.
+	// The sensor's aspect ratio is more square than 16/9.
 	// Anyway - if we divide 1.77777 / 1.5128, we get 1.17, which is precisely the quoted "crop factor"
-	// that the reviews talk about, when they mention FHD/4K recording. So it looks like we've got the
+	// that the reviews of the X-T2 talk about, when they mention FHD/4K recording. So it looks like we've got the
 	// right number here.
-	// I haven't checked whether LensFun has the camera sensor dimensions in it's DB.
+	// Unfortunately LensFun doesn't seem to have the sensor dimensions in it's database. But even if it did,
+	// it would also need to specify how the cropping gets done. As far as I know, it's not always as obvious
+	// as this case with the X-T2.
 
-	// Make these larger, for a potential crop factor
-	int sensorWidth  = width;
-	int sensorHeight = height * 1.777 / 1.5128;
+	// Hardcoded value for the Fuji X-T2. LensFun doesn't seem to have this data in it's DB, so if we
+	// want to support different cameras, then we'll need to know this for that camera.
+	double sensorAspectRatio = 23.6 / 15.6;
 
-	float crop = Camera->CropFactor;
-	auto  mod  = lf_modifier_create(crop, sensorWidth, sensorHeight, LF_PF_F32, false);
+	// This is the aspect ratio of the footage that is coming out of the camera. This is often cropped for
+	// video (as explained above). The part of the sensor that's thrown away comes from the top and bottom,
+	// because camera sensors are usually more square, and videos are usually more wide.
+	double usedAspectRatio = (double) width / (double) height;
+
+	// When we get the distortion parameters out of LensFun, we want to give it a matrix that is the
+	// same ratio as the camera's sensor. This seems like the most sane thing to do, because it
+	// makes it easy to reason about; The data coming out of LensFun is 1:1 with the camera sensor.
+	// Whatever data we want to throw away, we throw away after getting the 1:1 data from LensFun.
+	int sensorWidth, sensorHeight;
+	if (usedAspectRatio > sensorAspectRatio) {
+		// expected case (sensor is square, video is wide)
+		sensorWidth  = width;
+		sensorHeight = height * (usedAspectRatio / sensorAspectRatio);
+	} else {
+		// unexpected case (sensor is wide, video is square)
+		sensorWidth  = width / (usedAspectRatio / sensorAspectRatio);
+		sensorHeight = height;
+	}
+
+	auto mod = lf_modifier_create(Camera->CropFactor, sensorWidth, sensorHeight, LF_PF_F32, false);
 	if (!mod)
 		return Error("Unable to create lens modifier");
 
@@ -136,44 +164,131 @@ Error LensCorrector::ComputeVignetting(int width, int height, gfx::Image& img) {
 	if (!(enabled & LF_MODIFY_VIGNETTING))
 		return Error("Failed to initialize vignetting correction");
 
-	float* px = new float[sensorWidth * sensorHeight];
+	enabled = mod->EnableDistortionCorrection(Lens, focal);
+	if (!(enabled & LF_MODIFY_DISTORTION))
+		return Error("Failed to initialize distortion correction");
+
+	float* pxColor = new float[sensorWidth * sensorHeight];
 	for (int i = 0; i < sensorWidth * sensorHeight; i++)
-		px[i] = 1;
-	bool ok = mod->ApplyColorModification(px, 0.0, 0.0, sensorWidth, sensorHeight, LF_CR_1(INTENSITY), sensorWidth * sizeof(float));
+		pxColor[i] = 1;
+
+	bool ok = mod->ApplyColorModification(pxColor, 0.0, 0.0, sensorWidth, sensorHeight, LF_CR_1(INTENSITY), sensorWidth * sizeof(float));
 	IMQS_ASSERT(ok);
 
-	bool debugPrint = false;
+#define SKIP_Y(Y, HEIGHT)                                   \
+	if (HEIGHT > maxDebugPrint && Y == maxDebugPrint / 2) { \
+		tsf::print(" .. \n");                               \
+		Y = HEIGHT - maxDebugPrint / 2;                     \
+		continue;                                           \
+	}
+#define SKIP_X(X, WIDTH)                                   \
+	if (WIDTH > maxDebugPrint && X == maxDebugPrint / 2) { \
+		tsf::print(".. ");                                 \
+		X = WIDTH - maxDebugPrint / 2;                     \
+		continue;                                          \
+	}
+
 	if (debugPrint) {
+		tsf::print("---------------------------------Vignetting------------------------------------\n");
 		for (int y = 0; y < sensorHeight; y++) {
+			SKIP_Y(y, sensorHeight);
 			for (int x = 0; x < sensorWidth; x++) {
-				tsf::print("%4.2f ", px[y * width + x]);
+				SKIP_X(x, sensorWidth);
+				tsf::print("%4.2f ", pxColor[y * width + x]);
 			}
 			tsf::print("\n");
 		}
 	}
 
-	img.Alloc(gfx::ImageFormat::Gray, width, height);
+	// Assume here that the video crop region lies in the center of the sensor (a very reasonable assumption)
+	vignetting.Alloc(gfx::ImageFormat::Gray, width, height);
+	if (combined)
+		combined->Alloc(gfx::ImageFormat::F32_RGBA, width, height);
 	int x1 = (sensorWidth - width) / 2;
 	int y1 = (sensorHeight - height) / 2;
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
-			int   sx      = x + x1;
-			int   sy      = y + y1;
-			float v       = px[sy * sensorWidth + sx];
-			*img.At(x, y) = (uint8_t) math::Clamp<float>(v * VignetteGrayMultiplier, 0, 255);
+			int   sx             = x + x1;
+			int   sy             = y + y1;
+			float v              = pxColor[sy * sensorWidth + sx];
+			*vignetting.At(x, y) = (uint8_t) math::Clamp<float>(v * VignetteGrayMultiplier, 0, 255);
+			if (combined) {
+				float* com = combined->AtF32(x, y);
+				com[0]     = v;
+			}
 		}
 	}
 
 	if (debugPrint) {
 		for (int y = 0; y < height; y++) {
+			SKIP_Y(y, height);
 			for (int x = 0; x < width; x++) {
-				tsf::print("%3d ", (int) *img.At(x, y));
+				SKIP_X(x, width);
+				tsf::print("%3d ", (int) *vignetting.At(x, y));
 			}
 			tsf::print("\n");
 		}
 	}
 
-	delete[] px;
+	delete[] pxColor;
+
+	// Distortion
+	DistortionEl* pxDistort = new DistortionEl[sensorWidth * sensorHeight];
+	ok                      = mod->ApplySubpixelGeometryDistortion(0.0, 0.0, sensorWidth, sensorHeight, (float*) pxDistort);
+	IMQS_ASSERT(ok);
+
+	maxDebugPrint = 10;
+
+	if (debugPrint) {
+		tsf::print("---------------------------------Distortion------------------------------------\n");
+		for (int y = 0; y < sensorHeight; y++) {
+			SKIP_Y(y, sensorHeight);
+			for (int x = 0; x < sensorWidth; x++) {
+				SKIP_X(x, sensorWidth);
+				tsf::print("%4.2f,%4.2f ", pxDistort[y * width + x].Gx, pxDistort[y * width + x].Gy);
+			}
+			tsf::print("\n");
+		}
+	}
+
+	// Same rules apply here, as for the color correction (ie crop is in center of sensor)
+	distortion.Alloc(gfx::ImageFormat::F32_RG, width, height);
+	auto bounds = gfx::RectF::Inverted();
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			int         sx = x + x1;
+			int         sy = y + y1;
+			const auto& v  = pxDistort[sy * sensorWidth + sx];
+			float*      xy = distortion.AtF32(x, y);
+			// I find it strange that lensfun's values are scaled to width-1 and height-1, instead of width and height,
+			// but the numbers look correct this way, in the sense that left/right and top/bottom are symmetrical.
+			float nGx = v.Gx / (float) (width - 1);
+			float nGy = v.Gy / (float) (height - 1);
+			xy[0]     = nGx;
+			xy[1]     = nGy;
+			if (combined) {
+				float* com = combined->AtF32(x, y);
+				com[1]     = nGx;
+				com[2]     = nGy;
+			}
+			bounds.ExpandToFit(v.Gx, v.Gy);
+		}
+	}
+
+	if (debugPrint) {
+		tsf::print("Bounds of raw distortion values: %v,%v - %v,%v\n", bounds.x1, bounds.y1, bounds.x2, bounds.y2);
+		for (int y = 0; y < height; y++) {
+			SKIP_Y(y, height);
+			for (int x = 0; x < width; x++) {
+				SKIP_X(x, width);
+				tsf::print("%4.2f,%4.2f ", distortion.AtF32(x, y)[0], distortion.AtF32(x, y)[1]);
+			}
+			tsf::print("\n");
+		}
+	}
+
+	delete[] pxDistort;
+
 	return Error();
 }
 

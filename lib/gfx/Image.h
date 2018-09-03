@@ -15,16 +15,26 @@ enum class ImageType {
 const char* ImageTypeName(ImageType f);
 ImageType   ParseImageType(const std::string& f);
 
+enum class ChannelTypes {
+	Null,
+	Uint8,
+	Float32,
+};
+
 enum class ImageFormat {
 	Null,
-	RGBA,  // RGBA not premultipled
-	RGBAP, // RGBA premultipled
+	F32_RG,   // Two channels float32
+	F32_RGBA, // Four channels float32
+	RGBA,     // RGBA not premultipled
+	RGBAP,    // RGBA premultipled
 	Gray,
 };
 
 inline int BytesPerPixel(ImageFormat f) {
 	switch (f) {
 	case ImageFormat::Null: return 0;
+	case ImageFormat::F32_RG: return 2 * sizeof(float);
+	case ImageFormat::F32_RGBA: return 4 * sizeof(float);
 	case ImageFormat::RGBA: return 4;
 	case ImageFormat::RGBAP: return 4;
 	case ImageFormat::Gray: return 1;
@@ -32,9 +42,22 @@ inline int BytesPerPixel(ImageFormat f) {
 	return 0;
 }
 
+inline ChannelTypes ChannelType(ImageFormat f) {
+	switch (f) {
+	case ImageFormat::Null: return ChannelTypes::Null;
+	case ImageFormat::F32_RG: return ChannelTypes::Float32;
+	case ImageFormat::F32_RGBA: return ChannelTypes::Float32;
+	case ImageFormat::RGBA: return ChannelTypes::Uint8;
+	case ImageFormat::RGBAP: return ChannelTypes::Uint8;
+	case ImageFormat::Gray: return ChannelTypes::Uint8;
+	}
+}
+
 inline int NumChannels(ImageFormat f) {
 	switch (f) {
 	case ImageFormat::Null: return 0;
+	case ImageFormat::F32_RG: return 2;
+	case ImageFormat::F32_RGBA: return 4;
 	case ImageFormat::RGBA: return 4;
 	case ImageFormat::RGBAP: return 4;
 	case ImageFormat::Gray: return 1;
@@ -104,12 +127,15 @@ public:
 	const uint8_t*  At(int x, int y) const { return Data + (y * Stride) + x * BytesPerPixel(); }
 	uint32_t*       At32(int x, int y) { return (uint32_t*) (Data + (y * Stride) + x * BytesPerPixel()); }
 	const uint32_t* At32(int x, int y) const { return (const uint32_t*) (Data + (y * Stride) + x * BytesPerPixel()); }
+	float*          AtF32(int x, int y) { return (float*) (Data + (y * Stride) + x * BytesPerPixel()); }
+	const float*    AtF32(int x, int y) const { return (const float*) (Data + (y * Stride) + x * BytesPerPixel()); }
 	uint8_t*        Line(int y) { return Data + (y * Stride); }
 	const uint8_t*  Line(int y) const { return Data + (y * Stride); }
 	uint32_t*       Line32(int y) { return (uint32_t*) (Data + (y * Stride)); }
 	const uint32_t* Line32(int y) const { return (const uint32_t*) (Data + (y * Stride)); }
 	int             BytesPerPixel() const { return gfx::BytesPerPixel(Format); }
 	int             NumChannels() const { return gfx::NumChannels(Format); }
+	ChannelTypes    ChannelType() const { return gfx::ChannelType(Format); }
 	size_t          BytesPerLine() const { return gfx::BytesPerPixel(Format) * Width; }
 };
 
