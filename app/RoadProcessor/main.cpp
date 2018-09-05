@@ -150,8 +150,8 @@ int main(int argc, char** argv) {
 	}
 
 	// testing...
-	imqs::roadproc::TestCuda();
-	return 1;
+	//imqs::roadproc::TestCuda();
+	//return 1;
 
 	int ret = args.ExecCommand();
 

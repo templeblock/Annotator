@@ -6,23 +6,39 @@
 #include "VideoStitcher.h"
 #include "Speed.h"
 
-// This is the third version of our vehicle speed computation system, which uses
-// optical flow on flattened images, instead of using OpenCV feature tracking.
-//
-// Time to do 3 mthata videos (4.1GB, 4.1GB, 3.8GB): 40 minutes
-//
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed -o speeds.json -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
-//
-// mthata
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS'speed --csv -0.000411 ~/mldata/mthata/DSCF0001-HG-3.MOV 2>/dev/null
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed -o mthata-speeds.json -0.000411 /home/ben/mldata/mthata/DSCF0001-HG-3.MOV,/home/ben/mldata/mthata/DSCF0001-HG-4.MOV,/home/ben/mldata/mthata/DSCF0001-HG-5.MOV 2>/dev/null
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.000411 /home/ben/mldata/mthata/DSCF0001-HG-3.MOV,/home/ben/mldata/mthata/DSCF0001-HG-4.MOV,/home/ben/mldata/mthata/DSCF0001-HG-5.MOV 2>/dev/null
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.000411 /home/ben/mldata/mthata/Day3-4.MOV 2>/dev/null
-// build/run-roadprocessor --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.000411 /home/ben/mldata/mthata/Day3-4.MOV
-// Day3-11: ZY: -0.000794
-// build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed '{"z1":1.311900, "zy":-0.000578, "sensorCrop":[0,0,1920,1080]}' -o speed.json \
-   '/home/ben/mldata/train/ORT Day1 (3).MOV,/home/ben/mldata/train/ORT Day1 (4).MOV,/home/ben/mldata/train/ORT Day1 (5).MOV,/home/ben/mldata/train/ORT Day1 (6).MOV,/home/ben/mldata/train/ORT Day1 (7).MOV,/home/ben/mldata/train/ORT Day1 (8).MOV' 2>/dev/null
+/*
+This is the third version of our vehicle speed computation system, which uses
+optical flow on flattened images, instead of using OpenCV feature tracking.
+
+Time to do 3 mthata videos (4.1GB, 4.1GB, 3.8GB): 40 minutes
+
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed -o speeds.json -0.00095 ~/mldata/DSCF3040.MOV 2>/dev/null
+
+mthata
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS'speed --csv -0.000411 ~/mldata/mthata/DSCF0001-HG-3.MOV 2>/dev/null
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed -o mthata-speeds.json -0.000411 /home/ben/mldata/mthata/DSCF0001-HG-3.MOV,/home/ben/mldata/mthata/DSCF0001-HG-4.MOV,/home/ben/mldata/mthata/DSCF0001-HG-5.MOV 2>/dev/null
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.000411 /home/ben/mldata/mthata/DSCF0001-HG-3.MOV,/home/ben/mldata/mthata/DSCF0001-HG-4.MOV,/home/ben/mldata/mthata/DSCF0001-HG-5.MOV 2>/dev/null
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.000411 /home/ben/mldata/mthata/Day3-4.MOV 2>/dev/null
+build/run-roadprocessor --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed --csv -0.000411 /home/ben/mldata/mthata/Day3-4.MOV
+Day3-11: ZY: -0.000794
+
+AHEM.. it actually starts at Day1 (2)!!
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed '{"z1":1.311900, "zy":-0.000578, "sensorCrop":[0,0,1920,1080]}' -o speed.json \
+  '/home/ben/mldata/train/ORT Day1 (3).MOV,/home/ben/mldata/train/ORT Day1 (4).MOV,/home/ben/mldata/train/ORT Day1 (5).MOV,/home/ben/mldata/train/ORT Day1 (6).MOV,/home/ben/mldata/train/ORT Day1 (7).MOV,/home/ben/mldata/train/ORT Day1 (8).MOV' 2>/dev/null
+
+
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed '{"z1":1.287231, "zy":-0.000532, "sensorCrop":[0,0,1920,1080]}' -o speed-ORT-Day1-2-to-6 \
+  '/home/ben/mldata/train/ORT Day1 (2).MOV,/home/ben/mldata/train/ORT Day1 (3).MOV,/home/ben/mldata/train/ORT Day1 (4).MOV,/home/ben/mldata/train/ORT Day1 (5).MOV,/home/ben/mldata/train/ORT Day1 (6).MOV'
+
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed '{"z1":1.309312, "zy":-0.000573, "sensorCrop":[0,0,1920,1080]}' -o speed-ORT-Day1-7-to-12 \
+  '/home/ben/mldata/train/ORT Day1 (7).MOV,/home/ben/mldata/train/ORT Day1 (8).MOV,/home/ben/mldata/train/ORT Day1 (9).MOV,/home/ben/mldata/train/ORT Day1 (10).MOV,/home/ben/mldata/train/ORT Day1 (11).MOV,/home/ben/mldata/train/ORT Day1 (12).MOV'
+
+build/run-roadprocessor -r --lens 'Fujifilm X-T2,Samyang 12mm f/2.0 NCS CS' speed '{"z1":1.362058, "zy":-0.000844, "sensorCrop":[0,222,1920,1080]}' -o speed-ORT-Day3-18-to-22.json \
+  '/home/ben/mldata/train/Day3 (18).MOV,/home/ben/mldata/train/Day3 (19).MOV,/home/ben/mldata/train/Day3 (20).MOV,/home/ben/mldata/train/Day3 (21).MOV,/home/ben/mldata/train/Day3 (22).MOV'
+
+
+*/
 
 using namespace std;
 using namespace imqs::gfx;

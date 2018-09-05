@@ -33,10 +33,13 @@ public:
 
 	NVVideo();
 	~NVVideo() override;
-	Error Initialize(int iGPU = 0);
-	void  Close();
-	int   Width();
-	int   Height();
+
+	static Error Initialize(int iGPU = 0);
+	static void  Shutdown();
+
+	void Close();
+	int  Width();
+	int  Height();
 
 	// IVideo
 	Error OpenFile(std::string filename) override;
@@ -60,7 +63,6 @@ private:
 		gfx::Image Img; // The memory inside this img is special pinned memory - allocated with cudaMallocHost
 		int64_t    Pts = 0;
 	};
-	CUcontext     CUCtx = nullptr;
 	FFmpegDemuxer Demuxer;
 	NvDecoder*    Decoder          = nullptr;
 	int           DeviceBufferSize = 20;

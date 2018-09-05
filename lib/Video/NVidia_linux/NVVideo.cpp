@@ -13,6 +13,8 @@ using namespace std;
 namespace imqs {
 namespace video {
 
+CUcontext CUCtx = nullptr;
+
 NVVideo::NVVideo() {
 	HostHead     = 0;
 	HostTail     = 0;
@@ -22,11 +24,11 @@ NVVideo::NVVideo() {
 
 NVVideo::~NVVideo() {
 	Close();
-	if (CUCtx)
-		cuCtxDestroy(CUCtx);
 }
 
 Error NVVideo::Initialize(int iGPU) {
+	IMQS_ASSERT(!CUCtx);
+
 	auto err = cuErr(cuInit(0));
 	if (!err.OK())
 		return err;
@@ -43,8 +45,12 @@ Error NVVideo::Initialize(int iGPU) {
 	if (!err.OK())
 		return err;
 
-	//Decode(cuContext, szInFilePath);
 	return Error();
+}
+
+void NVVideo::Shutdown() {
+	if (CUCtx)
+		cuCtxDestroy(CUCtx);
 }
 
 Error NVVideo::OpenFile(std::string filename) {
@@ -251,10 +257,12 @@ void NVVideo::DecodeThreadFunc() {
 		uint8_t** ppFrame;
 		int64_t   pts = 0;
 		bool      ok  = Demuxer.Demux(&pVideo, &videoBytes, &pts);
-		IMQS_ASSERT(ok);
+		if (!ok)
+			tsf::print("Demuxer.Demux failed!\n");
 		// error handling!
 		ok = Decoder->Decode(pVideo, videoBytes, &ppFrame, &nFrameReturned, 0, &timeStamps, pts);
-		IMQS_ASSERT(ok);
+		if (!ok)
+			tsf::print("Decoder->Decode failed!\n");
 		//if (!nFrame && nFrameReturned)
 		//	LOG(INFO) << dec.GetVideoInfo();
 
@@ -277,7 +285,8 @@ void NVVideo::DecodeThreadFunc() {
 		for (int i = 0; i < nFrameReturned; i++) {
 			// SemDeviceFramesFree is only used when decoding to GPU. Every time a frame is removed from the DeviceFrames ring,
 			// the SemDeviceFramesFree is increased. Once it drops to zero, we pause here, to wait for the consumer to drain DeviceFrames.
-			SemDeviceFramesFree->wait();
+			if (OutputMode == OutputGPU)
+				SemDeviceFramesFree->wait();
 			auto& dFrame  = DeviceFrames[DeviceHead % DeviceBufferSize];
 			dFrame.Stride = Decoder->GetWidth() * 4;
 			//tsf::print("Decoding to %p (device)\n", dFrame.Frame);
