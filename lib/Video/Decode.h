@@ -33,17 +33,17 @@ public:
 	VideoStreamInfo GetVideoStreamInfo();
 	VideoMetadata   Metadata();
 	Error           SeekToPreviousFrame();
-	Error           SeekToFrame(int64_t frame, unsigned flags = Seek::None);
-	Error           SeekToFraction(double fraction_0_to_1, unsigned flags = Seek::None);
-	Error           SeekToSecond(double second, unsigned flags = Seek::None);
+	Error           SeekToFrame(int64_t frame, unsigned flags = SeekFlagNone);
+	Error           SeekToFraction(double fraction_0_to_1, unsigned flags = SeekFlagNone);
+	Error           SeekToSecond(double second, unsigned flags = SeekFlagNone);
 	double          LastFrameTimeSeconds() const;
 	int64_t         LastFrameTimeMicrosecond() const;
 
 	// IVideo
 	Error OpenFile(std::string filename) override;
-	void  Info(int& width, int& height) override;
+	void  Info(int& width, int& height, int64_t& durationMicroseconds) override;
 	Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) override;
-	Error SeekToMicrosecond(int64_t microsecond, unsigned flags = Seek::None) override;
+	Error SeekToMicrosecond(int64_t microsecond, unsigned flags = SeekFlagNone) override;
 
 	void Dimensions(int& width, int& height) const;
 

@@ -13,7 +13,7 @@ public:
 	Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) override {
 		return Error("NVVideo not available on Windows");
 	}
-	Error SeekToMicrosecond(int64_t microsecond, unsigned flags = Seek::None) override {
+	Error SeekToMicrosecond(int64_t microsecond, unsigned flags = SeekFlagNone) override {
 		return Error("NVVideo not available on Windows");
 	}
 };

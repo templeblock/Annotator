@@ -3,9 +3,9 @@
 namespace imqs {
 namespace video {
 
-enum Seek {
-	None = 0,               // seek to nearest keyframe
-	Any  = AVSEEK_FLAG_ANY, // seek to any frame, even non-keyframes
+enum SeekFlags {
+	SeekFlagNone = 0,               // seek to nearest keyframe
+	SeekFlagAny  = AVSEEK_FLAG_ANY, // seek to any frame, even non-keyframes
 
 	// Note: ffmpeg has these:
 	// AVSEEK_FLAG_BACKWARD 1 ///< seek backward
@@ -21,9 +21,9 @@ class IVideo {
 public:
 	virtual ~IVideo() {}
 	virtual Error OpenFile(std::string filename)                                                               = 0;
-	virtual void  Info(int& width, int& height)                                                                = 0;
+	virtual void  Info(int& width, int& height, int64_t& durationMicroseconds)                                 = 0;
 	virtual Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) = 0;
-	virtual Error SeekToMicrosecond(int64_t microsecond, unsigned flags = Seek::None)                          = 0;
+	virtual Error SeekToMicrosecond(int64_t microsecond, unsigned flags = SeekFlagNone)                        = 0;
 
 	static Error TranslateAvErr(int ret, const char* whileBusyWith = nullptr);
 };

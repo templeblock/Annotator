@@ -70,9 +70,10 @@ Error NVVideo::OpenFile(std::string filename) {
 	return Error();
 }
 
-void NVVideo::Info(int& width, int& height) {
-	width  = Width();
-	height = Height();
+void NVVideo::Info(int& width, int& height, int64_t& durationMicroseconds) {
+	width                = Width();
+	height               = Height();
+	durationMicroseconds = Demuxer.GetDurationSeconds() * 1000000;
 }
 
 void NVVideo::Close() {

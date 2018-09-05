@@ -61,6 +61,8 @@ Error FFmpegDemuxer::Open(AVFormatContext* _fmtc) {
 
 	timebase = fmtc->streams[iVideoStream]->time_base;
 
+	Duration = fmtc->duration;
+
 	av_init_packet(&pkt);
 	pkt.data = NULL;
 	pkt.size = 0;
@@ -99,6 +101,10 @@ void FFmpegDemuxer::Close() {
 		av_freep(&avioc);
 		avioc = nullptr;
 	}
+}
+
+double FFmpegDemuxer::GetDurationSeconds() {
+	return (double) Duration / (double) AV_TIME_BASE;
 }
 
 Error FFmpegDemuxer::CreateFormatContext(DataProvider* pDataProvider, AVFormatContext*& ctx) {

@@ -84,9 +84,10 @@ Error VideoFile::OpenFile(std::string filename) {
 	return Error();
 }
 
-void VideoFile::Info(int& width, int& height) {
-	width  = Width();
-	height = Height();
+void VideoFile::Info(int& width, int& height, int64_t& durationMicroseconds) {
+	width                = Width();
+	height               = Height();
+	durationMicroseconds = GetVideoStreamInfo().DurationSeconds() * 1000000;
 }
 
 VideoStreamInfo VideoFile::GetVideoStreamInfo() {
@@ -161,7 +162,7 @@ Error VideoFile::SeekToMicrosecond(int64_t microsecond, unsigned flags) {
 	double  t   = ((double) microsecond / 1000000.0) / ts;
 	int64_t pts = (int64_t) t;
 	int     r   = av_seek_frame(FmtCtx, VideoStreamIdx, pts, flags);
-	if (r >= 0 && !!(flags & Seek::Any))
+	if (r >= 0 && !!(flags & SeekFlagAny))
 		LastSeekPTS = pts;
 	return Error();
 }

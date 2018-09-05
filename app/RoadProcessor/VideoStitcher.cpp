@@ -114,7 +114,7 @@ Error VideoStitcher::Rewind() {
 	if (StartVideoAt != 0) {
 		if (EnableNVVideo)
 			return Error("CUDA accelerated video decoder does not support seeking");
-		err = Video.SeekToSecond(StartVideoAt, video::Seek::Any);
+		err = Video.SeekToSecond(StartVideoAt, video::SeekFlagAny);
 		if (!err.OK())
 			return err;
 	}

@@ -169,7 +169,7 @@ static void HandleHttp(SessionStore& sessions, phttp::Response& w, phttp::Reques
 		if (r.QueryVal("quality") == "")
 			quality = -1;
 		if (hasMicros) {
-			auto err = ses->Video.SeekToMicrosecond(micros, video::Seek::Any);
+			auto err = ses->Video.SeekToMicrosecond(micros, video::SeekFlagAny);
 			if (!err.OK()) {
 				w.SetStatusAndBody(phttp::Status400_Bad_Request, tsf::fmt("Seek to %v microseconds failed: %v", micros, err.Message()));
 				return;

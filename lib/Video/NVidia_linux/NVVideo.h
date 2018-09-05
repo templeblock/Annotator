@@ -43,9 +43,9 @@ public:
 
 	// IVideo
 	Error OpenFile(std::string filename) override;
-	void  Info(int& width, int& height) override;
+	void  Info(int& width, int& height, int64_t& durationMicroseconds) override;
 	Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) override;
-	Error SeekToMicrosecond(int64_t microsecond, unsigned flags = Seek::None) override;
+	Error SeekToMicrosecond(int64_t microsecond, unsigned flags = SeekFlagNone) override;
 
 	// Returns a pointer to CUDA memory, containing the next decoded RGBA video frame (and it's stride)
 	// OutputMode must be set to OutputGPU before opening the file.

@@ -27,6 +27,7 @@ private:
 	int       nWidth       = 0;
 	int       nHeight      = 0;
 	int       nBitDepth    = 0;
+	int64_t   Duration     = 0;
 
 public:
 	class DataProvider {
@@ -54,6 +55,7 @@ public:
 	int        GetBitDepth() { return nBitDepth; }
 	int        GetFrameSize() { return nBitDepth == 8 ? nWidth * nHeight * 3 / 2 : nWidth * nHeight * 3; }
 	AVRational GetTimebase() { return timebase; }
+	double     GetDurationSeconds();
 
 	bool Demux(uint8_t** ppVideo, int* pnVideoBytes, int64_t* pts);
 
