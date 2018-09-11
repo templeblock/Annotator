@@ -196,8 +196,10 @@ void UI::Render() {
 		auto labelsCopy   = Labels;
 		auto filenameCopy = VideoFilename;
 		ExportThread      = std::thread([this, taxonomyCopy, labelsCopy, filenameCopy] {
-            auto exportType = LabelMode == UI::LabelModes::FixedBoxes ? ExportTypes::Jpeg : ExportTypes::Segmentation;
-            auto err        = ExportLabeledImagePatches_Video(exportType, filenameCopy, taxonomyCopy, labelsCopy, ExportCallback);
+            auto exportType = ExportTypes::Jpeg;
+            if (LabelMode == UI::LabelModes::Segmentation)
+                exportType = ExportTypes::Segmentation;
+            auto err = ExportLabeledImagePatches_Video(exportType, filenameCopy, taxonomyCopy, labelsCopy, ExportCallback);
             if (ExportMsgBox) {
                 if (err.OK())
                     ExportMsgBox->SetText("Done");
@@ -277,29 +279,53 @@ void UI::RenderLabelUI() {
 	int labelRows = 3;
 
 	for (auto group : Taxonomy.ClassGroups()) {
-		if (!group[0].IsPolygon && LabelMode != LabelModes::FixedBoxes)
+		if (!group[0].IsPolygon && LabelMode != LabelModes::FixedBoxes && LabelMode != LabelModes::OneBox)
 			continue;
 		if (group[0].IsPolygon && LabelMode != LabelModes::Segmentation)
 			continue;
 
 		// compute number of columns necessary for this group, and then size the width
 		// of the container so that the children will wrap around appropriately
-		int  labelCols = (int) ceil(group.size() / (double) labelRows);
-		auto makeLabel = [](string key, string title, bool isActive) -> string {
+		int    labelCols  = (int) ceil(group.size() / (double) labelRows);
+		double labelWidth = 7.2;
+		if (LabelMode == LabelModes::OneBox)
+			labelWidth = 8;
+
+		auto makeLabel = [=](string key, string title, bool isActive, int severity) -> string {
 			// the label with (7.5) must be slightly less than the column multiplier, down below (8)
-			const char* active = isActive ? "class='active-label'" : "";
-			return tsf::fmt("<div style='width: 7.2em' %v><span class='shortcut'>%v</span>%v</div>", active, key, title);
+			const char* active     = isActive ? "class='active-label'" : "";
+			string      severityUI = "";
+			if (severity != -1)
+				severityUI = tsf::fmt("<span class='severity-inline'>%v</span>", severity);
+			return tsf::fmt("<div style='width: %vem' %v><span class='shortcut'>%v</span>%v%v</div>", labelWidth, active, key, severityUI, title);
 		};
-		string labelSrc = tsf::fmt("<div style='width: %vem' class='label-group'>", labelCols * 7.4);
+		string labelSrc = tsf::fmt("<div style='width: %vem' class='label-group'>", labelCols * labelWidth * 1.1);
 		for (size_t i = 0; i < group.size(); i++) {
-			bool active = CurrentAssignClass.Class == group[i].Class;
-			labelSrc += makeLabel(group[i].KeyStr(), group[i].Class, active);
+			bool active   = CurrentAssignClass.Class == group[i].Class;
+			int  severity = -1;
+			if (LabelMode == LabelModes::OneBox)
+				severity = CurrentOneBoxState.get(group[i].Class);
+			labelSrc += makeLabel(group[i].KeyStr(), group[i].Class, active, severity);
 		}
 		labelSrc += "</div>";
 		LabelBox->ParseAppend(labelSrc);
 	}
-	string severity = tsf::fmt("<div style='margin-left: 10ep'>Severity <span class='severity'>%v</span></div>", CurrentAssignSeverity);
-	LabelBox->ParseAppend(severity);
+	if (LabelMode != LabelModes::OneBox) {
+		string severity = tsf::fmt("<div style='margin-left: 10ep'>Severity <span class='severity'>%v</span></div>", CurrentAssignSeverity);
+		LabelBox->ParseAppend(severity);
+	}
+	if (LabelMode == LabelModes::OneBox && !AreAllOneBoxLabelsDefined()) {
+		LabelBox->ParseAppend("<div class='error' style='padding: 5px'>All classes must be non-zero</div>");
+	}
+}
+
+bool UI::AreAllOneBoxLabelsDefined() {
+	bool isDefined = CurrentOneBoxState.size() == Taxonomy.Classes.size();
+	for (auto it : CurrentOneBoxState) {
+		if (it.second == 0)
+			isDefined = false;
+	}
+	return isDefined;
 }
 
 void UI::RenderTimeSlider(bool first) {
@@ -376,8 +402,11 @@ void UI::SeekFromUI(xo::Event& ev) {
 	Video.SeekToFraction(mouseX);
 	// When seeking by fraction, we just seek to a keyframe, and the codec buffer still has data inside it. So that's
 	// why we need to burn a frame.
+	// UPDATE: I have subsequently fixed the seeking inside Video so that this problem no longer exists
 	NextFrame();
-	NextFrame();
+	//NextFrame();
+	if (LabelMode == LabelModes::OneBox)
+		LoadOneBoxLabel();
 }
 
 void UI::Play() {
@@ -597,12 +626,29 @@ void UI::DrawEvalOverlay() {
 #endif
 }
 
+xo::Box UI::OneBoxRect() {
+	int vwidth, vheight;
+	Video.Dimensions(vwidth, vheight);
+	int h = int(vheight * 2.0 / 3.0);
+	h     = ((h + 15) / 16) * 16; // just for nice numbers. arbitrary decision
+	return xo::Box(0, vheight - h, vwidth, vheight);
+}
+
 void UI::DrawLabels() {
 	switch (LabelMode) {
 	case LabelModes::FixedBoxes: DrawLabelBoxes(); break;
+	case LabelModes::OneBox: DrawOneBox(); break;
 	case LabelModes::Segmentation: DrawSegmentationLabels(); break;
 	default: IMQS_DIE();
 	}
+}
+
+void UI::DrawOneBox() {
+	auto cx = VideoCanvas->GetCanvas2D();
+	cx->GetImage()->CopyFrom(&LastFrameImg);
+	auto box = OneBoxRect();
+	box.Expand(-5, -5);
+	cx->StrokeRect(box, xo::Color(255, 0, 0, 150), 1.5f);
 }
 
 void UI::DrawLabelBoxes() {
@@ -718,6 +764,8 @@ void UI::OnKeyChar(xo::Event& ev) {
 		PrevFrame();
 		break;
 	case '.':
+		if (LabelMode == LabelModes::OneBox && AreAllOneBoxLabelsDefined())
+			SaveOneBoxLabel();
 		NextFrame();
 		break;
 	case '0':
@@ -727,12 +775,14 @@ void UI::OnKeyChar(xo::Event& ev) {
 	case '4':
 	case '5':
 		CurrentAssignSeverity = ev.KeyChar - '0';
+		if (LabelMode == LabelModes::OneBox && CurrentAssignSeverity >= 1)
+			CurrentOneBoxState.set(CurrentAssignClass.Class, CurrentAssignSeverity);
 		RenderLabelUI();
 		break;
 	}
 	for (auto c : Taxonomy.Classes) {
 		if (toupper(c.Key) == toupper(ev.KeyChar)) {
-			if (LabelMode == LabelModes::FixedBoxes)
+			if (LabelMode == LabelModes::FixedBoxes || LabelMode == LabelModes::OneBox)
 				SetCurrentLabel(c);
 			else
 				CreateNewPolygonLabel(c.Class, CurrentAssignSeverity);
@@ -795,7 +845,7 @@ void UI::OnLoadSaveTimer() {
 		status += tsf::fmt("TOTAL:%d ", total);
 		StatusLabel->SetText(status);
 		//StatusLabel->SetText(tsf::fmt("%v labels", Labels.TotalLabelCount()));
-	} else if (LabelMode == LabelModes::Segmentation) {
+	} else if (LabelMode == LabelModes::Segmentation || LabelMode == LabelModes::OneBox) {
 		status = tsf::fmt("Frames:%d ", Labels.TotalPolygonFrameCount());
 		StatusLabel->SetText(status);
 	}
@@ -844,6 +894,37 @@ void UI::CreateNewPolygonLabel(std::string klass, int severity) {
 	frame->Labels.back().Classes.push_back(ClassSeverity(klass, severity));
 	CurrentPolygon = &frame->Labels.back().Polygon;
 	CurrentLabel   = &frame->Labels.back();
+}
+
+void UI::SaveOneBoxLabel() {
+	auto        frame = LabelsForCurrentFrame(true);
+	auto        box   = OneBoxRect();
+	train::Rect rect(box.Left, box.Top, box.Right, box.Bottom);
+
+	Label* lab = frame->FindLabel(rect, true);
+	lab->Classes.clear();
+	for (const auto& it : CurrentOneBoxState) {
+		lab->Classes.push_back(ClassSeverity(it.first, it.second));
+	}
+
+	SetLabelDirty(frame, lab, false);
+}
+
+void UI::LoadOneBoxLabel() {
+	auto frame = LabelsForCurrentFrame(false);
+	if (!frame)
+		return;
+	auto        box = OneBoxRect();
+	train::Rect rect(box.Left, box.Top, box.Right, box.Bottom);
+	Label*      lab = frame->FindLabel(rect, false);
+	if (!lab)
+		return;
+	for (const auto& c : lab->Classes) {
+		if (Taxonomy.FindClass(c.Class)) {
+			CurrentOneBoxState.insert(c.Class, c.Severity, true);
+		}
+	}
+	RenderLabelUI();
 }
 
 void UI::SetLabelDirty(train::ImageLabels* frame, train::Label* label, bool redrawOnCanvas) {

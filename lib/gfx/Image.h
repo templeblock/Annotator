@@ -51,6 +51,7 @@ inline ChannelTypes ChannelType(ImageFormat f) {
 	case ImageFormat::RGBAP: return ChannelTypes::Uint8;
 	case ImageFormat::Gray: return ChannelTypes::Uint8;
 	}
+	return ChannelTypes::Null;
 }
 
 inline int NumChannels(ImageFormat f) {

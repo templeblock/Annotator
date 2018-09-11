@@ -341,7 +341,7 @@ static void BoxBlurGray(uint8_t* src, uint8_t* dst, int width, int blurSize, int
 static void BlurRGBAPixel(int n, Color8* src, Color8* dst, libdivide::divider<int>& divider) {
 	auto sum = _mm_setzero_si128();
 	for (int i = 0; i < n; i++)
-		sum += _mm_cvtepu8_epi32(_mm_cvtsi32_si128((int) src[i].u));
+		sum = _mm_add_epi32(sum, _mm_cvtepu8_epi32(_mm_cvtsi32_si128((int) src[i].u)));
 	sum /= divider;
 	sum      = _mm_packs_epi32(sum, _mm_setzero_si128());
 	sum      = _mm_packus_epi16(sum, _mm_setzero_si128());
@@ -355,7 +355,7 @@ static void BoxBlurRGBA(Color8* src, Color8* dst, int width, int blurSize, int i
 		}
 		__m128i sum = _mm_setzero_si128();
 		for (int i = 0; i < 2 * blurSize + 1; i++) {
-			sum += _mm_cvtepu8_epi32(_mm_cvtsi32_si128((int) src[i].u));
+			sum = _mm_add_epi32(sum, _mm_cvtepu8_epi32(_mm_cvtsi32_si128((int) src[i].u)));
 		}
 		size_t      x           = blurSize + 1;
 		size_t      w           = width - blurSize;
@@ -365,8 +365,8 @@ static void BoxBlurRGBA(Color8* src, Color8* dst, int width, int blurSize, int i
 			auto vNew = _mm_cvtsi32_si128((int) src[x + blurSize].u);
 			vOld      = _mm_cvtepu8_epi32(vOld);
 			vNew      = _mm_cvtepu8_epi32(vNew);
-			sum       = sum - vOld; // subtract outgoing value, and add incoming value
-			sum       = sum + vNew; // subtract outgoing value, and add incoming value
+			sum       = _mm_sub_epi32(sum, vOld); // subtract outgoing value
+			sum       = _mm_add_epi32(sum, vNew); // add incoming value
 			auto out  = sum;
 			out       = out / mainDivider; // divide by blurSize
 			out       = _mm_packs_epi32(out, _mm_setzero_si128());

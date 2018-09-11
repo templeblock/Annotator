@@ -17,7 +17,7 @@ enum SeekFlags {
 
 extern StaticError ErrNeedMoreData; // Codec needs more data before it can deliver a frame/audio
 
-class IVideo {
+class IMQS_VIDEO_API IVideo {
 public:
 	virtual ~IVideo() {}
 	virtual Error OpenFile(std::string filename)                                                               = 0;

@@ -49,6 +49,9 @@ struct IMQS_TRAIN_API Rect {
 
 	Error FromJson(const nlohmann::json& j);
 	void  ToJson(nlohmann::json& j) const;
+
+	bool operator==(const Rect& r) const { return X1 == r.X1 && Y1 == r.Y1 && X2 == r.X2 && Y2 == r.Y2; }
+	bool operator!=(const Rect& r) const { return X1 != r.X1 || Y1 != r.Y1 || X2 != r.X2 || Y2 != r.Y2; }
 };
 
 // A polygon has 3 or more vertices, and is implicitly closed. The final vertex is not repeated.
@@ -106,6 +109,7 @@ public:
 	time::Time MaxEditTime() const; // Max edit time of labels inside this frame
 	bool       HasRects() const;
 	bool       HasPolygons() const;
+	Label*     FindLabel(Rect rect, bool createIfNotExist);
 
 	double TimeSeconds() const { return (double) Time / 1000000.0; }
 

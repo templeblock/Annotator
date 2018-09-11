@@ -13,6 +13,7 @@ public:
 
 	enum class LabelModes {
 		FixedBoxes,
+		OneBox,
 		Segmentation,
 	} LabelMode = LabelModes::FixedBoxes;
 
@@ -25,6 +26,8 @@ public:
 		None,
 		AssignLabel,
 	} ActionState = ActionStates::None;
+
+	typedef ohash::map<std::string, int> OneBoxStateType; // Map from dimension to severity
 
 	xo::DomNode*      Root          = nullptr;
 	xo::DomNode*      TimeSliderBox = nullptr;
@@ -54,8 +57,9 @@ public:
 	train::VideoLabels   Labels;
 	train::LabelClass    CurrentAssignClass;
 	int                  CurrentAssignSeverity = 1;
-	int                  LabelGridSize         = 256;
-	bool                 GridTopDown           = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
+	OneBoxStateType      CurrentOneBoxState;
+	int                  LabelGridSize = 256;
+	bool                 GridTopDown   = false; // For road markings, we prefer bottom up, because the interesting stuff is at the bottom of the frame
 
 #ifdef IMQS_AI_API
 	// Inference
@@ -95,6 +99,7 @@ private:
 	void Stop();
 	void DrawLabels();
 	void DrawLabelBoxes();
+	void DrawOneBox();
 	void DrawSegmentationLabels();
 	void DrawPolygon(xo::Canvas2D* cx, const train::Polygon& poly, std::vector<float>* tmpVx = nullptr);
 	void DrawEvalOverlay();
@@ -108,6 +113,9 @@ private:
 	void RenderLabelUI();
 	void SetLabelDirty(train::ImageLabels* frame, train::Label* label, bool redrawOnCanvas = true);
 	void CreateNewPolygonLabel(std::string klass, int severity);
+	void SaveOneBoxLabel();
+	void LoadOneBoxLabel();
+	bool AreAllOneBoxLabelsDefined();
 
 	train::ImageLabels* LabelsForCurrentFrame(bool create);
 
@@ -124,6 +132,7 @@ private:
 	xo::Point VideoPosToGrid(int x, int y);
 	xo::Point GridPosToVideo(int x, int y);
 	xo::Point GridPosOffset();
+	xo::Box   OneBoxRect();
 
 	void OnPaintLabel(xo::Event& ev);
 	void OnKeyChar(xo::Event& ev);

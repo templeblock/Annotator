@@ -6,12 +6,18 @@
 using namespace imqs;
 using namespace std;
 
-train::LabelTaxonomy CreateTaxonomy(bool isSegmentation) {
+enum class ClassifyModes {
+	Tar,
+	Lane,
+	Dirt,
+};
+
+train::LabelTaxonomy CreateTaxonomy(ClassifyModes mode) {
 	train::LabelTaxonomy taxonomy;
-	if (isSegmentation) {
+	if (mode == ClassifyModes::Lane) {
 		taxonomy.Classes.push_back({false, false, 'U', "", "unlabeled"});
 		taxonomy.Classes.push_back({true, false, 'L', "mark", "lane"});
-	} else {
+	} else if (mode == ClassifyModes::Tar) {
 		// !!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!
 		// If you make changes that need once-off fixups, then the best place to
 		// write the fix-up code is inside UI::LoadLabels()
@@ -58,6 +64,19 @@ train::LabelTaxonomy CreateTaxonomy(bool isSegmentation) {
 		taxonomy.Classes.push_back({false, true, 'P', "pumping", "pumping"});
 
 		imqs::train::ExportClassTaxonomy("taxonomy.json", taxonomy.Classes);
+	} else if (mode == ClassifyModes::Dirt) {
+		// taxonomy.Classes.push_back({false, true, 'G', "gravel", "gravel"});
+		// taxonomy.Classes.push_back({false, true, 'P', "shape", "shape"});
+		// taxonomy.Classes.push_back({false, true, 'D', "drainage", "drainage"});
+		// taxonomy.Classes.push_back({false, true, 'Q', "riding quality", "riding quality"});
+		// taxonomy.Classes.push_back({false, true, 'C', "corrugation", "corrugation"});
+		// taxonomy.Classes.push_back({false, true, 'T', "tar", "tar"});
+
+		// simple 1-class classifier
+		taxonomy.Classes.push_back({false, true, 'Q', "quality", "quality"});
+		taxonomy.Classes.push_back({false, true, 'T', "tar", "tar"});
+
+		imqs::train::ExportClassTaxonomy("taxonomy-dirt.json", taxonomy.Classes);
 	}
 	return taxonomy;
 }
@@ -77,11 +96,11 @@ void xoMain(xo::SysWnd* wnd) {
 	}
 	*/
 
-	if (true) {
+	if (false) {
 		// rsync -av /home/ben/win/t/Temp/ML/labels/ /home/ben/mldata/train/labels/
 		tsf::print("Exporting patches...\n");
 		using namespace imqs::train;
-		auto taxonomy = CreateTaxonomy(false);
+		auto taxonomy = CreateTaxonomy(ClassifyModes::Tar);
 		auto err      = ExportLabeledImagePatches_Video_Bulk(ExportTypes::Jpeg, "/home/ben/mldata/train", taxonomy);
 		if (!err.OK()) {
 			tsf::print("Error: %v\n", err.Message());
@@ -94,22 +113,25 @@ void xoMain(xo::SysWnd* wnd) {
 	wnd->SetTitle("IMQS Video Labeler");
 	wnd->Doc()->ClassParse("font-medium", "font-size: 14ep");
 	wnd->Doc()->ClassParse("shortcut", "font-size: 15ep; color: #000; width: 1em");
+	wnd->Doc()->ClassParse("severity-inline", "font-size: 15ep; color: #000; font-weight: bold; width: 1em");
 	wnd->Doc()->ClassParse("severity", "font-size: 20ep; color: #000; width: 1em; font-weight: bold");
 	wnd->Doc()->ClassParse("label-group", "padding: 3ep; margin: 2ep 0ep 2ep 0ep; border: 1px #ddd; border-radius: 4ep; background: #f0f0f0");
 	wnd->Doc()->ClassParse("active-label", "font-weight: bold");
+	wnd->Doc()->ClassParse("error", "color: #a00");
 
 	svg::LoadAll(wnd->Doc());
 	//wnd->SetPosition(xo::Box(0, 0, 1600, 1020), xo::SysWnd::SetPosition_Size);
 
 	auto ui       = new UI(&wnd->Doc()->Root);
-	ui->LabelMode = UI::LabelModes::FixedBoxes;
-	ui->Taxonomy  = CreateTaxonomy(ui->LabelMode == UI::LabelModes::Segmentation);
+	ui->LabelMode = UI::LabelModes::OneBox;
+	ui->Taxonomy  = CreateTaxonomy(ClassifyModes::Dirt);
 
 	//ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
 	//ui->VideoFilename = "C:\\mldata\\DSCF3022.MOV";
 	//ui->VideoFilename = "T:\\IMQS8_Data\\ML\\DSCF3022.MOV";
 	//ui->VideoFilename = "/home/ben/mldata/mthata/Day3-11.MOV";
-	ui->VideoFilename = "/home/ben/win/t/Temp/ML/ORT Day1 (2).MOV";
+	//ui->VideoFilename = "/home/ben/win/t/Temp/ML/ORT Day1 (2).MOV";
+	ui->VideoFilename = "T:\\Temp\\ML\\ORT\\2018-08\\03\\Day3 (3).MOV";
 	//ui->VideoFilename = "LOAD FILE";
 	if (!ui->OpenVideo())
 		ui->Render();

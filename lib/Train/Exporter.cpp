@@ -174,7 +174,7 @@ Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilenam
 			if (!err.OK())
 				break;
 			//int64_t pts   = video.LastFrameTimeMicrosecond();
-			int64_t pts   = frameSeconds * 1000000;
+			int64_t pts   = int64_t(frameSeconds * 1000000);
 			lastFrameTime = pts;
 			if (pts == frame.Time) {
 				// found our frame

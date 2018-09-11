@@ -87,7 +87,7 @@ Error VideoFile::OpenFile(std::string filename) {
 void VideoFile::Info(int& width, int& height, int64_t& durationMicroseconds) {
 	width                = Width();
 	height               = Height();
-	durationMicroseconds = GetVideoStreamInfo().DurationSeconds() * 1000000;
+	durationMicroseconds = int64_t(GetVideoStreamInfo().DurationSeconds() * 1000000);
 }
 
 VideoStreamInfo VideoFile::GetVideoStreamInfo() {

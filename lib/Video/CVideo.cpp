@@ -2,6 +2,11 @@
 #include "IVideo.h"
 #include "Decode.h"
 
+#ifdef _MSC_VER
+#pragma warning(disable : 4996) // strdup is deprecated
+//#define strdup _strdup
+#endif
+
 #ifdef _WIN32
 #include "NVVideoStub_windows.h"
 typedef imqs::video::VideoFile PlatformVideoType;

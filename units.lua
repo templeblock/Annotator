@@ -847,9 +847,9 @@ local Labeler = Program {
 	Libs = { 
 		{ "omp", "pthread", "m", "stdc++"; Config = linuxFilter },
 	},
-	Env = {
-		PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
-	},
+	--Env = {
+	--	PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
+	--},
 	PrecompiledHeader = {
 		Source = "app/Labeler/pch.cpp",
 		Header = "pch.h",
