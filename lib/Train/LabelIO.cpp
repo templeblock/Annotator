@@ -447,6 +447,11 @@ IMQS_TRAIN_API std::string ImagePatchDir(std::string videoFilename) {
 	return path::Dir(videoFilename) + "/patches/" + path::Filename(videoFilename);
 }
 
+IMQS_TRAIN_API bool VideoFileHasLabels(std::string videoFilename) {
+	os::FileAttributes at;
+	return os::Stat(LabelFileDir(videoFilename), at).OK();
+}
+
 IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
 	labels.Frames.clear();
 	auto  dir = LabelFileDir(videoFilename);

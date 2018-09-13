@@ -163,6 +163,7 @@ public:
 
 IMQS_TRAIN_API std::string LabelFileDir(std::string videoFilename);
 IMQS_TRAIN_API std::string ImagePatchDir(std::string videoFilename);
+IMQS_TRAIN_API bool        VideoFileHasLabels(std::string videoFilename);
 IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels);
 IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, const VideoLabels& labels);
 IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);

@@ -96,12 +96,12 @@ void xoMain(xo::SysWnd* wnd) {
 	}
 	*/
 
-	if (false) {
+	if (true) {
 		// rsync -av /home/ben/win/t/Temp/ML/labels/ /home/ben/mldata/train/labels/
 		tsf::print("Exporting patches...\n");
 		using namespace imqs::train;
-		auto taxonomy = CreateTaxonomy(ClassifyModes::Tar);
-		auto err      = ExportLabeledImagePatches_Video_Bulk(ExportTypes::Jpeg, "/home/ben/mldata/train", taxonomy);
+		auto taxonomy = CreateTaxonomy(ClassifyModes::Dirt);
+		auto err      = ExportLabeledImagePatches_Video_Bulk(ExportTypes::Jpeg, "/home/ben/mldata-dirt", taxonomy);
 		if (!err.OK()) {
 			tsf::print("Error: %v\n", err.Message());
 			return;

@@ -756,7 +756,7 @@ local CUDA = ExternalLibrary {
 	Propagate = {
 		Env = {
 			LIBPATH = {
-				{ "/usr/local/cuda-9.1/targets/x86_64-linux/lib",
+				{ "/usr/local/cuda/lib64",
 				  "/usr/lib/nvidia-396"; Config = linuxFilter },
 				{ "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v9.1/lib/x64"; Config = winFilter },
 			},
@@ -766,7 +766,7 @@ local CUDA = ExternalLibrary {
 			}
 		},
 		Includes = {
-			{ "/usr/local/cuda-9.1/targets/x86_64-linux/include",
+			{ "/usr/local/cuda/include",
 			  "/usr/include/nvidia-396/cuda"; Config = linuxFilter },
 			{ '"$(CUDA_PATH)\\include"'; Config = winFilter },
 		},

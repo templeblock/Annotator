@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Exporter.h"
+#include "LabelIO.h"
 
 using namespace std;
 
@@ -36,7 +37,7 @@ Error ExportLabeledImagePatches_Frame_Rect(ExportTypes type, std::string dir, in
 		if (haveErr)
 			continue;
 		const auto& patch = labels.Labels[i];
-		IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
+		//IMQS_ASSERT(patch.Rect.Width() == dim && patch.Rect.Height() == dim);
 		auto           patchTex = frameImg.Window(patch.Rect.X1, patch.Rect.Y1, patch.Rect.Width(), patch.Rect.Height());
 		gfx::ImageIO   imgIO;
 		gfx::ImageType filetype;
@@ -99,16 +100,21 @@ Error ExportLabeledImagePatches_Frame_Polygons(std::string dir, int64_t frameTim
 	return Error();
 }
 
+Error FindVideoFiles(string root, vector<string>& videoFiles, bool filterToVideosWithLabels) {
+	return os::FindFiles(root, [&](const os::FindFileItem& item) -> bool {
+		if (item.IsDir)
+			return true;
+		if (path::Extension(item.Name) == ".MOV") {
+			if (!filterToVideosWithLabels || VideoFileHasLabels(item.FullPath()))
+				videoFiles.push_back(item.FullPath());
+		}
+		return true;
+	});
+}
+
 Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string rootDir, const LabelTaxonomy& taxonomy) {
-	auto           labelsDir = path::Join(rootDir, "labels");
 	vector<string> videoFiles;
-	auto           err = os::FindFiles(labelsDir, [&](const os::FindFileItem& item) -> bool {
-        if (item.IsDir) {
-            videoFiles.push_back(path::Join(rootDir, item.Name));
-            return false;
-        }
-        return true;
-    });
+	auto           err = FindVideoFiles(rootDir, videoFiles, true);
 	if (!err.OK())
 		return err;
 
