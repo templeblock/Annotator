@@ -131,8 +131,8 @@ int main(int argc, char** argv) {
 
 	imqs::video::VideoFile::Initialize();
 	//imqs::gfx::raster::TestBilinear();
-	UnitTestVideo();
-	return 0;
+	//UnitTestVideo();
+	//return 0;
 
 	//imqs::gfx::Image img;
 	////img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-30-10h09m46s586.png");
