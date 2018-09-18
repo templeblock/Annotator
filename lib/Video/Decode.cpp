@@ -90,6 +90,14 @@ void VideoFile::Info(int& width, int& height, int64_t& durationMicroseconds) {
 	durationMicroseconds = int64_t(GetVideoStreamInfo().DurationSeconds() * 1000000);
 }
 
+Error VideoFile::SetOutputResolution(int width, int height) {
+	// We don't need to do anything here, since we are capable of recreating our scaler object
+	// on every frame.
+	// This API call was built for the GPU decoder, which has a more complex pipeline, and
+	// needs to know the output resolution upfront.
+	return Error();
+}
+
 VideoStreamInfo VideoFile::GetVideoStreamInfo() {
 	VideoStreamInfo inf;
 	// frame rate: 119.880116

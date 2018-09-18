@@ -145,6 +145,11 @@ Error FFmpegDemuxer::CreateFormatContext(const char* szFilePath, AVFormatContext
 	return Error();
 }
 
+Error FFmpegDemuxer::SeekPts(int64_t pts) {
+	av_seek_frame(fmtc, iVideoStream, pts, 0);
+	return Error();
+}
+
 bool FFmpegDemuxer::Demux(uint8_t** ppVideo, int* pnVideoBytes, int64_t* pts) {
 	if (!fmtc) {
 		return false;

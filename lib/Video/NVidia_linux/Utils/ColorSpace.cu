@@ -116,7 +116,7 @@ __global__ static void YuvToRgbKernel(uint8_t *pYuv, int nYuvPitch, uint8_t *pRg
 
     YuvUnitx2 l0 = *(YuvUnitx2 *)pSrc;
     YuvUnitx2 l1 = *(YuvUnitx2 *)(pSrc + nYuvPitch);
-    YuvUnitx2 ch = *(YuvUnitx2 *)(pSrc + (nHeight - y / 2) * nYuvPitch);
+    YuvUnitx2 ch = *(YuvUnitx2 *)(pSrc + (nHeight - y / 2) * nYuvPitch); // the "- y/2" is shrinking our offset by 2x, for the smaller UV block
 
     *(RgbIntx2 *)pDst = RgbIntx2 {
         YuvToRgbForPixel<Rgb>(l0.x, ch.x, ch.y).d, 

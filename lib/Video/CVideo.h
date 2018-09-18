@@ -18,6 +18,7 @@ void  CloseVideo(VideoHandle v);
 void  VideoInfo(VideoHandle v, int* width, int* height, double* durationSeconds);
 char* DecodeFrameRGBA(VideoHandle v, int width, int height, void* buf, int stride, double* timeSeconds);
 char* VideoSeek(VideoHandle v, double timeSeconds, unsigned seekFlags);
+void  SetOutputResolution(VideoHandle v, int width, int height);
 
 #ifdef __cplusplus
 }

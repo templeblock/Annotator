@@ -57,10 +57,11 @@ public:
 	AVRational GetTimebase() { return timebase; }
 	double     GetDurationSeconds();
 
-	bool Demux(uint8_t** ppVideo, int* pnVideoBytes, int64_t* pts);
+	Error SeekPts(int64_t pts);
+	bool  Demux(uint8_t** ppVideo, int* pnVideoBytes, int64_t* pts);
 
-	double PtsToSeconds(int64_t pts) { return PtsToSeconds(pts, timebase); }
-
+	int64_t       SecondsToPts(double s) { return int64_t(s / av_q2d(timebase)); }
+	double        PtsToSeconds(int64_t pts) { return PtsToSeconds(pts, timebase); }
 	static double PtsToSeconds(int64_t pts, AVRational timebase) { return av_q2d(av_mul_q({(int) pts, 1}, timebase)); }
 
 	static int ReadPacket(void* opaque, uint8_t* pBuf, int nBuf) { return ((DataProvider*) opaque)->GetData(pBuf, nBuf); }

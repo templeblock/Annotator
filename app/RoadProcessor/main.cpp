@@ -61,6 +61,67 @@ void TestBilinear() {
 } // namespace gfx
 } // namespace imqs
 
+void UnitTestVideo() {
+	imqs::video::NVVideo vid;
+	//vid.OpenFile("/home/ben/mldata/DSCF3037.MOV");
+	vid.OpenFile("/home/ben/mldata/DSCF3022.MOV");
+	int w = 1920;
+	int h = 1080;
+	//w     = 1664;
+	//h     = 936;
+	//w = 1280;
+	//h = 720;
+	w = 1024;
+	h = 576;
+	//w = 512;
+	//h = 288;
+	vid.SetOutputResolution(w, h);
+	imqs::gfx::Image img;
+	img.Alloc(imqs::gfx::ImageFormat::RGBA, w, h, w * 4);
+	tsf::print("Decoding...\n");
+	vid.DecodeFrameRGBA(w, h, img.Data, w * 4);
+	return;
+	img.SaveFile("/home/ben/f1.jpeg");
+	tsf::print("Done saving file\n");
+	vid.DecodeFrameRGBA(w, h, img.Data, w * 4);
+	vid.DecodeFrameRGBA(w, h, img.Data, w * 4);
+	img.SaveFile("/home/ben/f3.jpeg");
+	int j = 0;
+	for (int i = 0; i < 1000; i++) {
+		bool isSwitch = false;
+		if (i % 30 == 0) {
+			isSwitch = true;
+			if (j % 2 == 0) {
+				w = 1280;
+				h = 720;
+			} else {
+				w = 1024;
+				h = 576;
+			}
+			tsf::print("Switching resolution to %v x %v\n", w, h);
+			img.SaveFile("/home/ben/f-BEFORE.jpeg");
+			vid.SetOutputResolution(w, h);
+			img.Alloc(imqs::gfx::ImageFormat::RGBA, w, h, w * 4);
+			j++;
+		}
+		//tsf::print("Decoding %v\n", i);
+		double ts  = 0;
+		auto   err = vid.DecodeFrameRGBA(w, h, img.Data, w * 4, &ts);
+		if (isSwitch)
+			img.SaveFile("/home/ben/f-AFTER.jpeg");
+		if (err == imqs::ErrEOF) {
+			tsf::print("Video stream finished\n");
+			break;
+		} else if (!err.OK()) {
+			tsf::print("error decoding frame: %v\n", err.Message());
+		}
+		if (i % 50 == 0)
+			img.SaveFile("/home/ben/fN.jpeg");
+		tsf::print("Decoded %.3f\n", ts);
+	}
+	tsf::print("Done many frames\n");
+}
+
 int main(int argc, char** argv) {
 	using namespace imqs::roadproc;
 	imqs::Error err;
@@ -70,6 +131,8 @@ int main(int argc, char** argv) {
 
 	imqs::video::VideoFile::Initialize();
 	//imqs::gfx::raster::TestBilinear();
+	UnitTestVideo();
+	return 0;
 
 	//imqs::gfx::Image img;
 	////img.LoadFile("/home/ben/Pictures/vlcsnap-2018-08-30-10h09m46s586.png");

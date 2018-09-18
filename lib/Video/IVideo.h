@@ -17,11 +17,13 @@ enum SeekFlags {
 
 extern StaticError ErrNeedMoreData; // Codec needs more data before it can deliver a frame/audio
 
+// SetOutputResolution was built for the GPU decoder (NVVideo), but it's not necessary for the CPU decoder (ie the VideoFile class).
 class IMQS_VIDEO_API IVideo {
 public:
 	virtual ~IVideo() {}
 	virtual Error OpenFile(std::string filename)                                                               = 0;
 	virtual void  Info(int& width, int& height, int64_t& durationMicroseconds)                                 = 0;
+	virtual Error SetOutputResolution(int width, int height)                                                   = 0;
 	virtual Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) = 0;
 	virtual Error SeekToMicrosecond(int64_t microsecond, unsigned flags = SeekFlagNone)                        = 0;
 

@@ -18,6 +18,8 @@ CUcontext CUCtx = nullptr;
 NVVideo::NVVideo() {
 	HostHead     = 0;
 	HostTail     = 0;
+	DeviceTail   = 0;
+	DeviceHead   = 0;
 	DecodeState  = DecodeStateNotStarted;
 	ExitSignaled = 0;
 }
@@ -63,11 +65,21 @@ Error NVVideo::OpenFile(std::string filename) {
 	auto err = Demuxer.Open(filename.c_str());
 	if (!err.OK())
 		return err;
-	Decoder = new NvDecoder(CUCtx, Demuxer.GetWidth(), Demuxer.GetHeight(), true, FFmpeg2NvCodecId(Demuxer.GetVideoCodec()));
-	err     = InitBuffers();
+	Filename = filename;
+	Decoder  = new NvDecoder(CUCtx, Demuxer.GetWidth(), Demuxer.GetHeight(), true, FFmpeg2NvCodecId(Demuxer.GetVideoCodec()));
+	return Error();
+}
+
+Error NVVideo::CloseAndReopen(bool seekToLastPTS) {
+	Close();
+	auto err = OpenFile(Filename);
 	if (!err.OK())
 		return err;
-	return Error();
+
+	if (seekToLastPTS)
+		return Demuxer.SeekPts(LastObservedPTS);
+	else
+		return Error();
 }
 
 void NVVideo::Info(int& width, int& height, int64_t& durationMicroseconds) {
@@ -76,19 +88,55 @@ void NVVideo::Info(int& width, int& height, int64_t& durationMicroseconds) {
 	durationMicroseconds = Demuxer.GetDurationSeconds() * 1000000;
 }
 
+Error NVVideo::SetOutputResolution(int width, int height) {
+	if (width % 2 != 0 || height % 2 != 0)
+		return Error("Output size must be a multiple of 2 (due to the way our 4:2:0 decoding functions are written)");
+
+	if (DecodeState == DecodeStateRunning) {
+		auto err = CloseAndReopen(true);
+		if (!err.OK())
+			return err;
+	}
+	OutputWidth  = width;
+	OutputHeight = height;
+	// wait for the decode thread to flush all stale buffers. If we don't do this, then this thread
+	// will go ahead and ask for more frames, but the system is not in a consistent state, until
+	// OutSideDirty = 0 again.
+	//while (DecodeState == DecodeStateRunning && OutSizeDirty == 1) {
+	//	os::Sleep(time::Millisecond);
+	//}
+	return Error();
+}
+
 void NVVideo::Close() {
 	ExitSignaled = 1;
+	if (SemHostFramesFree) {
+		// Unblock the decoding thread
+		SemHostFramesFree->signal();
+	}
 	if (DecodeThread.joinable())
 		DecodeThread.join();
+
 	for (auto& f : HostFrames)
 		cudaFreeHost(f.Img.Data);
 	HostFrames.resize(0);
+
 	for (auto f : DeviceFrames)
 		cudaFree(f.Frame);
 	DeviceFrames.resize(0);
+
+	cudaFree(DeviceTempFrame);
+	DeviceTempFrame      = nullptr;
+	DeviceTempFramePitch = 0;
+
+	FrameSize    = 0;
 	ExitSignaled = 0;
 	HostHead     = 0;
 	HostTail     = 0;
+	DeviceHead   = 0;
+	DeviceTail   = 0;
+	delete SemHostFramesFree;
+	SemHostFramesFree = nullptr;
 	delete SemHostFramesReady;
 	SemHostFramesReady = nullptr;
 	delete SemDeviceFramesFree;
@@ -106,25 +154,55 @@ int NVVideo::Height() {
 	return Demuxer.GetHeight();
 }
 
-Error NVVideo::DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds) {
-	IMQS_ASSERT(OutputMode == OutputCPU);
+int NVVideo::OutWidth() {
+	return OutputWidth ? OutputWidth : Width();
+}
+
+int NVVideo::OutHeight() {
+	return OutputHeight ? OutputHeight : Height();
+}
+
+Error NVVideo::DecodeFramePrelude() {
+	if (FrameSize == 0) {
+		auto err = InitBuffers();
+		if (!err.OK())
+			return err;
+	} else {
+		// If you're going to call SetOutputResolution(), then you must do so before decoding any frames
+		IMQS_ASSERT(FrameSize == OutWidth() * 4 * OutHeight());
+	}
+
 	if (DecodeState == DecodeStateNotStarted) {
 		DecodeState  = DecodeStateRunning;
 		DecodeThread = std::thread([&]() -> void {
 			DecodeThreadFunc();
 		});
-	} else if (DecodeState == DecodeStateFinished) {
-		if (HostTail == HostHead)
-			return ErrEOF;
-		// else.. the decoder has finished, but the queue is not empty, so drain it
 	}
+
+	return Error();
+}
+
+Error NVVideo::DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds) {
+	IMQS_ASSERT(OutputMode == OutputCPU);
+
+	auto err = DecodeFramePrelude();
+	if (!err.OK())
+		return err;
+
+	//if (DecodeState == DecodeStateFinished && HostTail == HostHead) {
+	//	// The decoder has consumed all frames of the video, and we've consumed them all
+	//	return ErrEOF;
+	//}
 
 	SemHostFramesReady->wait();
 	if (HostTail == HostHead) {
+		// The decoder has finished all frames, and exited. It signaled the semaphore one last time to wake us up.
 		IMQS_ASSERT(DecodeState == DecodeStateFinished);
 		return ErrEOF;
 	}
 
+	IMQS_ASSERT(OutWidth() == width);
+	IMQS_ASSERT(OutHeight() == height);
 	IMQS_ASSERT(HostTail < HostHead);
 
 	HostFrame& f         = HostFrames[HostTail % HostBufferSize];
@@ -137,26 +215,24 @@ Error NVVideo::DecodeFrameRGBA(int width, int height, void* buf, int stride, dou
 
 	if (timeSeconds)
 		*timeSeconds = Demuxer.PtsToSeconds(f.Pts);
+	LastObservedPTS = f.Pts;
 
 	HostTail++;
+	SemHostFramesFree->signal();
+
 	return Error();
 }
 
 Error NVVideo::DecodeFrameRGBA_GPU(CudaFrame& frame) {
 	IMQS_ASSERT(OutputMode == OutputGPU);
-	if (DecodeState == DecodeStateNotStarted) {
-		DecodeState  = DecodeStateRunning;
-		DecodeThread = std::thread([&]() -> void {
-			DecodeThreadFunc();
-		});
-	} else if (DecodeState == DecodeStateFinished) {
-		if (DeviceTail == DeviceHead)
-			return ErrEOF;
-		// else.. the decoder has finished, but the queue is not empty, so drain it
-	}
+
+	auto err = DecodeFramePrelude();
+	if (!err.OK())
+		return err;
 
 	SemDeviceFramesReady->wait();
 	if (DeviceTail == DeviceHead) {
+		// The decoder has finished all frames, and exited. It signaled the semaphore one last time to wake us up.
 		IMQS_ASSERT(DecodeState == DecodeStateFinished);
 		return ErrEOF;
 	}
@@ -169,26 +245,35 @@ Error NVVideo::DecodeFrameRGBA_GPU(CudaFrame& frame) {
 	frame.Pts        = f.Pts;
 	frame.PtsSeconds = Demuxer.PtsToSeconds(f.Pts);
 
-	// the consumer now owns the pointer, so we need to allocate more memory for the next frame
-	f.Frame  = nullptr;
-	auto err = cuErr(cudaMalloc(&f.Frame, FrameSize));
+	LastObservedPTS = f.Pts;
+
+	// The consumer now owns the pointer, so we need to allocate more memory for the next frame
+	// This is potentially expensive - these frequent re-allocs. The only numbers I could find for
+	// cudaMalloc overhead are old (2011 IIRC), so I'm not sure what the cost of this is today.
+	f.Frame = nullptr;
+	err     = cuErr(cudaMalloc(&f.Frame, FrameSize));
 	if (!err.OK())
 		return err;
 
+	DeviceTail++;
 	SemDeviceFramesFree->signal();
 
 	return Error();
 }
 
 Error NVVideo::SeekToMicrosecond(int64_t microsecond, unsigned flags) {
-	return Error("Seeking is not supported in NVVideo");
+	if (DecodeState == DecodeStateRunning) {
+		auto err = CloseAndReopen(false);
+		if (!err.OK())
+			return err;
+	}
+	return Demuxer.SeekPts(Demuxer.SecondsToPts(microsecond / 1000000.0));
 }
 
 Error NVVideo::InitBuffers() {
-	DecodeState        = DecodeStateNotStarted;
-	SemHostFramesReady = new Semaphore();
+	DecodeState = DecodeStateNotStarted;
 
-	FrameSize = Width() * Height() * 4;
+	FrameSize = OutWidth() * OutHeight() * 4;
 
 	IMQS_ASSERT(HostFrames.size() == 0);
 	IMQS_ASSERT(DeviceFrames.size() == 0);
@@ -199,8 +284,11 @@ Error NVVideo::InitBuffers() {
 		auto  err = cuErr(cudaMallocHost(&b, FrameSize));
 		if (!err.OK())
 			return err;
-		HostFrames[i].Img = gfx::Image(gfx::ImageFormat::RGBA, gfx::Image::ConstructWindow, Width() * 4, b, Width(), Height());
+		HostFrames[i].Img = gfx::Image(gfx::ImageFormat::RGBA, gfx::Image::ConstructWindow, OutWidth() * 4, b, OutWidth(), OutHeight());
 	}
+	SemHostFramesReady = new Semaphore();
+	SemHostFramesFree  = new Semaphore();
+	SemHostFramesFree->signal(HostFrames.size());
 	HostHead = 0;
 	HostTail = 0;
 
@@ -210,22 +298,42 @@ Error NVVideo::InitBuffers() {
 		if (!err.OK())
 			return err;
 	}
-	SemDeviceFramesFree = new Semaphore();
-	SemDeviceFramesFree->signal(DeviceFrames.size());
 	SemDeviceFramesReady = new Semaphore();
+	SemDeviceFramesFree  = new Semaphore();
+	SemDeviceFramesFree->signal(DeviceFrames.size());
 
+	return Error();
+}
+
+// We can't do this until we've decoded at least one frame, because only then do we know the bit depth.
+Error NVVideo::AllocResizeBuffer() {
+	if (DeviceTempFrame)
+		return Error();
+
+	if (OutWidth() != Width() || OutHeight() != Height()) {
+		// This is a requirement for NV12 encoding (4:2:0) - specifically the CUDA code that does resizing and color conversion
+		IMQS_ASSERT(OutWidth() % 2 == 0);
+		IMQS_ASSERT(OutHeight() % 2 == 0);
+
+		if (Decoder->GetBitDepth() == 8)
+			DeviceTempFramePitch = OutWidth(); // Nv12 (planar 4:2:0 8-bit)
+		else
+			DeviceTempFramePitch = OutWidth() * 2; // P016 (planar 4:2:0 16-bit)
+
+		size_t bytes = OutHeight() * DeviceTempFramePitch * 3 / 2;
+		auto   err   = cuErr(cudaMalloc(&DeviceTempFrame, bytes));
+		if (!err.OK())
+			return err;
+	}
 	return Error();
 }
 
 void NVVideo::DecodeThreadFunc() {
 	int nFrame = 0;
-	DeviceTail = 0;
-	DeviceHead = 0;
 
 	auto sendFramesToHost = [&]() {
-		//cudaDeviceSynchronize(); // not sure if we need this
-		//int nPost = 0;
-		for (; DeviceTail != DeviceHead; DeviceTail++) {
+		while (DeviceTail != DeviceHead) {
+			/*
 			for (int spin = 0; HostHead - HostTail == HostBufferSize; spin++) {
 				// Obviously sleeping is never great, but I don't know how to do this correctly. I just feel
 				// like there is some kind of deadlock going on if we also use a semaphore from the reading
@@ -235,18 +343,20 @@ void NVVideo::DecodeThreadFunc() {
 				if (ExitSignaled)
 					break;
 			}
+			*/
+			SemHostFramesFree->wait(); // we expect to block on this (waiting for 'main' thread to consume frames)
+			if (ExitSignaled)
+				break;
+			SemDeviceFramesReady->wait(); // should never block on this
 			auto& dFrame = DeviceFrames[DeviceTail % DeviceBufferSize];
 			auto& hFrame = HostFrames[HostHead % HostBufferSize];
-			//auto& hFrame = HostFrames[(HostHead + nPost) % HostBufferSize];
 			cudaMemcpy(hFrame.Img.Data, (const void*) dFrame.Frame, FrameSize, cudaMemcpyDeviceToHost);
 			hFrame.Pts = dFrame.Pts;
 			HostHead++;
 			SemHostFramesReady->signal();
-			//nPost++;
+			DeviceTail++;
+			SemDeviceFramesFree->signal();
 		}
-		//cudaDeviceSynchronize();
-		//HostHead += nPost;
-		//SemHostFramesReady.signal(nPost);
 	};
 
 	int maxNFrames = 0;
@@ -260,7 +370,6 @@ void NVVideo::DecodeThreadFunc() {
 		bool      ok  = Demuxer.Demux(&pVideo, &videoBytes, &pts);
 		if (!ok)
 			tsf::print("Demuxer.Demux failed!\n");
-		// error handling!
 		ok = Decoder->Decode(pVideo, videoBytes, &ppFrame, &nFrameReturned, 0, &timeStamps, pts);
 		if (!ok)
 			tsf::print("Decoder->Decode failed!\n");
@@ -284,17 +393,27 @@ void NVVideo::DecodeThreadFunc() {
 		}
 
 		for (int i = 0; i < nFrameReturned; i++) {
-			// SemDeviceFramesFree is only used when decoding to GPU. Every time a frame is removed from the DeviceFrames ring,
-			// the SemDeviceFramesFree is increased. Once it drops to zero, we pause here, to wait for the consumer to drain DeviceFrames.
-			if (OutputMode == OutputGPU)
-				SemDeviceFramesFree->wait();
+			SemDeviceFramesFree->wait();
+			void* resizedFrame      = ppFrame[i];
+			int   resizedFramePitch = Decoder->GetWidth();
+			auto  err               = AllocResizeBuffer();
+			if (!err.OK())
+				IMQS_DIE_MSG(tsf::fmt("Error allocating image resize buffer: %v", err.Message()).c_str());
+			if (OutWidth() != Width() || OutHeight() != Height()) {
+				if (Decoder->GetBitDepth() == 8) {
+					ResizeNv12((uint8_t*) DeviceTempFrame, DeviceTempFramePitch, OutWidth(), OutHeight(), (uint8_t*) ppFrame[i], Decoder->GetWidth(), Decoder->GetWidth(), Decoder->GetHeight());
+				} else {
+					ResizeP016((uint8_t*) DeviceTempFrame, DeviceTempFramePitch, OutWidth(), OutHeight(), (uint8_t*) ppFrame[i], 2 * Decoder->GetWidth(), Decoder->GetWidth(), Decoder->GetHeight());
+				}
+				resizedFrame      = DeviceTempFrame;
+				resizedFramePitch = DeviceTempFramePitch;
+			}
 			auto& dFrame  = DeviceFrames[DeviceHead % DeviceBufferSize];
-			dFrame.Stride = Decoder->GetWidth() * 4;
-			//tsf::print("Decoding to %p (device)\n", dFrame.Frame);
+			dFrame.Stride = OutWidth() * 4;
 			if (Decoder->GetBitDepth() == 8)
-				Nv12ToRgba32((uint8_t*) ppFrame[i], Decoder->GetWidth(), (uint8_t*) dFrame.Frame, dFrame.Stride, Decoder->GetWidth(), Decoder->GetHeight());
+				Nv12ToRgba32((uint8_t*) resizedFrame, resizedFramePitch, (uint8_t*) dFrame.Frame, dFrame.Stride, OutWidth(), OutHeight());
 			else
-				P016ToRgba32((uint8_t*) ppFrame[i], 2 * Decoder->GetWidth(), (uint8_t*) dFrame.Frame, dFrame.Stride, Decoder->GetWidth(), Decoder->GetHeight());
+				P016ToRgba32((uint8_t*) resizedFrame, 2 * resizedFramePitch, (uint8_t*) dFrame.Frame, dFrame.Stride, OutWidth(), OutHeight());
 			dFrame.Pts = timeStamps[i];
 			DeviceHead++;
 			SemDeviceFramesReady->signal();
@@ -312,7 +431,9 @@ void NVVideo::DecodeThreadFunc() {
 	};
 
 	DecodeState = DecodeStateFinished;
-	SemHostFramesReady->signal(); // wake up thread that's waiting for a result from us
+	// wake up thread that's waiting for a result from us (inside DecodeFrameRGBA or DecodeFrameRGBA_GPU)
+	SemHostFramesReady->signal();
+	SemDeviceFramesReady->signal();
 }
 
 } // namespace video

@@ -12,6 +12,26 @@
 #include <cuda_runtime.h>
 #include "NvCodecUtils.h"
 
+// [BMH 2018-09-18]
+// I added sRGB resizing for the Luma channel. If you don't do this, then the image gets darkened.
+// HOWEVER, I don't know what the right thing to do is, for 16-bit data.
+// This code naively assumes that the 16-bit data is also sRGB encoded, which I think is unlikely
+// to be true.
+#define sRGB_RESIZE
+
+template<class T>
+__device__ static T Clamp(T x, T lower, T upper) {
+    return x < lower ? lower : (x > upper ? upper : x);
+}
+
+template<class TOut>
+__device__ static TOut LinearTosRGB(float v) {
+    const float a = 0.055f;
+    const float scale =  (1 << (sizeof(TOut) * 8)) - 1;
+	v = v <= 0.0031308f ? 12.92f * v : (1.0f + a) * pow(v, (1.0f / 2.4f));
+	return (TOut) Clamp(v * scale, 0.0f, scale);
+}
+
 template<typename YuvUnitx2>
 static __global__ void Resize(cudaTextureObject_t texY, cudaTextureObject_t texUv,
         uint8_t *pDst, uint8_t *pDstUV, int nPitch, int nWidth, int nHeight,
@@ -24,20 +44,33 @@ static __global__ void Resize(cudaTextureObject_t texY, cudaTextureObject_t texU
         return;
     }
 
-    int x = ix * 2, y = iy * 2;
+    int x = ix * 2;
+    int y = iy * 2;
     typedef decltype(YuvUnitx2::x) YuvUnit;
-    const int MAX = 1 << (sizeof(YuvUnit) * 8);
-    *(YuvUnitx2 *)(pDst + y * nPitch + x * sizeof(YuvUnit)) = YuvUnitx2 {
-        (YuvUnit)(tex2D<float>(texY, x / fxScale, y / fyScale) * MAX),
-        (YuvUnit)(tex2D<float>(texY, (x + 1) / fxScale, y / fyScale) * MAX)
-    };
+    const int MAX = (1 << (sizeof(YuvUnit) * 8)) - 1;
+    
+#ifdef sRGB_RESIZE
+    YuvUnit* dstY = (YuvUnit*) (pDst + y * nPitch + x * sizeof(YuvUnit));
+    dstY[0] = LinearTosRGB<YuvUnit>(tex2D<float>(texY, x / fxScale, y / fyScale));
+    dstY[1] = LinearTosRGB<YuvUnit>(tex2D<float>(texY, (x + 1) / fxScale, y / fyScale));
+    
     y++;
-    *(YuvUnitx2 *)(pDst + y * nPitch + x * sizeof(YuvUnit)) = YuvUnitx2 {
-        (YuvUnit)(tex2D<float>(texY, x / fxScale, y / fyScale) * MAX),
-        (YuvUnit)(tex2D<float>(texY, (x + 1) / fxScale, y / fyScale) * MAX)
-    };
-    float2 uv = tex2D<float2>(texUv, ix / fxScale, (nHeight + iy) / fyScale + 0.5f);
-    *(YuvUnitx2 *)(pDstUV + iy * nPitch + ix * 2 * sizeof(YuvUnit)) = YuvUnitx2{ (YuvUnit)(uv.x * MAX), (YuvUnit)(uv.y * MAX) };
+    dstY += nPitch / sizeof(YuvUnit);
+    dstY[0] = LinearTosRGB<YuvUnit>(tex2D<float>(texY, x / fxScale, y / fyScale));
+    dstY[1] = LinearTosRGB<YuvUnit>(tex2D<float>(texY, (x + 1) / fxScale, y / fyScale));
+#else
+    YuvUnit* dstY = (YuvUnit*) (pDst + y * nPitch + x * sizeof(YuvUnit));
+    dstY[0] = (YuvUnit) (tex2D<float>(texY, x / fxScale, y / fyScale) * MAX);
+    dstY[1] = (YuvUnit) (tex2D<float>(texY, (x + 1) / fxScale, y / fyScale) * MAX);
+
+    y++;
+    dstY += nPitch / sizeof(YuvUnit);
+    dstY[0] = (YuvUnit) (tex2D<float>(texY, x / fxScale, y / fyScale) * MAX);
+    dstY[1] = (YuvUnit) (tex2D<float>(texY, (x + 1) / fxScale, y / fyScale) * MAX);
+#endif
+
+    float2 uv = tex2D<float2>(texUv, ix / fxScale, iy / fyScale);
+    *(YuvUnitx2 *)(pDstUV + iy * nPitch + ix * sizeof(YuvUnitx2)) = YuvUnitx2{ (YuvUnit)(uv.x * MAX), (YuvUnit)(uv.y * MAX) };
 }
 
 template <typename YuvUnitx2>
@@ -53,15 +86,20 @@ static void Resize(unsigned char *dpDst, unsigned char* dpDstUV, int nDstPitch, 
     cudaTextureDesc texDesc = {};
     texDesc.filterMode = cudaFilterModeLinear;
     texDesc.readMode = cudaReadModeNormalizedFloat;
+#ifdef sRGB_RESIZE
+    texDesc.sRGB = 1;
+#endif
 
-    cudaTextureObject_t texY=0;
+    cudaTextureObject_t texY = 0;
     ck(cudaCreateTextureObject(&texY, &resDesc, &texDesc, NULL));
 
+    resDesc.res.pitch2D.devPtr = dpSrc + nSrcPitch * nSrcHeight;
     resDesc.res.pitch2D.desc = cudaCreateChannelDesc<YuvUnitx2>();
     resDesc.res.pitch2D.width = nSrcWidth / 2;
-    resDesc.res.pitch2D.height = nSrcHeight * 3 / 2;
+    resDesc.res.pitch2D.height = nSrcHeight / 2;
+    texDesc.sRGB = 0;
 
-    cudaTextureObject_t texUv=0;
+    cudaTextureObject_t texUv = 0;
     ck(cudaCreateTextureObject(&texUv, &resDesc, &texDesc, NULL));
 
     Resize<YuvUnitx2> << <dim3((nDstWidth + 31) / 32, (nDstHeight + 31) / 32), dim3(16, 16) >> >(texY, texUv, dpDst, dpDstUV,
