@@ -76,7 +76,10 @@ char* VideoSeek(VideoHandle v, double timeSeconds, unsigned seekFlag) {
 	return nullptr;
 }
 
-void SetOutputResolution(VideoHandle v, int width, int height) {
-	v->SetOutputResolution(width, height);
+char* SetOutputResolution(VideoHandle v, int width, int height) {
+	auto e = v->SetOutputResolution(width, height);
+	if (!e.OK())
+		return MAKE_ERR(e);
+	return nullptr;
 }
 }
