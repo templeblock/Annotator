@@ -803,7 +803,8 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, bool verbose, F
 				}
 			}
 			if (stats.size() < MinValidSamples) {
-				tsf::print("Too few valid frames (z1 = %.8f, frames = %v/%v)\n", pp.Z1, stats.size(), samples.size());
+				if (verbose)
+					tsf::print("Too few valid frames (z1 = %.8f, frames = %v/%v)\n", pp.Z1, stats.size(), samples.size());
 				return ErrTooFewGoodFrames;
 			}
 			sort(stats.begin(), stats.end(), [](Vec2d a, Vec2d b) { return a.size() < b.size(); });
