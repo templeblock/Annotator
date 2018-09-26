@@ -161,12 +161,12 @@ public:
 	std::vector<std::vector<train::LabelClass>> ClassGroups() const;
 };
 
-IMQS_TRAIN_API std::string LabelFileDir(std::string videoFilename);
+IMQS_TRAIN_API std::string LabelFileDir(std::string videoFilename, std::string modelName);
 IMQS_TRAIN_API std::string ImagePatchDir(std::string videoFilename);
-IMQS_TRAIN_API bool        VideoFileHasLabels(std::string videoFilename);
-IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels);
-IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, const VideoLabels& labels);
-IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame);
+IMQS_TRAIN_API bool        VideoFileHasLabels(std::string videoFilename, std::string modelName);
+IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, std::string modelName, VideoLabels& labels);
+IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, std::string modelName, const VideoLabels& labels);
+IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, std::string modelName, const ImageLabels& frame);
 IMQS_TRAIN_API int   MergeVideoLabels(const VideoLabels& src, VideoLabels& dst); // Returns number of new frames
 IMQS_TRAIN_API Error ExportClassTaxonomy(std::string filename, std::vector<LabelClass> classes);
 IMQS_TRAIN_API ohash::map<std::string, std::string> ClassToGroupMap(std::vector<LabelClass> classes);

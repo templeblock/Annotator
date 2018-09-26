@@ -53,6 +53,7 @@ public:
 
 	std::string          UserName;
 	size_t               UnlabeledClass = 0; // First class must be unlabeled
+	std::string          ModelName;          // eg 'dirt' or 'tar'
 	train::LabelTaxonomy Taxonomy;
 	train::VideoLabels   Labels;
 	train::LabelClass    CurrentAssignClass;

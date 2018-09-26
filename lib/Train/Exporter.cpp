@@ -100,21 +100,21 @@ Error ExportLabeledImagePatches_Frame_Polygons(std::string dir, int64_t frameTim
 	return Error();
 }
 
-Error FindVideoFiles(string root, vector<string>& videoFiles, bool filterToVideosWithLabels) {
+Error FindVideoFiles(std::string modelName, string root, vector<string>& videoFiles, bool filterToVideosWithLabels) {
 	return os::FindFiles(root, [&](const os::FindFileItem& item) -> bool {
 		if (item.IsDir)
 			return true;
 		if (path::Extension(item.Name) == ".MOV") {
-			if (!filterToVideosWithLabels || VideoFileHasLabels(item.FullPath()))
+			if (!filterToVideosWithLabels || VideoFileHasLabels(item.FullPath(), modelName))
 				videoFiles.push_back(item.FullPath());
 		}
 		return true;
 	});
 }
 
-Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string rootDir, const LabelTaxonomy& taxonomy) {
+Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string modelName, std::string rootDir, const LabelTaxonomy& taxonomy) {
 	vector<string> videoFiles;
-	auto           err = FindVideoFiles(rootDir, videoFiles, true);
+	auto           err = FindVideoFiles(modelName, rootDir, videoFiles, true);
 	if (!err.OK())
 		return err;
 
@@ -125,7 +125,7 @@ Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string rootDir
 			return true;
 		};
 		VideoLabels labels;
-		auto        err = LoadVideoLabels(videoFiles[i], labels);
+		auto        err = LoadVideoLabels(videoFiles[i], modelName, labels);
 		if (!err.OK())
 			return err;
 		err = ExportLabeledImagePatches_Video(type, videoFiles[i], taxonomy, labels, progress);

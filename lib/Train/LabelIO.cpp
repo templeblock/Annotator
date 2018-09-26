@@ -439,22 +439,22 @@ std::vector<std::vector<train::LabelClass>> LabelTaxonomy::ClassGroups() const {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-IMQS_TRAIN_API std::string LabelFileDir(std::string videoFilename) {
-	return path::Dir(videoFilename) + "/labels/" + path::Filename(videoFilename);
+IMQS_TRAIN_API std::string LabelFileDir(std::string videoFilename, std::string modelName) {
+	return path::Dir(videoFilename) + "/labels-" + modelName + "/" + path::Filename(videoFilename);
 }
 
 IMQS_TRAIN_API std::string ImagePatchDir(std::string videoFilename) {
 	return path::Dir(videoFilename) + "/patches/" + path::Filename(videoFilename);
 }
 
-IMQS_TRAIN_API bool VideoFileHasLabels(std::string videoFilename) {
+IMQS_TRAIN_API bool VideoFileHasLabels(std::string videoFilename, std::string modelName) {
 	os::FileAttributes at;
-	return os::Stat(LabelFileDir(videoFilename), at).OK();
+	return os::Stat(LabelFileDir(videoFilename, modelName), at).OK();
 }
 
-IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& labels) {
+IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, std::string modelName, VideoLabels& labels) {
 	labels.Frames.clear();
-	auto  dir = LabelFileDir(videoFilename);
+	auto  dir = LabelFileDir(videoFilename, modelName);
 	Error err;
 	auto  errFind = os::FindFiles(dir, [&err, &labels](const os::FindFileItem& item) -> bool {
         if (item.IsDir)
@@ -482,9 +482,9 @@ IMQS_TRAIN_API Error LoadVideoLabels(std::string videoFilename, VideoLabels& lab
 	return err;
 }
 
-IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, const VideoLabels& labels) {
+IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, std::string modelName, const VideoLabels& labels) {
 	for (const auto& f : labels.Frames) {
-		auto err = SaveFrameLabels(videoFilename, f);
+		auto err = SaveFrameLabels(videoFilename, modelName, f);
 		if (!err.OK())
 			return err;
 	}
@@ -492,8 +492,8 @@ IMQS_TRAIN_API Error SaveVideoLabels(std::string videoFilename, const VideoLabel
 }
 
 // Save one labeled frame. By saving at image granularity instead of video granularity, we allow concurrent labeling by many people
-IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, const ImageLabels& frame) {
-	auto dir = LabelFileDir(videoFilename);
+IMQS_TRAIN_API Error SaveFrameLabels(std::string videoFilename, std::string modelName, const ImageLabels& frame) {
+	auto dir = LabelFileDir(videoFilename, modelName);
 	auto err = os::MkDirAll(dir);
 	if (!err.OK())
 		return err;

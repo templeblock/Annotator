@@ -96,7 +96,7 @@ void xoMain(xo::SysWnd* wnd) {
 	}
 	*/
 
-	if (true) {
+	if (false) {
 		// rsync -av /home/ben/win/t/Temp/ML/labels/ /home/ben/mldata/train/labels/
 		tsf::print("Exporting patches...\n");
 		using namespace imqs::train;
@@ -122,16 +122,24 @@ void xoMain(xo::SysWnd* wnd) {
 	svg::LoadAll(wnd->Doc());
 	//wnd->SetPosition(xo::Box(0, 0, 1600, 1020), xo::SysWnd::SetPosition_Size);
 
-	auto ui       = new UI(&wnd->Doc()->Root);
-	ui->LabelMode = UI::LabelModes::OneBox;
-	ui->Taxonomy  = CreateTaxonomy(ClassifyModes::Dirt);
+	auto ui = new UI(&wnd->Doc()->Root);
+
+	// for training dirt
+	//ui->ModelName = "dirt";
+	//ui->LabelMode = UI::LabelModes::OneBox;
+	//ui->Taxonomy  = CreateTaxonomy(ClassifyModes::Dirt);
+
+	// for training tar
+	ui->ModelName = "tar";
+	ui->LabelMode = UI::LabelModes::FixedBoxes;
+	ui->Taxonomy  = CreateTaxonomy(ClassifyModes::Tar);
 
 	//ui->VideoFilename = "c:\\mldata\\GOPR0080.MP4";
 	//ui->VideoFilename = "C:\\mldata\\DSCF3022.MOV";
 	//ui->VideoFilename = "T:\\IMQS8_Data\\ML\\DSCF3022.MOV";
 	//ui->VideoFilename = "/home/ben/mldata/mthata/Day3-11.MOV";
 	//ui->VideoFilename = "/home/ben/win/t/Temp/ML/ORT Day1 (2).MOV";
-	ui->VideoFilename = "T:\\Temp\\ML\\ORT\\2018-08\\03\\Day3 (3).MOV";
+	ui->VideoFilename = "T:\\Temp\\ML\\ORT\\2018-08\\05\\Day5 (11).MOV";
 	//ui->VideoFilename = "LOAD FILE";
 	if (!ui->OpenVideo())
 		ui->Render();

@@ -25,7 +25,7 @@ void UI::LoadSaveThreadFunc(UI* ui) {
 				// save last filename, so that loader knows about it
 				lastVideoFilename = package->VideoFilename;
 				for (const auto& frame : package->Labels.Frames) {
-					auto err = SaveFrameLabels(package->VideoFilename, frame);
+					auto err = SaveFrameLabels(package->VideoFilename, ui->ModelName, frame);
 					if (!err.OK()) {
 						setError(tsf::fmt("Error saving labels for %v: %v", package->VideoFilename, err.Message()));
 						break; // don't try saving further frames
@@ -37,7 +37,7 @@ void UI::LoadSaveThreadFunc(UI* ui) {
 			setError("");
 			package                = new LoadSavePackage();
 			package->VideoFilename = lastVideoFilename;
-			auto err               = LoadVideoLabels(lastVideoFilename, package->Labels);
+			auto err               = LoadVideoLabels(lastVideoFilename, ui->ModelName, package->Labels);
 			if (!err.OK()) {
 				setError(tsf::fmt("Error loading labels for %v: %v", lastVideoFilename, err.Message()));
 				delete package;
@@ -1090,7 +1090,7 @@ std::string UI::ShortcutKeyForClass(const std::string& klass) {
 }
 
 void UI::LoadLabels() {
-	LoadVideoLabels(VideoFilename, Labels);
+	LoadVideoLabels(VideoFilename, ModelName, Labels);
 	// Perform any once-off fixups here
 
 	//for (auto& f : Labels.Frames) {
