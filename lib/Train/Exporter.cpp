@@ -115,8 +115,9 @@ Error FindVideoFiles(std::string modelName, string root, vector<string>& videoFi
 Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string modelName, std::string rootDir, const LabelTaxonomy& taxonomy) {
 	vector<string> videoFiles;
 	auto           err = FindVideoFiles(modelName, rootDir, videoFiles, true);
-	if (!err.OK())
-		return err;
+	if (!err.OK()) {
+		return Error::Fmt("Error finding videos in '%v': %v", rootDir, err.Message());
+	}
 
 	for (size_t i = 0; i < videoFiles.size(); i++) {
 		auto progress = [&](size_t pos, size_t total) -> bool {

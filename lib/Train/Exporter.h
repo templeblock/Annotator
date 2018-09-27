@@ -13,7 +13,7 @@ enum class ExportTypes {
 
 typedef std::function<bool(size_t pos, size_t total)> ProgressCallback;
 
-IMQS_TRAIN_API Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string rootDir, const LabelTaxonomy& taxonomy);
+IMQS_TRAIN_API Error ExportLabeledImagePatches_Video_Bulk(ExportTypes type, std::string modelName, std::string rootDir, const LabelTaxonomy& taxonomy);
 IMQS_TRAIN_API Error ExportLabeledImagePatches_Video(ExportTypes type, std::string videoFilename, const LabelTaxonomy& taxonomy, const VideoLabels& labels, ProgressCallback prog);
 IMQS_TRAIN_API Error ExportLabeledBatch(bool channelsFirst, bool compress, const std::vector<std::pair<int, int>>& batch, video::VideoFile& video, const VideoLabels& labels, std::string& encoded);
 

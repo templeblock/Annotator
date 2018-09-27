@@ -1,24 +1,31 @@
 #!/bin/bash
 
 # ubuntu 16.04
-sudo apt-get install -y \
-	libcurl4-openssl-dev \
-	liblz4-dev \
-	zlib1g-dev \
-	libjpeg-turbo8-dev
-
-	# libavcodec-dev \
-	# libavformat-dev \
-	# libswscale-dev
-
-	#libpng-dev \
+#sudo apt-get install -y \
+#	libcurl4-openssl-dev \
+#	liblz4-dev \
+#	zlib1g-dev \
+#	libjpeg-turbo8-dev
+#
+#	# libavcodec-dev \
+#	# libavformat-dev \
+#	# libswscale-dev
+#
+#	#libpng-dev \
 
 # ubuntu 18.04
 sudo apt-get install -y \
 	libunwind-dev \
 	libbsd-dev \
 	libgles2-mesa-dev \
-	libproj-dev
+	libproj-dev \
+	yasm \
+	zlib1g-dev \
+	liblz4-dev \
+	libpng-dev \
+	libcurl4-openssl-dev \
+	uuid-dev \
+	libexpat1-dev
 
 # Building glfw
 # sudo apt-get install -y xorg-dev
@@ -48,7 +55,7 @@ sudo apt-get install -y \
 #
 # git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
 # cd ffmpeg
-# git checkout n3.3.3
+# git checkout n4.0.2
 # ./configure --enable-pic --disable-static --enable-shared
 # ./configure --enable-pic --disable-static --enable-shared --disable-stripping
 # ./configure --enable-pic --disable-static --enable-shared --disable-stripping --enable-cuda --enable-cuvid --enable-nvenc --enable-nonfree --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64
@@ -75,9 +82,11 @@ sudo apt-get install -y \
 
 # Lensfun:
 # sudo apt-get install libglib2.0-dev
-# clone source and follow build instructions
+# git clone https://git.code.sf.net/p/lensfun/code lensfun
+# cd lensfun && git apply ../Annotator/third_party/lensfun-heapfix.patch
 # mkdir build
 # cd build
 # cmake -DCMAKE_BUILD_TYPE=Release ..
 # make -j
 # sudo make install
+# sudo ldconfig

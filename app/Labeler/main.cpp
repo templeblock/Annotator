@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "third_party/xo/templates/xoWinMain.cpp"
+//#include "third_party/xo/templates/xoWinMain.cpp"
 #include "SvgIcons.h"
 #include "UI.h"
 
@@ -96,20 +96,6 @@ void xoMain(xo::SysWnd* wnd) {
 	}
 	*/
 
-	if (false) {
-		// rsync -av /home/ben/win/t/Temp/ML/labels/ /home/ben/mldata/train/labels/
-		tsf::print("Exporting patches...\n");
-		using namespace imqs::train;
-		auto taxonomy = CreateTaxonomy(ClassifyModes::Dirt);
-		auto err      = ExportLabeledImagePatches_Video_Bulk(ExportTypes::Jpeg, "/home/ben/mldata-dirt", taxonomy);
-		if (!err.OK()) {
-			tsf::print("Error: %v\n", err.Message());
-			return;
-		}
-		tsf::print("Done exporting patches\n");
-		return;
-	}
-
 	wnd->SetTitle("IMQS Video Labeler");
 	wnd->Doc()->ClassParse("font-medium", "font-size: 14ep");
 	wnd->Doc()->ClassParse("shortcut", "font-size: 15ep; color: #000; width: 1em");
@@ -145,26 +131,44 @@ void xoMain(xo::SysWnd* wnd) {
 		ui->Render();
 }
 
+void ExportPatches(bool dirt) {
+	// rsync -av /home/ben/win/t/Temp/ML/labels/ /home/ben/mldata/train/labels/
+	tsf::print("Exporting patches...\n");
+	using namespace imqs::train;
+	string model    = dirt ? "dirt" : "tar";
+	auto   taxonomy = CreateTaxonomy(dirt ? ClassifyModes::Dirt : ClassifyModes::Tar);
+	auto   err      = ExportLabeledImagePatches_Video_Bulk(ExportTypes::Jpeg, model, "/home/ben/mldata", taxonomy);
+	if (!err.OK()) {
+		tsf::print("Error: %v\n", err.Message());
+		return;
+	}
+	tsf::print("Done exporting patches\n");
+}
+
+#if XO_PLATFORM_WIN_DESKTOP
+#pragma warning(disable : 28251) // Inconsistent annotation for 'WinMain': this instance has no annotations. See c:\program files (x86)\windows kits\8.0\include\um\winbase.h(2188).
+int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+	xo::RunApp(xoMain);
+	return 0;
+}
+#elif XO_PLATFORM_LINUX_DESKTOP
+int main(int argc, char** argv) {
+	if (argc > 1) {
+		if (argc == 2 && strcmp(argv[1], "--dirt-patches") == 0) {
+			ExportPatches(true);
+		} else if (argc == 2 && strcmp(argv[1], "--tar-patches") == 0) {
+			ExportPatches(false);
+		} else {
+			tsf::print("Unrecognized command\n");
+			return 1;
+		}
+	} else {
+		xo::RunApp(xoMain);
+	}
+	return 0;
+}
+#endif
+
 // On Windows, you must uncomment the line:
 //   PROGOPTS = { "/SUBSYSTEM:CONSOLE"; Config = winFilter },
 // inside units.lua, for "Labeler" project
-/*
-int main(int argc, char** argv) {
-	using namespace imqs::train;
-
-	imqs::video::VideoFile::Initialize();
-
-	// Bulk export of jpeg patches
-	{
-		auto taxonomy = CreateTaxonomy(false);
-		auto err      = ExportLabeledImagePatches_Video_Bulk(ExportTypes::Jpeg, "T:\\Temp\\ML", taxonomy);
-		if (!err.OK()) {
-			tsf::print("Error: %v\n", err.Message());
-			return 1;
-		}
-		return 0;
-	}
-
-	return 1;
-}
-*/

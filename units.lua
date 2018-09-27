@@ -443,6 +443,9 @@ local opencv = ExternalLibrary {
 			{"opencv_core341.lib", "opencv_features2d341.lib", "opencv_imgproc341.lib"; Config = winReleaseFilter },
 			{"opencv_core", "opencv_features2d", "opencv_xfeatures2d", "opencv_imgproc"; Config = linuxFilter },
 		},
+		Includes = {
+			"/usr/local/include/opencv4" -- TESTING
+		}
 	},
 }
 
