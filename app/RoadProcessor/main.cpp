@@ -213,8 +213,9 @@ int main(int argc, char** argv) {
 	}
 
 	// testing...
-	//imqs::roadproc::TestCuda();
-	//return 1;
+	// imqs::roadproc::TestCuda();
+	// getchar();
+	// return 1;
 
 	int ret = args.ExecCommand();
 
@@ -223,5 +224,6 @@ int main(int argc, char** argv) {
 
 	global::Shutdown();
 
+	getchar();
 	return ret;
 }

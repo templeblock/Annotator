@@ -1,28 +1,28 @@
 {
 	"folders": [
 		{
-			"path": "/home/ben/dev/Annotator/app/FrameServer"
+			"path": "../app/FrameServer"
 		},
 		{
-			"path": "/home/ben/dev/Annotator/lib/Video"
+			"path": "../lib/Video"
 		},
 		{
-			"path": "/home/ben/dev/Annotator/app/RoadProcessor"
+			"path": "../app/RoadProcessor"
 		},
 		{
-			"path": "/home/ben/dev/Annotator/lib/gfx"
+			"path": "../lib/gfx"
 		},
 		{
-			"path": "/home/ben/dev/Annotator/app/CameraCalibrator"
+			"path": "../app/CameraCalibrator"
 		},
 		{
-			"path": "/home/ben/dev/Annotator/lib/pal"
+			"path": "../lib/pal"
 		},
 		{
-			"path": "/home/ben/dev/Annotator/app/Labeler"
+			"path": "../app/Labeler"
 		},
 		{
-			"path": "/home/ben/dev/Annotator/lib/Train"
+			"path": "../lib/Train"
 		}
 	],
 	"settings": {

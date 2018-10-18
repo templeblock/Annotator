@@ -21,7 +21,11 @@ void TestCuda() {
 
 	video::NVVideo video;
 	video.OutputMode = video::NVVideo::OutputGPU;
-	err              = video.OpenFile("/home/ben/mldata/train/ORT Day1 (4).MOV");
+	err              = video.OpenFile("/home/brad/Downloads/DSCF1010.MOV");
+	if (!err.OK()) {
+		tsf::print("%s\n", err.Message());
+		return;
+	}
 
 	CudaFrameExtractor ex;
 	ex.Initialize(ImageToTexData(lensCombined));
@@ -34,12 +38,12 @@ void TestCuda() {
 		Image copy;
 		copy.Alloc(ImageFormat::RGBA, video.Width(), video.Height());
 		err = cuErr(cudaMemcpy2D(copy.Data, copy.Stride, frame.Frame, frame.Stride, video.Width() * 4, video.Height(), cudaMemcpyDeviceToHost));
-		copy.SaveFile("/home/ben/hello-cuda-1.png");
+		copy.SaveFile("/home/brad/Downloads/hello-cuda-1.png");
 
 		ex.Frame(frame.Frame, frame.Stride, video.Width(), video.Height());
 		//LensCorrectCuda(frame.Frame, frame.Stride, video.Width(), video.Height(), ImageToTexData(lensCombined));
 		err = cuErr(cudaMemcpy2D(copy.Data, copy.Stride, frame.Frame, frame.Stride, video.Width() * 4, video.Height(), cudaMemcpyDeviceToHost));
-		copy.SaveFile("/home/ben/hello-cuda-2.png");
+		copy.SaveFile("/home/brad/Downloads/hello-cuda-2.png");
 
 		cudaFree(frame.Frame);
 	}

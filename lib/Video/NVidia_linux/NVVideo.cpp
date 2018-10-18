@@ -114,6 +114,7 @@ void NVVideo::Close() {
 		// Unblock the decoding thread
 		SemHostFramesFree->signal();
 	}
+
 	if (DecodeThread.joinable())
 		DecodeThread.join();
 

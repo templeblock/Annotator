@@ -25,9 +25,11 @@ sudo apt-get install -y \
 	libpng-dev \
 	libcurl4-openssl-dev \
 	uuid-dev \
-	libexpat1-dev
+	libexpat1-dev \
+	libvdpau-dev \
+	libglib2.0-dev
 
-# Building glfw
+# Building glfw (Not necessary)
 # sudo apt-get install -y xorg-dev
 # cd third_party/glfw
 # mkdir build
@@ -77,13 +79,9 @@ sudo apt-get install -y \
 # make -j
 # sudo make install
 
-# You also need to install proj4
-# I did that with the OS package manager .. apt-get install libproj9.. or libproj-dev, I think, on 18.04
-
 # Lensfun:
 # sudo apt-get install libglib2.0-dev
 # git clone https://git.code.sf.net/p/lensfun/code lensfun
-# cd lensfun && git apply ../Annotator/third_party/lensfun-heapfix.patch
 # mkdir build
 # cd build
 # cmake -DCMAKE_BUILD_TYPE=Release ..

@@ -27,6 +27,8 @@ public:
 	virtual Error DecodeFrameRGBA(int width, int height, void* buf, int stride, double* timeSeconds = nullptr) = 0;
 	virtual Error SeekToMicrosecond(int64_t microsecond, unsigned flags = SeekFlagNone)                        = 0;
 
+	Error SeekToSecond(int64_t seconds, unsigned flags = SeekFlagNone);
+
 	static Error TranslateAvErr(int ret, const char* whileBusyWith = nullptr);
 };
 

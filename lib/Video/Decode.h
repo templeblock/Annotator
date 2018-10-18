@@ -35,7 +35,6 @@ public:
 	Error           SeekToPreviousFrame();
 	Error           SeekToFrame(int64_t frame, unsigned flags = SeekFlagNone);
 	Error           SeekToFraction(double fraction_0_to_1, unsigned flags = SeekFlagNone);
-	Error           SeekToSecond(double second, unsigned flags = SeekFlagNone);
 	double          LastFrameTimeSeconds() const;
 	int64_t         LastFrameTimeMicrosecond() const;
 

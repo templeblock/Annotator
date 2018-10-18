@@ -161,10 +161,6 @@ Error VideoFile::SeekToFraction(double fraction_0_to_1, unsigned flags) {
 	return SeekToMicrosecond((int64_t)(seconds * 1000000.0), flags);
 }
 
-Error VideoFile::SeekToSecond(double second, unsigned flags) {
-	return SeekToMicrosecond((int64_t)(second * 1000000.0), flags);
-}
-
 Error VideoFile::SeekToMicrosecond(int64_t microsecond, unsigned flags) {
 	double  ts  = av_q2d(VideoStream->time_base);
 	double  t   = ((double) microsecond / 1000000.0) / ts;

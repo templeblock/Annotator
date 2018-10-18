@@ -686,8 +686,10 @@ static const int MinValidSamples = 7;
 // we store nSamples many pairs of frames in memory
 // A 1920x1080 RGBA image takes 8 MB memory. So 20 pairs is 316 MB, 100 pairs is 1.6 GB
 static Error EstimateZY(vector<string> videoFiles, int nSamples, bool verbose, FlattenParams& bestParams) {
-	video::VideoFile video;
-	auto             err = video.OpenFile(videoFiles[0]);
+	video::NVVideo video;
+	video.OutputMode = video::NVVideo::OutputGPU;
+
+	auto err = video.OpenFile(videoFiles[0]);
 	if (!err.OK())
 		return err;
 
@@ -705,17 +707,24 @@ static Error EstimateZY(vector<string> videoFiles, int nSamples, bool verbose, F
 
 	if (verbose)
 		tsf::print("Loading camera frames\n");
+
+	video::NVVideo::CudaFrame  frame1, frame2;
 	vector<pair<Image, Image>> samples;
 	for (int i = 0; i < nSamples; i++) {
 		//auto err = video.SeekToSecond(40);
 		auto err = video.SeekToSecond(i * spacing);
 		if (!err.OK())
 			return err;
+
 		pair<Image, Image> sample;
 		sample.first.Alloc(gfx::ImageFormat::RGBA, videoWidth, videoHeight);
 		sample.second.Alloc(gfx::ImageFormat::RGBA, videoWidth, videoHeight);
-		err = video.DecodeFrameRGBA(videoWidth, videoHeight, sample.first.Data, sample.second.Stride);
-		err |= video.DecodeFrameRGBA(videoWidth, videoHeight, sample.second.Data, sample.second.Stride);
+
+		err = video.DecodeFrameRGBA_GPU(frame1);
+		err |= video.DecodeFrameRGBA_GPU(frame2);
+
+		err |= cuErr(cudaMemcpy2D(copy.Data, copy.Stride, frame1.Frame, frame1.Stride, video.Width() * 4, video.Height(), cudaMemcpyDeviceToHost));
+		err |= cuErr(cudaMemcpy2D(copy.Data, copy.Stride, frame2.Frame, frame2.Stride, video.Width() * 4, video.Height(), cudaMemcpyDeviceToHost));
 		if (!err.OK())
 			return err;
 		samples.push_back(std::move(sample));
