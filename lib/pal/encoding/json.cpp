@@ -235,5 +235,30 @@ IMQS_PAL_API std::vector<std::string> GetStringList(const nlohmann::json& v, con
 	return {};
 }
 
+IMQS_PAL_API bool IsArray(const nlohmann::json& v, const char* key) {
+	auto it = v.find(key);
+	return it != v.end() && it->is_array();
+}
+
+IMQS_PAL_API bool IsObject(const nlohmann::json& v, const char* key) {
+	auto it = v.find(key);
+	return it != v.end() && it->is_object();
+}
+
+IMQS_PAL_API bool IsString(const nlohmann::json& v, const char* key) {
+	auto it = v.find(key);
+	return it != v.end() && it->is_string();
+}
+
+IMQS_PAL_API bool IsNumber(const nlohmann::json& v, const char* key) {
+	auto it = v.find(key);
+	return it != v.end() && it->is_number();
+}
+
+IMQS_PAL_API bool IsBool(const nlohmann::json& v, const char* key) {
+	auto it = v.find(key);
+	return it != v.end() && it->is_boolean();
+}
+
 } // namespace nj
 } // namespace imqs

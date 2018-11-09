@@ -22,6 +22,7 @@
 #include "encoding/csv.h"
 #include "encoding/json.h"
 #include "encoding/xml.h"
+#include "encoding/JsonSchemas.h"
 #include "geom/geom2d.h"
 #include "geom/geomNd.h"
 #include "geom/BBox2.h"

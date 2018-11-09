@@ -46,5 +46,10 @@ IMQS_PAL_API int         GetInt(const nlohmann::json& v, const char* key, int de
 IMQS_PAL_API int64_t GetInt64(const nlohmann::json& v, const char* key, int64_t defaultValue = 0);
 IMQS_PAL_API double  GetDouble(const nlohmann::json& v, const char* key, double defaultValue = 0);
 IMQS_PAL_API std::vector<std::string> GetStringList(const nlohmann::json& v, const char* key);
+IMQS_PAL_API bool                     IsArray(const nlohmann::json& v, const char* key);
+IMQS_PAL_API bool                     IsObject(const nlohmann::json& v, const char* key);
+IMQS_PAL_API bool                     IsString(const nlohmann::json& v, const char* key);
+IMQS_PAL_API bool                     IsNumber(const nlohmann::json& v, const char* key);
+IMQS_PAL_API bool                     IsBool(const nlohmann::json& v, const char* key);
 } // namespace nj
 } // namespace imqs
